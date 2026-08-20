@@ -16,6 +16,7 @@ export type ReminderKind = 'water' | 'stand' | 'toilet' | 'eyes'
 export interface HealthSnapshot {
   pressure: number
   score: number
+  recovery: number
   activeSecondsToday: number
   continuousActiveSeconds: number
   restCount: number
@@ -26,6 +27,7 @@ export interface HealthSnapshot {
 export interface HealthEngineOptions {
   initialNow: number
   pressurePerMinute?: number
+  initialState?: HealthSnapshot
 }
 
 export interface HealthEngine {
@@ -41,11 +43,13 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
   const pressurePerMinute = options.pressurePerMinute ?? 1
   let lastTickAt = options.initialNow
   let currentDay = localDayKey(options.initialNow)
-  let restCompleted = false
+  let restCompleted = options.initialState?.mode === 'resting'
+  let rewardedRests = Math.min(5, options.initialState?.restCount ?? 0)
   let lastPokeAt = Number.NEGATIVE_INFINITY
-  const state: HealthSnapshot = {
+  const state: HealthSnapshot = options.initialState ? { ...options.initialState } : {
     pressure: 0,
-    score: 100,
+    score: 50,
+    recovery: 100,
     activeSecondsToday: 0,
     continuousActiveSeconds: 0,
     restCount: 0,
@@ -61,31 +65,46 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
         lastTickAt = now
         restCompleted = false
         state.pressure = 0
-        state.score = 100
+        state.score = 50
+        state.recovery = 100
         state.activeSecondsToday = 0
         state.continuousActiveSeconds = 0
         state.restCount = 0
         state.explosionsToday = 0
+        rewardedRests = 0
         state.mode = 'active'
         return [{ type: 'daily_reset', ts: now, day: nextDay }]
       }
       const elapsedSeconds = Math.max(0, (now - lastTickAt) / 1000)
       lastTickAt = now
       const resumeEvents: HealthEvent[] = []
-      if (state.mode === 'resting' && idleSeconds === 0) {
+      if (state.mode === 'resting' && idleSeconds < 180) {
         state.mode = 'active'
+        restCompleted = false
         resumeEvents.push({ type: 'state_changed', ts: now, mode: 'active' })
       }
-      if (idleSeconds > 0) {
+      if (idleSeconds >= 180) {
+        if (state.mode === 'deflated') return []
         if (idleSeconds >= 180 && !restCompleted) {
           restCompleted = true
           state.mode = 'resting'
+          state.continuousActiveSeconds = 0
           state.restCount += 1
           const pressureRelief = Math.min(20, state.pressure)
           state.pressure -= pressureRelief
-          return [{ type: 'rest_completed', ts: now, effective: true, pressureRelief }]
+          const reward = rewardedRests < 5 ? Math.min(3, 100 - state.score) : 0
+          rewardedRests += 1
+          state.score += reward
+          const events: HealthEvent[] = [{ type: 'rest_completed', ts: now, effective: true, pressureRelief }]
+          if (reward) events.push({ type: 'score_changed', ts: now, delta: reward, score: state.score, reason: 'effective_rest' })
+          return events
         }
         return []
+      }
+      if (state.mode === 'deflated') {
+        state.activeSecondsToday += elapsedSeconds
+        state.continuousActiveSeconds += elapsedSeconds
+        return resumeEvents
       }
       const delta = (elapsedSeconds / 60) * pressurePerMinute
       state.pressure = Math.min(100, state.pressure + delta)
@@ -93,8 +112,9 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
       state.continuousActiveSeconds += elapsedSeconds
       if (state.pressure >= 100) {
         state.explosionsToday += 1
-        const penalty = [15, 30, 50][Math.min(state.explosionsToday - 1, 2)]
+        const penalty = [15, 25, 40][Math.min(state.explosionsToday - 1, 2)]
         state.score = Math.max(0, state.score - penalty)
+        state.recovery = 0
         state.pressure = 0
         state.mode = 'deflated'
         return [
@@ -109,16 +129,18 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
         : resumeEvents
     },
     startRest(now) {
+      if (state.mode === 'deflated') return []
       state.mode = 'resting'
-      state.continuousActiveSeconds = 0
       restCompleted = false
       return [{ type: 'rest_started', ts: now }]
     },
     completeHabit(kind, now) {
       const pressureRelief = Math.min(20, state.pressure)
       state.pressure -= pressureRelief
-      const scoreRecovery = Math.min(5, 100 - state.score)
+      const reward = { water: 5, stand: 8, toilet: 5, eyes: 5, pomodoro_break: 8 }[kind]
+      const scoreRecovery = Math.min(reward, 100 - state.score)
       state.score += scoreRecovery
+      state.recovery = Math.min(100, state.recovery + reward * 4)
       const events: HealthEvent[] = [
         { type: 'habit_completed', ts: now, kind, pressureRelief }
       ]
@@ -131,7 +153,7 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
           reason: kind
         })
       }
-      if (state.mode === 'deflated') {
+      if (state.mode === 'deflated' && state.recovery >= 100) {
         state.mode = 'active'
         events.push({ type: 'state_changed', ts: now, mode: 'active' })
       }
@@ -149,7 +171,12 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
     ignoreReminder(kind, now) {
       const pressureAdded = Math.min(10, 100 - state.pressure)
       state.pressure += pressureAdded
-      return [{ type: 'reminder_ignored', ts: now, kind, pressureAdded }]
+      const penalty = Math.min(3, state.score)
+      state.score -= penalty
+      return [
+        { type: 'reminder_ignored', ts: now, kind, pressureAdded },
+        { type: 'score_changed', ts: now, delta: -penalty, score: state.score, reason: 'ignored_reminder' }
+      ]
     },
     snapshot() {
       return { ...state }

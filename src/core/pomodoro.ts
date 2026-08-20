@@ -30,12 +30,19 @@ export interface Pomodoro {
 export function createPomodoro(settings: {
   workMinutes: number
   breakMinutes: number
+  initialNow?: number
+  initialState?: PomodoroSnapshot
 }): Pomodoro {
-  let phase: PomodoroPhase = 'idle'
-  let targetAt: number | null = null
-  let remainingSeconds = settings.workMinutes * 60
-  let completedToday = 0
-  let pausedPhase: 'work' | 'break' = 'work'
+  const initialNow = settings.initialNow ?? Date.now()
+  const restored = settings.initialState
+  let currentDay = localDayKey(initialNow)
+  let phase: PomodoroPhase = restored?.phase ?? 'idle'
+  let remainingSeconds = restored?.remainingSeconds ?? settings.workMinutes * 60
+  let completedToday = restored?.completedToday ?? 0
+  let targetAt: number | null = phase === 'work' || phase === 'break'
+    ? initialNow + remainingSeconds * 1000
+    : null
+  let pausedPhase: 'work' | 'break' = phase === 'break' ? 'break' : 'work'
 
   return {
     start(now) {
@@ -71,6 +78,11 @@ export function createPomodoro(settings: {
       remainingSeconds = settings.workMinutes * 60
     },
     tick(now) {
+      const nextDay = localDayKey(now)
+      if (nextDay !== currentDay) {
+        currentDay = nextDay
+        completedToday = 0
+      }
       if ((phase !== 'work' && phase !== 'break') || targetAt === null) return []
       remainingSeconds = Math.max(0, Math.ceil((targetAt - now) / 1000))
       if (remainingSeconds > 0) return []
@@ -89,4 +101,9 @@ export function createPomodoro(settings: {
       return { phase, remainingSeconds, completedToday }
     }
   }
+}
+
+function localDayKey(ts: number): string {
+  const date = new Date(ts)
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
 }

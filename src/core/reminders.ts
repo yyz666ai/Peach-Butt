@@ -50,6 +50,7 @@ export function createReminderScheduler(options: {
         pending.add(kind)
         const wasDeferred = deferred.delete(kind)
         events.push({ type: 'reminder_due', kind, ts: now, deferred: wasDeferred })
+        break
       }
       return events
     },

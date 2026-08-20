@@ -7,5 +7,7 @@ release/
 .superpowers/
 .worktrees/
 coverage/
+__pycache__/
+*.pyc
 *.tsbuildinfo
 assets/frames/

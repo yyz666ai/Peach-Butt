@@ -60,4 +60,31 @@ describe('pomodoro', () => {
 
     expect(timer.snapshot()).toMatchObject({ phase: 'idle', remainingSeconds: 25 * 60 })
   })
+
+  it('restores completed count when the configured duration changes', () => {
+    const first = createPomodoro({ workMinutes: 1, breakMinutes: 5, initialNow: 0 })
+    first.start(0)
+    first.tick(60_000)
+
+    const changed = createPomodoro({
+      workMinutes: 45,
+      breakMinutes: 5,
+      initialNow: 61_000,
+      initialState: first.snapshot()
+    })
+
+    expect(changed.snapshot()).toMatchObject({ completedToday: 1 })
+  })
+
+  it('resets completed count on a new local day', () => {
+    const start = new Date(2026, 7, 20, 23, 58).getTime()
+    const nextDay = new Date(2026, 7, 21, 0, 1).getTime()
+    const timer = createPomodoro({ workMinutes: 1, breakMinutes: 5, initialNow: start })
+    timer.start(start)
+    timer.tick(start + 60_000)
+
+    timer.tick(nextDay)
+
+    expect(timer.snapshot().completedToday).toBe(0)
+  })
 })

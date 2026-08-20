@@ -1,28 +1,25 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import type { AppAction, AppSettings, AppSnapshot } from '../../shared/contracts'
+import { BarChart3, Settings, X } from 'lucide-react'
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import type { AppAction, AppSettings, AppSnapshot, ReminderKind } from '../../shared/contracts'
+import { PetMotion } from './components/PetMotion'
 import './styles.css'
 
 import idle from '../../../assets/generated/final/idle.png'
-import happy from '../../../assets/generated/final/happy.png'
-import wave from '../../../assets/generated/final/wave.png'
-import drink from '../../../assets/generated/final/drink.png'
-import stretch from '../../../assets/generated/final/stretch.png'
-import toilet from '../../../assets/generated/final/toilet.png'
-import sleep from '../../../assets/generated/final/sleep.png'
-import eyeRest from '../../../assets/generated/final/eye-rest.png'
-import swell1 from '../../../assets/generated/final/swell-1.png'
-import swell2 from '../../../assets/generated/final/swell-2.png'
-import swell3 from '../../../assets/generated/final/swell-3.png'
-import explode from '../../../assets/generated/final/explode.png'
-import deflated from '../../../assets/generated/final/deflated.png'
-
-const images: Record<string, string> = {
-  idle, happy, wave, drink, stretch, toilet, sleep,
-  'eye-rest': eyeRest, 'swell-1': swell1, 'swell-2': swell2, 'swell-3': swell3,
-  explode, deflated
-}
+import roomBackground from '../../../assets/dashboard/room-background.png'
+import energyArc from '../../../assets/dashboard/energy-arc.png'
+import waterAsset from '../../../assets/dashboard/water.png'
+import standAsset from '../../../assets/dashboard/stand.png'
+import eyeMaskAsset from '../../../assets/dashboard/eye-mask.png'
+import toiletAsset from '../../../assets/dashboard/toilet.png'
+import calendarAsset from '../../../assets/dashboard/calendar.png'
+import timerAsset from '../../../assets/dashboard/timer.png'
+import storyNoteAsset from '../../../assets/dashboard/story-note.png'
+import milestoneAsset from '../../../assets/dashboard/milestone.png'
+import motivationNoteAsset from '../../../assets/dashboard/motivation-note.png'
+import explosionVideo from '../../../assets/video/generated/explosion.webm'
+import focusVideo from '../../../assets/video/generated/focus.webm'
 
 function useSnapshot(): [AppSnapshot | null, (action: AppAction) => Promise<void>] {
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null)
@@ -35,13 +32,13 @@ function useSnapshot(): [AppSnapshot | null, (action: AppAction) => Promise<void
 
 function PetView(): React.JSX.Element {
   const [snapshot, act] = useSnapshot()
+  const [hovered, setHovered] = useState(false)
+  const greetedAt = useRef(0)
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   if (!snapshot) return <div className="pet-loading">桃屁屁醒来中…</div>
-  const p = snapshot.pomodoro
-  const timer = formatTime(p.remainingSeconds)
-  const timerLabel = p.phase === 'break' ? '休息' : p.phase === 'work' || p.phase === 'paused' ? '专注' : ''
 
   const pointerDown = (event: React.PointerEvent): void => {
+    if (event.button !== 0) return
     drag.current = { x: event.screenX, y: event.screenY, moved: false }
     window.pipeach.beginDrag({ x: event.screenX, y: event.screenY })
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -56,100 +53,191 @@ function PetView(): React.JSX.Element {
     drag.current = null
     if (!moved) void act({ type: 'pet:click' })
   }
-
-  return (
-    <main className="pet-shell">
-      <section className="speech" aria-live="polite">{snapshot.message}</section>
-      <div className="pet-stage" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
-        <img className={`pet-image state-${snapshot.visual}`} src={images[snapshot.visual] ?? idle} alt="桃屁屁桌宠" draggable={false} />
-      </div>
-      <div className="pet-toolbar">
-        <div className="score"><span>健康</span><strong>{Math.round(snapshot.health.score)}</strong></div>
-        <div className="pressure"><i style={{ width: `${snapshot.health.pressure}%` }} /></div>
-        {timerLabel ? <button className="timer" onClick={() => void act({ type: 'pomodoro:toggle-pause' })}>{timerLabel} {timer}</button> : <button className="timer" onClick={() => void act({ type: 'pomodoro:start' })}>开始 {String(snapshot.settings.workMinutes).padStart(2, '0')}:00</button>}
-        <button className="more" title="健康统计" onClick={() => void act({ type: 'dashboard:open' })}>•••</button>
-      </div>
-      {snapshot.reminder && <div className="reminder-actions">
-        <button onClick={() => void act({ type: 'reminder:complete', kind: snapshot.reminder!.kind })}>完成啦</button>
-        <button className="quiet" onClick={() => void act({ type: 'reminder:snooze', kind: snapshot.reminder!.kind })}>10 分钟后</button>
-      </div>}
-    </main>
-  )
-}
-
-const names = { water: '喝水', stand: '活动', toilet: '厕所', eyes: '护眼' }
-
-function Dashboard(): React.JSX.Element {
-  const [snapshot, act] = useSnapshot()
-  const [tab, setTab] = useState<'today' | 'settings'>('today')
-  const [draft, setDraft] = useState<AppSettings | null>(null)
-  useEffect(() => { if (snapshot && !draft) setDraft(snapshot.settings) }, [snapshot, draft])
-  const chart = useMemo(() => snapshot?.trends.map((d) => ({
-    ...d, day: d.date.slice(5).replace('-', '/'), activeHours: Number((d.activeSeconds / 3600).toFixed(1)),
-    healthy: d.waterCount + d.standCount + d.toiletCount + d.eyeRestCount
-  })) ?? [], [snapshot])
-  if (!snapshot || !draft) return <main className="dashboard loading">正在整理健康记录…</main>
-  const today = snapshot.trends.at(-1)!
-
-  return <main className="dashboard">
-    <aside>
-      <div className="brand"><img src={idle} alt="" /><div><strong>桃屁屁</strong><span>程序员健康助手</span></div></div>
-      <nav>
-        <button className={tab === 'today' ? 'active' : ''} onClick={() => setTab('today')}>今日与趋势</button>
-        <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>提醒设置</button>
-      </nav>
-      <div className="side-score"><span>今日健康分</span><strong>{Math.round(snapshot.health.score)}</strong><small>压力 {Math.round(snapshot.health.pressure)}%</small></div>
-    </aside>
-    <section className="content">
-      {tab === 'today' ? <>
-        <header><div><p>今天也辛苦啦</p><h1>你的健康节奏</h1></div><button className="primary" onClick={() => void act({ type: 'pomodoro:start' })}>开始番茄钟</button></header>
-        <div className="metric-grid">
-          <Metric label="屏幕活跃" value={formatDuration(snapshot.health.activeSecondsToday)} note="依据键鼠活跃时间" />
-          <Metric label="完成番茄" value={`${snapshot.pomodoro.completedToday} 个`} note="专注结束后点桃屁屁休息" />
-          <Metric label="有效休息" value={`${snapshot.health.restCount} 次`} note="离开键鼠满 3 分钟" />
-          <Metric label="今日爆炸" value={`${snapshot.health.explosionsToday} 次`} note={snapshot.health.explosionsToday ? '久坐会扣健康分' : '保持得很好'} danger={snapshot.health.explosionsToday > 0} />
-        </div>
-        <div className="chart-grid">
-          <ChartCard title="近 7 天屏幕活跃时间" subtitle="小时">
-            <ResponsiveContainer width="100%" height={220}><AreaChart data={chart}><defs><linearGradient id="peach" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ff8b78" stopOpacity={.5}/><stop offset="100%" stopColor="#ff8b78" stopOpacity={.03}/></linearGradient></defs><CartesianGrid stroke="#f1dfd7" vertical={false}/><XAxis dataKey="day" axisLine={false} tickLine={false}/><YAxis axisLine={false} tickLine={false}/><Tooltip/><Area type="monotone" dataKey="activeHours" stroke="#f26f5e" strokeWidth={3} fill="url(#peach)" /></AreaChart></ResponsiveContainer>
-          </ChartCard>
-          <ChartCard title="健康行为" subtitle="完成次数">
-            <ResponsiveContainer width="100%" height={220}><BarChart data={chart}><CartesianGrid stroke="#f1dfd7" vertical={false}/><XAxis dataKey="day" axisLine={false} tickLine={false}/><YAxis axisLine={false} tickLine={false}/><Tooltip/><Bar dataKey="healthy" fill="#78a943" radius={[8, 8, 0, 0]} /></BarChart></ResponsiveContainer>
-          </ChartCard>
-        </div>
-        <section className="habit-card"><div><h2>今日行为</h2><p>点击桌宠完成提醒后会自动记录</p></div><div className="habit-list"><Habit name="喝水" count={today.waterCount}/><Habit name="起身活动" count={today.standCount}/><Habit name="上厕所" count={today.toiletCount}/><Habit name="休息眼睛" count={today.eyeRestCount}/></div></section>
-      </> : <>
-        <header><div><p>按你的节奏来</p><h1>提醒与计时设置</h1></div></header>
-        <section className="settings-card">
-          <h2>番茄钟</h2>
-          <div className="field-row"><label>专注时长<input type="number" min="1" max="120" value={draft.workMinutes} onChange={(e) => setDraft({ ...draft, workMinutes: Number(e.target.value) })}/><span>分钟</span></label><label>休息时长<input type="number" min="1" max="60" value={draft.breakMinutes} onChange={(e) => setDraft({ ...draft, breakMinutes: Number(e.target.value) })}/><span>分钟</span></label></div>
-          <h2>生活提醒</h2>
-          <div className="reminder-grid">{(Object.keys(names) as Array<keyof typeof names>).map((kind) => <label className="reminder-setting" key={kind}><input type="checkbox" checked={draft.reminders[kind].enabled} onChange={(e) => setDraft({ ...draft, reminders: { ...draft.reminders, [kind]: { ...draft.reminders[kind], enabled: e.target.checked } } })}/><strong>{names[kind]}</strong><span>每</span><input type="number" min="5" max="240" value={draft.reminders[kind].intervalMinutes} onChange={(e) => setDraft({ ...draft, reminders: { ...draft.reminders, [kind]: { ...draft.reminders[kind], intervalMinutes: Number(e.target.value) } } })}/><span>分钟</span></label>)}</div>
-          <button className="primary save" onClick={() => void act({ type: 'settings:update', settings: draft })}>保存设置</button>
-        </section>
-      </>}
-    </section>
+  const enter = (): void => {
+    setHovered(true)
+    const now = Date.now()
+    if (now - greetedAt.current > 90_000 && snapshot.pomodoro.phase === 'idle') {
+      greetedAt.current = now
+      void act({ type: 'pet:greet' })
+    }
+  }
+  const showStatus = hovered || Boolean(snapshot.reminder) || snapshot.pomodoro.phase === 'awaiting_rest_confirmation'
+  return <main className="pet-shell" onMouseEnter={enter} onMouseLeave={() => setHovered(false)} onContextMenu={(event) => { event.preventDefault(); window.pipeach.showPetMenu() }}>
+    {showStatus && <section className="hover-status" aria-live="polite">
+      <strong>{snapshot.message}</strong>
+      {(snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused' || snapshot.pomodoro.phase === 'break') && <span>{snapshot.pomodoro.phase === 'break' ? '休息' : '还剩'} {formatTime(snapshot.pomodoro.remainingSeconds)}</span>}
+      {snapshot.reminder && <div><button onClick={() => void act({ type: 'reminder:complete', kind: snapshot.reminder!.kind })}>完成啦</button><button onClick={() => void act({ type: 'reminder:snooze', kind: snapshot.reminder!.kind })}>稍后</button></div>}
+    </section>}
+    <div className="pet-stage" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
+      <PetMotion visual={snapshot.visual} pressureValue={snapshot.health.pressure} recovery={snapshot.health.recovery}/>
+    </div>
   </main>
 }
 
-function Metric({ label, value, note, danger = false }: { label: string; value: string; note: string; danger?: boolean }): React.JSX.Element {
-  return <article className={`metric ${danger ? 'danger' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>
+const habitItems: Array<{ kind: ReminderKind; label: string; asset: string }> = [
+  { kind: 'water', label: '喝水', asset: waterAsset },
+  { kind: 'stand', label: '起身', asset: standAsset },
+  { kind: 'eyes', label: '护眼', asset: eyeMaskAsset },
+  { kind: 'toilet', label: '上厕所', asset: toiletAsset }
+]
+
+function Dashboard(): React.JSX.Element {
+  const [snapshot, act] = useSnapshot()
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [storyOpen, setStoryOpen] = useState(false)
+  const [draft, setDraft] = useState<AppSettings | null>(null)
+  const storyTrigger = useRef<HTMLButtonElement>(null)
+  const storyClose = useRef<HTMLButtonElement>(null)
+  const settingsTrigger = useRef<HTMLButtonElement>(null)
+  const growthCard = useRef<HTMLElement>(null)
+  useEffect(() => { if (snapshot && !draft) setDraft(snapshot.settings) }, [snapshot, draft])
+  useEffect(() => { if (storyOpen) storyClose.current?.focus() }, [storyOpen])
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        setStoryOpen(false)
+        setSettingsOpen(false)
+      }
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [])
+  const chart = useMemo(() => snapshot?.trends.map((item) => ({ ...item, shortDate: item.date.slice(5).replace('-', '/'), energy: item.scoreEnd ?? 50 })) ?? [], [snapshot])
+  if (!snapshot || !draft) return <main className="cottage-loading">正在布置桃桃小屋…</main>
+  const today = snapshot.trends.at(-1)!
+  const date = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
+  const focusActive = snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused'
+
+  return <main className="cottage" style={{ backgroundImage: `url(${roomBackground})` }}>
+    <header className="cottage-topbar">
+      <div className="cottage-brand"><img src={idle} alt=""/><div><strong>桃屁屁</strong><span>你的健康小助手</span></div></div>
+      <div className="date-actions"><time>{date}</time><button ref={settingsTrigger} aria-label="设置" onClick={() => setSettingsOpen(true)}><Settings/></button><button aria-label="查看 7 天成长路线" onClick={() => growthCard.current?.focus()}><BarChart3/></button><button aria-label="关闭" onClick={() => window.close()}><X/></button></div>
+    </header>
+
+    <section className="energy-hero">
+      <img src={energyArc} alt="桃桃能量进度"/>
+      <div className="energy-copy"><span>桃桃能量</span><strong>{Math.round(snapshot.health.score)}</strong><small>离 <b>100</b> 还差 {Math.max(0, 100 - Math.round(snapshot.health.score))}</small></div>
+      <div className="hero-metrics"><div><span>今日专注</span><strong>{snapshot.pomodoro.completedToday}<small> 个</small></strong></div><div><span>休息</span><strong>{snapshot.health.restCount}<small> 次</small></strong></div><div><span>活跃</span><strong>{formatDuration(snapshot.health.activeSecondsToday)}</strong></div></div>
+    </section>
+
+    <section className="motivation-note"><img src={motivationNoteAsset} alt=""/><p>照顾自己<br/>就是最好的<br/>生产力</p></section>
+
+    <button ref={storyTrigger} className="story-trigger" onClick={() => setStoryOpen(true)} aria-haspopup="dialog" aria-expanded={storyOpen}>
+      <img src={storyNoteAsset} alt=""/>
+      <span><strong>今日的话</strong><small>点一下听桃屁屁说</small></span>
+    </button>
+
+    <section ref={growthCard} className="growth-card" tabIndex={-1} aria-label="7 天成长路线">
+      <div className="growth-title">7 天成长路线</div>
+      <ResponsiveContainer width="100%" height="100%"><LineChart data={chart} margin={{ top: 34, right: 35, bottom: 18, left: 35 }}>
+        <YAxis domain={[0, 100]} hide/><XAxis dataKey="shortDate" axisLine={false} tickLine={false} tick={{ fill: '#71452f', fontSize: 12 }} dy={13}/><Tooltip contentStyle={{ border: 0, borderRadius: 15, background: '#fff7e9', boxShadow: '0 8px 24px rgba(107,65,35,.16)' }} formatter={(value) => [`${value} 能量`, '桃桃能量']}/>
+        <Line type="monotone" dataKey="energy" stroke="#f17b62" strokeWidth={5} dot={<PeachDot/>} activeDot={{ r: 9, fill: '#a8cc45', stroke: '#fff7e9', strokeWidth: 4 }}/>
+      </LineChart></ResponsiveContainer>
+    </section>
+
+    <section className="working-friend"><DashboardFriend/><p>{focusActive ? '你专注，我也认真做事' : '我先整理一下今天的小计划'}</p></section>
+
+    <nav className="habit-dock" aria-label="健康行为快捷记录">
+      {habitItems.map((item) => <button key={item.kind} onClick={() => void act({ type: 'reminder:complete', kind: item.kind })}><img src={item.asset} alt=""/><span>{item.label}</span><small>{habitCount(today, item.kind)}</small></button>)}
+      <button onClick={() => void act({ type: 'pet:click' })}><img src={calendarAsset} alt=""/><span>休息一下</span><small>{snapshot.health.restCount}</small></button>
+    </nav>
+
+    <button className="timer-device" onClick={() => void act(focusActive ? { type: 'pomodoro:toggle-pause' } : { type: 'pomodoro:start' })} aria-label={focusActive ? '暂停专注' : '开始专注'}>
+      <img src={timerAsset} alt=""/><strong>{formatTime(snapshot.pomodoro.remainingSeconds)}</strong><span>{focusActive ? '暂停一下' : '开始专注'}</span>
+    </button>
+
+    {storyOpen && <div className="story-scrim" onMouseDown={() => { setStoryOpen(false); storyTrigger.current?.focus() }}><section className="story-dialog" role="dialog" aria-modal="true" aria-labelledby="today-story-title" onMouseDown={(event) => event.stopPropagation()}>
+      <button ref={storyClose} className="story-close" onClick={() => { setStoryOpen(false); storyTrigger.current?.focus() }} aria-label="关闭"><X/></button>
+      <img src={storyNoteAsset} alt=""/>
+      <div><span>今日的话</span><h2 id="today-story-title">认真生活，也要认真休息</h2><p>{snapshot.health.pressure > 60 ? '你已经很专注了。现在给眼睛放个假，喝口水，再走两步吧。' : '每一次喝水和起身，都在给今天的自己补充能量。照顾好自己，就是很棒的生产力。'}</p><button onClick={() => { setStoryOpen(false); storyTrigger.current?.focus() }}>收下这句话</button></div>
+    </section></div>}
+    {settingsOpen && <SettingsPanel
+      draft={draft}
+      setDraft={setDraft}
+      close={() => { setSettingsOpen(false); settingsTrigger.current?.focus() }}
+      save={() => { void act({ type: 'settings:update', settings: draft }); setSettingsOpen(false); settingsTrigger.current?.focus() }}
+    />}
+  </main>
 }
-function ChartCard({ title, subtitle, children }: React.PropsWithChildren<{ title: string; subtitle: string }>): React.JSX.Element {
-  return <section className="chart-card"><div><h2>{title}</h2><span>{subtitle}</span></div>{children}</section>
+
+function DashboardFriend(): React.JSX.Element {
+  const video = useRef<HTMLVideoElement>(null)
+  const [playing, setPlaying] = useState(true)
+  const playOnce = (): void => {
+    const element = video.current
+    if (!element || playing) return
+    element.currentTime = 0.42
+    setPlaying(true)
+    void element.play()
+  }
+  return <video
+    ref={video}
+    className="dashboard-friend-video"
+    src={focusVideo}
+    muted
+    autoPlay
+    playsInline
+    onMouseEnter={playOnce}
+    onLoadedMetadata={(event) => { event.currentTarget.currentTime = 0.42; void event.currentTarget.play() }}
+    onTimeUpdate={(event) => {
+      if (event.currentTarget.currentTime >= 5.42) {
+        event.currentTarget.pause()
+        event.currentTarget.currentTime = 4.96
+        setPlaying(false)
+      }
+    }}
+  />
 }
-function Habit({ name, count }: { name: string; count: number }): React.JSX.Element {
-  return <div><i>{count ? '✓' : '·'}</i><span>{name}</span><strong>{count}</strong></div>
+
+function PeachDot(props: { cx?: number; cy?: number; value?: number }): React.JSX.Element {
+  const { cx = 0, cy = 0, value = 0 } = props
+  return <g transform={`translate(${cx - 27} ${cy - 35})`}><image href={milestoneAsset} width="54" height="68"/><text x="27" y="39" textAnchor="middle" fill="white" fontSize="14" fontWeight="800">{value}</text></g>
+}
+
+function SettingsPanel({ draft, setDraft, save, close }: { draft: AppSettings; setDraft: (value: AppSettings) => void; save: () => void; close: () => void }): React.JSX.Element {
+  const closeButton = useRef<HTMLButtonElement>(null)
+  useEffect(() => { closeButton.current?.focus() }, [])
+  return <div className="settings-scrim" onMouseDown={close}>
+    <section className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" onMouseDown={(event) => event.stopPropagation()}>
+      <header><div><span>桃桃设置</span><strong id="settings-title">按你的节奏来</strong></div><button ref={closeButton} aria-label="关闭设置" onClick={close}><X/></button></header>
+      <div className="setting-pair">
+        <label>专注时长<input type="number" min="1" max="120" value={draft.workMinutes} onChange={(e) => setDraft({ ...draft, workMinutes: Number(e.target.value) })}/><span>分钟</span></label>
+        <label>休息时长<input type="number" min="1" max="60" value={draft.breakMinutes} onChange={(e) => setDraft({ ...draft, breakMinutes: Number(e.target.value) })}/><span>分钟</span></label>
+      </div>
+      <h3>生活提醒</h3>
+      {(Object.keys(draft.reminders) as ReminderKind[]).map((kind) => <label className="setting-reminder" key={kind}>
+        <input type="checkbox" checked={draft.reminders[kind].enabled} onChange={(e) => setDraft({ ...draft, reminders: { ...draft.reminders, [kind]: { ...draft.reminders[kind], enabled: e.target.checked } } })}/>
+        <span>{({ water: '喝水', stand: '起身', toilet: '厕所', eyes: '护眼' })[kind]}</span>
+        <input type="number" min="5" max="240" value={draft.reminders[kind].intervalMinutes} onChange={(e) => setDraft({ ...draft, reminders: { ...draft.reminders, [kind]: { ...draft.reminders[kind], intervalMinutes: Number(e.target.value) } } })}/>
+        <small>分钟</small>
+      </label>)}
+      <button className="save-settings" onClick={save}>保存设置</button>
+    </section>
+  </div>
+}
+
+function ExplosionView(): React.JSX.Element {
+  const video = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    const element = video.current
+    if (!element) return
+    const play = (): void => { element.currentTime = 0; void element.play() }
+    if (element.readyState >= 1) play(); else element.addEventListener('loadedmetadata', play, { once: true })
+  }, [])
+  return <main className="explosion-view"><video ref={video} src={explosionVideo} muted playsInline/><div><strong>该休息啦！</strong><span>起来走走、喝水，让桃屁屁慢慢恢复</span></div></main>
+}
+
+function habitCount(today: AppSnapshot['trends'][number], kind: ReminderKind): number {
+  return { water: today.waterCount, stand: today.standCount, toilet: today.toiletCount, eyes: today.eyeRestCount }[kind]
 }
 function formatTime(seconds: number): string { return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}` }
-function formatDuration(seconds: number): string { const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); return h ? `${h}时${m}分` : `${m} 分钟` }
+function formatDuration(seconds: number): string { const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); return h ? `${h}小时${m}分` : `${m}分钟` }
 
 function App(): React.JSX.Element {
-  return new URLSearchParams(location.search).get('view') === 'dashboard' ? <Dashboard /> : <PetView />
+  const view = new URLSearchParams(location.search).get('view')
+  if (view === 'dashboard') return <Dashboard/>
+  if (view === 'explosion') return <ExplosionView/>
+  return <PetView/>
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-)
+ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>)

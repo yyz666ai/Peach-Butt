@@ -16,12 +16,13 @@ describe('reminder scheduler', () => {
       expect.objectContaining({ type: 'reminder_due', kind: 'eyes' })
     ])
     scheduler.complete('eyes', 20 * 60_000)
-    expect(scheduler.tick(50 * 60_000, false)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: 'reminder_due', kind: 'stand' }),
-        expect.objectContaining({ type: 'reminder_due', kind: 'eyes' })
-      ])
-    )
+    expect(scheduler.tick(50 * 60_000, false)).toEqual([
+      expect.objectContaining({ type: 'reminder_due', kind: 'stand' })
+    ])
+    scheduler.complete('stand', 50 * 60_000)
+    expect(scheduler.tick(50 * 60_000, false)).toEqual([
+      expect.objectContaining({ type: 'reminder_due', kind: 'eyes' })
+    ])
   })
 
   it('defers due reminders until focus mode ends', () => {
@@ -30,13 +31,9 @@ describe('reminder scheduler', () => {
     expect(scheduler.tick(60 * 60_000, true)).toEqual([])
     const events = scheduler.tick(61 * 60_000, false)
 
-    expect(events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ kind: 'water', deferred: true }),
-        expect.objectContaining({ kind: 'stand', deferred: true }),
-        expect.objectContaining({ kind: 'eyes', deferred: true })
-      ])
-    )
+    expect(events).toEqual([
+      expect.objectContaining({ kind: 'water', deferred: true })
+    ])
   })
 
   it('snoozes a pending reminder for the requested minutes', () => {
@@ -49,5 +46,23 @@ describe('reminder scheduler', () => {
     expect(scheduler.tick(25 * 60_000, false)).toContainEqual(
       expect.objectContaining({ type: 'reminder_due', kind: 'eyes' })
     )
+  })
+
+  it('queues simultaneous reminders instead of leaving hidden reminders pending', () => {
+    const scheduler = createReminderScheduler({ initialNow: 0, settings })
+
+    const first = scheduler.tick(60 * 60_000, false)
+    expect(first).toHaveLength(1)
+    expect(first[0]?.kind).toBe('water')
+
+    scheduler.complete('water', 60 * 60_000)
+    const second = scheduler.tick(60 * 60_000, false)
+    expect(second).toHaveLength(1)
+    expect(second[0]?.kind).toBe('stand')
+
+    scheduler.complete('stand', 60 * 60_000)
+    const third = scheduler.tick(60 * 60_000, false)
+    expect(third).toHaveLength(1)
+    expect(third[0]?.kind).toBe('eyes')
   })
 })

@@ -6,6 +6,8 @@ files:
   - out/**
   - assets/generated/final/**
   - assets/manifest.json
+  - assets/video/generated/**
+  - assets/video/manifest.json
 mac:
   icon: assets/generated/final/idle.png
   category: public.app-category.productivity

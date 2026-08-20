@@ -12,12 +12,15 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "assets:check": "node scripts/validate-assets.mjs",
+    "videos:check": "node scripts/validate-videos.mjs",
+    "videos:build": "python3 scripts/build-transparent-videos.py assets/video/source assets/video/generated",
     "dist:mac": "npm run build && electron-builder --mac dir",
     "dist:win": "npm run build && electron-builder --win nsis",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
+    "lucide-react": "^0.468.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "recharts": "^3.10.1"

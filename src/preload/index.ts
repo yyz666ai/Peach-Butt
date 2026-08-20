@@ -10,7 +10,8 @@ const api: PipeachApi = {
     return () => ipcRenderer.removeListener('pipeach:snapshot', listener)
   },
   beginDrag: (point) => ipcRenderer.send('pipeach:drag-begin', point),
-  dragTo: (point) => ipcRenderer.send('pipeach:drag-to', point)
+  dragTo: (point) => ipcRenderer.send('pipeach:drag-to', point),
+  showPetMenu: () => ipcRenderer.send('pipeach:pet-menu')
 }
 
 contextBridge.exposeInMainWorld('pipeach', api)
