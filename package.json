@@ -2,6 +2,7 @@
   "name": "pipeach",
   "version": "0.1.0",
   "description": "桃屁屁健康提醒桌宠",
+  "author": "Pipeach",
   "private": true,
   "main": "./out/main/index.js",
   "scripts": {
@@ -22,7 +23,6 @@
     "recharts": "^3.10.1"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.2.0",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.2.0",
     "@types/pngjs": "^6.0.5",

@@ -7,6 +7,7 @@ files:
   - assets/generated/final/**
   - assets/manifest.json
 mac:
+  icon: assets/generated/final/idle.png
   category: public.app-category.productivity
   target:
     - target: dir
@@ -14,6 +15,7 @@ mac:
         - arm64
         - x64
 win:
+  icon: assets/generated/final/idle.png
   target:
     - target: nsis
       arch:
