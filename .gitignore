@@ -7,4 +7,5 @@ release/
 .superpowers/
 .worktrees/
 coverage/
+*.tsbuildinfo
 assets/frames/
