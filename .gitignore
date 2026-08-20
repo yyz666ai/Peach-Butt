@@ -4,6 +4,6 @@ release/
 .DS_Store
 .env
 .superpowers/
+.worktrees/
 coverage/
 assets/frames/
-
