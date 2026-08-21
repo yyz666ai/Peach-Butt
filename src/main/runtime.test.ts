@@ -47,6 +47,24 @@ describe('runtime data integrity', () => {
     vi.useRealTimers()
   })
 
+  it('returns every day of the current month with missing dates zero-filled', () => {
+    const storage = memoryStorage()
+    storage.daily.set('2026-08-02', {
+      date: '2026-08-02', scoreEnd: 12, scoreMin: 0, activeSeconds: 600,
+      focusSeconds: 300, pomodoroCount: 1, waterCount: 3, standCount: 2,
+      toiletCount: 1, eyeRestCount: 1, restCount: 1, explodeCount: 0,
+      ignoreCount: 0, pressurePeak: 10
+    })
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+
+    const snapshot = runtime.snapshot()
+    expect(snapshot.monthStats).toHaveLength(31)
+    expect(snapshot.monthStats[0]).toMatchObject({ date: '2026-08-01', waterCount: 0 })
+    expect(snapshot.monthStats[1]).toMatchObject({ date: '2026-08-02', waterCount: 3, standCount: 2 })
+    expect(snapshot.monthStats.at(-1)?.date).toBe('2026-08-31')
+  })
+
   it('persists and restores health engine state', () => {
     const storage = memoryStorage()
     const first = createRuntime(storage)

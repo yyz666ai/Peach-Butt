@@ -121,6 +121,20 @@ export function createRuntime(storage: Storage): Runtime {
     })
   }
 
+  const monthStats = (): DailyStats[] => {
+    const cursor = new Date()
+    const year = cursor.getFullYear()
+    const month = cursor.getMonth()
+    const days = new Date(year, month + 1, 0).getDate()
+    const start = dateKey(new Date(year, month, 1).getTime())
+    const end = dateKey(new Date(year, month, days).getTime())
+    const found = new Map(storage.getDailyStats(start, end).map((item) => [item.date, item]))
+    return Array.from({ length: days }, (_, index) => {
+      const date = dateKey(new Date(year, month, index + 1).getTime())
+      return found.get(date) ?? emptyDailyStats(date)
+    })
+  }
+
   const currentVisual = (): { id: string; message: string } => {
     if (visualOverride && visualOverride.until > lastTickAt) return visualOverride
     visualOverride = null
@@ -150,7 +164,7 @@ export function createRuntime(storage: Storage): Runtime {
 
   const makeSnapshot = (): AppSnapshot => {
     const visual = currentVisual()
-    return { health: health.snapshot(), pomodoro: pomodoro.snapshot(), reminder, visual: visual.id, message: visual.message, settings, trends: trends() }
+    return { health: health.snapshot(), pomodoro: pomodoro.snapshot(), reminder, visual: visual.id, message: visual.message, settings, trends: trends(), monthStats: monthStats() }
   }
   const publish = (): AppSnapshot => {
     const value = makeSnapshot()

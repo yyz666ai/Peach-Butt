@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BarChart3, Settings, X } from 'lucide-react'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { AppAction, AppSettings, AppSnapshot, ReminderKind } from '../../shared/contracts'
+import { MonthCalendar } from './components/MonthCalendar'
 import { PetMotion } from './components/PetMotion'
 import './styles.css'
 
@@ -10,12 +11,9 @@ import idle from '../../../assets/generated/final/idle.png'
 import roomBackground from '../../../assets/dashboard/room-background.png'
 import energyArc from '../../../assets/dashboard/energy-arc.png'
 import waterAsset from '../../../assets/dashboard/water.png'
-import standAsset from '../../../assets/dashboard/stand.png'
+import activityStretchAsset from '../../../assets/dashboard/activity-stretch.png'
 import eyeMaskAsset from '../../../assets/dashboard/eye-mask.png'
 import toiletAsset from '../../../assets/dashboard/toilet.png'
-import calendarAsset from '../../../assets/dashboard/calendar.png'
-import timerAsset from '../../../assets/dashboard/timer.png'
-import storyNoteAsset from '../../../assets/dashboard/story-note.png'
 import milestoneAsset from '../../../assets/dashboard/milestone.png'
 import motivationNoteAsset from '../../../assets/dashboard/motivation-note.png'
 import explosionVideo from '../../../assets/video/generated/explosion.webm'
@@ -93,29 +91,37 @@ function PetView(): React.JSX.Element {
 
 const habitItems: Array<{ kind: ReminderKind; label: string; asset: string }> = [
   { kind: 'water', label: '喝水', asset: waterAsset },
-  { kind: 'stand', label: '起身', asset: standAsset },
+  { kind: 'stand', label: '活动一下', asset: activityStretchAsset },
   { kind: 'eyes', label: '护眼', asset: eyeMaskAsset },
   { kind: 'toilet', label: '上厕所', asset: toiletAsset }
 ]
 
+const habitIcons: Record<ReminderKind, string> = {
+  water: waterAsset,
+  stand: activityStretchAsset,
+  eyes: eyeMaskAsset,
+  toilet: toiletAsset
+}
+
 function Dashboard(): React.JSX.Element {
   const [snapshot, act] = useSnapshot()
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [storyOpen, setStoryOpen] = useState(false)
+  const [growthView, setGrowthView] = useState<'week' | 'month'>(() => new URLSearchParams(location.search).get('range') === 'month' ? 'month' : 'week')
+  const [selectedDate, setSelectedDate] = useState('')
   const [dockHint, setDockHint] = useState(false)
   const [draft, setDraft] = useState<AppSettings | null>(null)
-  const storyTrigger = useRef<HTMLButtonElement>(null)
-  const storyClose = useRef<HTMLButtonElement>(null)
   const settingsTrigger = useRef<HTMLButtonElement>(null)
   const growthCard = useRef<HTMLElement>(null)
   useEffect(() => { if (snapshot && !draft) setDraft(snapshot.settings) }, [snapshot, draft])
-  useEffect(() => { if (storyOpen) storyClose.current?.focus() }, [storyOpen])
+  useEffect(() => {
+    if (snapshot?.monthStats.length && !selectedDate) {
+      const today = localDateKey(new Date())
+      setSelectedDate(snapshot.monthStats.find((item) => item.date === today)?.date ?? snapshot.monthStats.at(-1)!.date)
+    }
+  }, [snapshot?.monthStats, selectedDate])
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        setStoryOpen(false)
-        setSettingsOpen(false)
-      }
+      if (event.key === 'Escape') setSettingsOpen(false)
     }
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
@@ -145,36 +151,31 @@ function Dashboard(): React.JSX.Element {
 
     <section className="motivation-note"><img src={motivationNoteAsset} alt=""/><p>照顾自己<br/>就是最好的<br/>生产力</p></section>
 
-    <button ref={storyTrigger} className="story-trigger" onClick={() => setStoryOpen(true)} aria-haspopup="dialog" aria-expanded={storyOpen}>
-      <img src={storyNoteAsset} alt=""/>
-      <span><strong>今日的话</strong><small>点一下听桃屁屁说</small></span>
-    </button>
-
-    <section ref={growthCard} className="growth-card" tabIndex={-1} aria-label="7 天成长路线">
-      <div className="growth-title">7 天成长路线</div>
-      <ResponsiveContainer width="100%" height="100%"><LineChart data={chart} margin={{ top: 34, right: 35, bottom: 18, left: 35 }}>
-        <YAxis domain={[0, chartCeiling]} hide/><XAxis dataKey="shortDate" axisLine={false} tickLine={false} tick={{ fill: '#71452f', fontSize: 12 }} dy={13}/><Tooltip contentStyle={{ border: 0, borderRadius: 15, background: '#fff7e9', boxShadow: '0 8px 24px rgba(107,65,35,.16)' }} formatter={(value) => [`${value} 能量`, '桃桃能量']}/>
-        <Line type="monotone" dataKey="energy" stroke="#f17b62" strokeWidth={5} dot={<PeachDot/>} activeDot={{ r: 9, fill: '#a8cc45', stroke: '#fff7e9', strokeWidth: 4 }}/>
-      </LineChart></ResponsiveContainer>
+    <section ref={growthCard} className="growth-card" tabIndex={-1} aria-label="健康成长记录">
+      <header className="growth-toolbar">
+        <div><strong>健康成长记录</strong><span>{growthView === 'week' ? '最近 7 天的能量变化' : '每天都看得见的小进步'}</span></div>
+        <div className="growth-tabs" role="tablist" aria-label="成长记录范围">
+          <button role="tab" aria-selected={growthView === 'week'} onClick={() => setGrowthView('week')}>7 天</button>
+          <button role="tab" aria-selected={growthView === 'month'} onClick={() => setGrowthView('month')}>本月</button>
+        </div>
+      </header>
+      <div className="growth-content">
+        {growthView === 'week'
+          ? <div className="week-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={chart} margin={{ top: 30, right: 35, bottom: 18, left: 35 }}>
+              <YAxis domain={[0, chartCeiling]} hide/><XAxis dataKey="shortDate" axisLine={false} tickLine={false} tick={{ fill: '#71452f', fontSize: 12 }} dy={13}/><Tooltip contentStyle={{ border: 0, borderRadius: 15, background: '#fff7e9', boxShadow: '0 8px 24px rgba(107,65,35,.16)' }} formatter={(value) => [`${value} 能量`, '桃桃能量']}/>
+              <Line type="monotone" dataKey="energy" stroke="#f17b62" strokeWidth={5} dot={<PeachDot/>} activeDot={{ r: 9, fill: '#a8cc45', stroke: '#fff7e9', strokeWidth: 4 }}/>
+            </LineChart></ResponsiveContainer></div>
+          : <MonthCalendar stats={snapshot.monthStats} selectedDate={selectedDate} onSelect={setSelectedDate} icons={habitIcons}/>
+        }
+      </div>
     </section>
 
     <section className="working-friend"><DashboardFriend/><p>{focusActive ? '你专注，我也认真做事' : '我先整理一下今天的小计划'}</p></section>
 
     <nav className="habit-dock" aria-label="今日健康记录。点击回到桌宠进行反馈">
       {habitItems.map((item) => <button key={item.kind} onClick={returnToPet} title={`到桌宠记录${item.label}`}><img src={item.asset} alt=""/><span>{item.label}</span><small>{habitCount(today, item.kind)}</small></button>)}
-      <button onClick={returnToPet} title="到桌宠确认休息"><img src={calendarAsset} alt=""/><span>休息一下</span><small>{snapshot.health.restCount}</small></button>
     </nav>
     {dockHint && <p className="dock-hint" aria-live="polite">回到桌宠，点桃屁屁确认这次健康行为</p>}
-
-    <button className="timer-device" onClick={() => void act(focusActive ? { type: 'pomodoro:toggle-pause' } : { type: 'pomodoro:start' })} aria-label={focusActive ? '暂停专注' : '开始专注'}>
-      <img src={timerAsset} alt=""/><strong>{formatTime(snapshot.pomodoro.remainingSeconds)}</strong><span>{focusActive ? '暂停一下' : '开始专注'}</span>
-    </button>
-
-    {storyOpen && <div className="story-scrim" onMouseDown={() => { setStoryOpen(false); storyTrigger.current?.focus() }}><section className="story-dialog" role="dialog" aria-modal="true" aria-labelledby="today-story-title" onMouseDown={(event) => event.stopPropagation()}>
-      <button ref={storyClose} className="story-close" onClick={() => { setStoryOpen(false); storyTrigger.current?.focus() }} aria-label="关闭"><X/></button>
-      <img src={storyNoteAsset} alt=""/>
-      <div><span>今日的话</span><h2 id="today-story-title">认真生活，也要认真休息</h2><p>{snapshot.health.pressure > 60 ? '你已经很专注了。现在给眼睛放个假，喝口水，再走两步吧。' : '每一次喝水和起身，都在给今天的自己补充能量。照顾好自己，就是很棒的生产力。'}</p><button onClick={() => { setStoryOpen(false); storyTrigger.current?.focus() }}>收下这句话</button></div>
-    </section></div>}
     {settingsOpen && <SettingsPanel
       draft={draft}
       setDraft={setDraft}
@@ -231,7 +232,7 @@ function SettingsPanel({ draft, setDraft, save, close }: { draft: AppSettings; s
       <h3>生活提醒</h3>
       {(Object.keys(draft.reminders) as ReminderKind[]).map((kind) => <label className="setting-reminder" key={kind}>
         <input type="checkbox" checked={draft.reminders[kind].enabled} onChange={(e) => setDraft({ ...draft, reminders: { ...draft.reminders, [kind]: { ...draft.reminders[kind], enabled: e.target.checked } } })}/>
-        <span>{({ water: '喝水', stand: '起身', toilet: '厕所', eyes: '护眼' })[kind]}</span>
+        <span>{({ water: '喝水', stand: '活动一下', toilet: '厕所', eyes: '护眼' })[kind]}</span>
         <input type="number" min="5" max="240" value={draft.reminders[kind].intervalMinutes} onChange={(e) => setDraft({ ...draft, reminders: { ...draft.reminders, [kind]: { ...draft.reminders[kind], intervalMinutes: Number(e.target.value) } } })}/>
         <small>分钟</small>
       </label>)}
@@ -256,6 +257,7 @@ function habitCount(today: AppSnapshot['trends'][number], kind: ReminderKind): n
 }
 function formatTime(seconds: number): string { return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}` }
 function formatDuration(seconds: number): string { const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); return h ? `${h}小时${m}分` : `${m}分钟` }
+function localDateKey(date: Date): string { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function getBubbleCopy(snapshot: AppSnapshot, focusing: boolean): string {
   if (snapshot.message === '保持专注') return '保持专注'
   if (focusing) return `还剩 ${formatTime(snapshot.pomodoro.remainingSeconds)}`

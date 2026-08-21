@@ -15,6 +15,9 @@ final result: passed
 - Brightened video/cutout review: `docs/qa/video-brightness-and-cutout.png`
 - Final one-line bubble: `docs/qa/pet-bubble-final.png`
 - Same hover after 4 seconds: `docs/qa/pet-bubble-auto-hidden.png`
+- Monthly calendar at `1050 × 760`: `docs/qa/dashboard-month-1050.png`
+- Monthly calendar at `960 × 650`: `docs/qa/dashboard-month-960.png`
+- Latest reference/month-calendar comparison: `docs/qa/month-dashboard-reference-comparison.png`
 
 ## Comparison history
 
@@ -25,6 +28,7 @@ final result: passed
 5. Final repair removed the fixed CSS minimum viewport that exceeded the framed Electron content height, made the chart parent resize with the window, and reserved a clipped 24px label row inside every habit button.
 6. This pass centered the story copy inside its paper safe area and centered the growth title on its responsive card; both `960 × 650` and `1050 × 760` screenshots show separated energy title, score, summary, metrics, chart and dock.
 7. Desktop-pet motion now uses a calm generated idle loop and a progressive eye-strain warning; generated-frame Alpha was tightened and white-matte color removed, while the greeting cutout was checked against a warm desktop background after brightening and foot-shadow cleanup.
+8. The statistics-only revision removed the daily-story and timer blocks, converted the action dock to four equal columns, and added an in-card 7-day/current-month toggle. The month view keeps seven columns at both minimum and default window sizes and exposes per-day health detail without opening another page.
 
 ## Final checks
 
@@ -39,4 +43,5 @@ final result: passed
 - The seven-day line and peach nodes reflow with the chart container at every recorded width.
 - Habit names remain inside the dock even when the viewport is wide or at its minimum height.
 - Reference and implementation were inspected together in the side-by-side comparison image.
+- The current-month view was inspected at both `1050 × 760` and the enforced `960 × 650` minimum. All 35/42 date cells, the four behavior markers, selected-day detail and four-item action dock remain inside their containers.
 - The speech bubble contains one short sentence, leaves the full body and feet visible, and disappears while the pointer remains over the pet.

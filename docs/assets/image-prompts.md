@@ -24,3 +24,9 @@
 ### 护眼超时四帧
 
 > 严格使用两张参考图中的桃屁屁角色身份、肥圆身体比例、草地绿叶片、气球嘴、极短环形腿和圆润三指小手。生成一张横向四格、固定正面镜头的渐进护眼警示动作表，3D 漫射哑光材质与明亮桃粉珊瑚配色保持一致。第一帧眼睛疲惫微红；第二帧揉眼，眼周更红；第三帧双眼明显发红并出现夸张但可爱的细小干裂纹；第四帧红眼干裂最明显、双手提醒用户休息。身体不得破裂或变形，四帧角色大小、位置、光线和视角完全一致。手不是棍状线条，末端必须有圆润三指；头顶、手、短腿全部保留，不要文字、地面、阴影、道具或额外角色；干净透明背景。
+
+### 统计页“活动一下”拉伸人物
+
+最终透明素材：`assets/dashboard/activity-stretch.png`。ImageGen 原始输出归档于 `assets/dashboard/source/activity-stretch-imagegen.png`，透明背景经过逐像素抠图和边缘归一化处理。
+
+> Use case: stylized-concept. Asset type: single dashboard action object for 桃桃小屋, replacing the existing 起身 icon. Input images: the water, stand and toilet dashboard assets are strict art-direction references for palette, premium 3D diffuse matte material, softness, camera angle and object density; do not reuse their subjects. Primary request: create one adorable gender-neutral person clearly doing a gentle full-body side stretch, one arm curved overhead and the other supporting the waist, feet planted, healthy movement instantly readable at small icon size. Style/medium: refined minimal 3D illustration, premium soft-touch frosted matte clay, diffuse material, restrained handcrafted warmth, low AI feel, rounded but not childish. Composition/framing: single complete centered figure, fixed front view with the same slight top-down angle as the references, compact silhouette, generous safe margin, all hands and feet fully visible. Lighting/mood: soft natural studio light, subtle ambient occlusion only. Color palette: peach pink clothing, cream skin and details, leaf-green accents matching the references. Constraints: genuinely transparent background; no text; no letters; no numbers; no border; no platform; no ground; no cast shadow; no props; no extra person; no cropped limbs; no photorealism; no glossy plastic.

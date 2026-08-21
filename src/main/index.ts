@@ -15,8 +15,10 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
 
 function load(window: BrowserWindow, view: 'pet' | 'dashboard' | 'explosion'): void {
-  if (process.env.ELECTRON_RENDERER_URL) void window.loadURL(`${process.env.ELECTRON_RENDERER_URL}?view=${view}`)
-  else void window.loadFile(join(__dirname, '../renderer/index.html'), { query: { view } })
+  const query: Record<string, string> = { view }
+  if (view === 'dashboard' && process.env.PIPEACH_DASHBOARD_RANGE === 'month') query.range = 'month'
+  if (process.env.ELECTRON_RENDERER_URL) void window.loadURL(`${process.env.ELECTRON_RENDERER_URL}?${new URLSearchParams(query).toString()}`)
+  else void window.loadFile(join(__dirname, '../renderer/index.html'), { query })
 }
 
 function createPetWindow(): BrowserWindow {

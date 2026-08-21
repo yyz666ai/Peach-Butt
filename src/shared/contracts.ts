@@ -53,6 +53,7 @@ export interface AppSnapshot {
   message: string
   settings: AppSettings
   trends: DailyStats[]
+  monthStats: DailyStats[]
 }
 
 export type AppAction =

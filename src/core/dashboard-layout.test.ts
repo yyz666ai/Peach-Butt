@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const styles = readFileSync(new URL('../renderer/src/styles.css', import.meta.url), 'utf8')
+const renderer = readFileSync(new URL('../renderer/src/main.tsx', import.meta.url), 'utf8')
 
 function rule(selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -13,7 +14,7 @@ describe('dashboard responsive layout contract', () => {
     expect(rule('.cottage')).toContain('display: grid')
     expect(rule('.cottage')).toContain('min-height: 0')
     expect(rule('.cottage')).not.toContain('min-height: 650px')
-    for (const selector of ['.energy-hero', '.motivation-note', '.story-trigger', '.growth-card', '.working-friend', '.habit-dock', '.timer-device']) {
+    for (const selector of ['.energy-hero', '.motivation-note', '.growth-card', '.working-friend', '.habit-dock']) {
       expect(rule(selector), selector).toContain('grid-area:')
       expect(rule(selector), selector).not.toContain('position: absolute')
     }
@@ -32,8 +33,16 @@ describe('dashboard responsive layout contract', () => {
     expect(rule('.habit-dock button')).toContain('grid-template-rows: minmax(0, 1fr) 24px')
   })
 
-  it('centers copy inside the story note and growth title', () => {
-    expect(rule('.story-trigger > span')).toContain('text-align: center')
+  it('centers the growth title and adapts a four-item behavior dock', () => {
     expect(rule('.growth-title')).toContain('left: 50%')
+    expect(rule('.habit-dock')).toContain('grid-template-columns: repeat(4, minmax(0, 1fr))')
+  })
+
+  it('keeps the dashboard statistical and removes story, timer, and generic rest controls', () => {
+    expect(renderer).toContain('活动一下')
+    expect(renderer).toContain("'month'")
+    for (const removed of ['今日的话', 'timer-device', 'story-trigger', 'calendarAsset', '<span>休息一下</span>']) {
+      expect(renderer).not.toContain(removed)
+    }
   })
 })
