@@ -128,6 +128,9 @@ export function createRuntime(storage: Storage): Runtime {
       if (reminder.kind === 'water' && lastTickAt - reminder.dueAt >= 15 * 60_000) {
         return { id: 'dry', message: '我都渴得干裂啦，快喝口水吧' }
       }
+      if (reminder.kind === 'eyes' && lastTickAt - reminder.dueAt >= 10 * 60_000) {
+        return { id: 'eye-strain', message: '眼睛又红又干啦，看看远处吧' }
+      }
       return { id: reminderVisual[reminder.kind], message: reminderCopy[reminder.kind] }
     }
     const p = pomodoro.snapshot()
@@ -225,7 +228,7 @@ export function createRuntime(storage: Storage): Runtime {
       if (action.type === 'pet:click') {
         const phase = pomodoro.snapshot().phase
         if (phase === 'work' || phase === 'paused') {
-          visualOverride = { id: 'focus', until: actionNow + 1_800, message: '保持专注，别分心啦' }
+          visualOverride = { id: 'focus', until: actionNow + 1_800, message: '保持专注' }
         } else if (reminder) {
           const kind = reminder.kind
           const wasDry = kind === 'water' && actionNow - reminder.dueAt >= 15 * 60_000

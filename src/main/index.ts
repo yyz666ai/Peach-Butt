@@ -113,9 +113,7 @@ function showPetMenu(): void {
         { label: '喝水', click: () => dispatch({ type: 'reminder:complete', kind: 'water' }) },
         { label: '起身活动', click: () => dispatch({ type: 'reminder:complete', kind: 'stand' }) },
         { label: '休息眼睛', click: () => dispatch({ type: 'reminder:complete', kind: 'eyes' }) },
-        { label: '上厕所', click: () => dispatch({ type: 'reminder:complete', kind: 'toilet' }) },
-        { type: 'separator' as const },
-        { label: '撤销刚刚完成的行为', click: () => dispatch({ type: 'reminder:undo' }) }
+        { label: '上厕所', click: () => dispatch({ type: 'reminder:complete', kind: 'toilet' }) }
       ]
     },
     { type: 'separator' },

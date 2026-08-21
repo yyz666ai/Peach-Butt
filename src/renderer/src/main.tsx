@@ -30,18 +30,31 @@ function useSnapshot(): [AppSnapshot | null, (action: AppAction) => Promise<void
   return [snapshot, async (action) => { setSnapshot(await window.pipeach.action(action)) }]
 }
 
-// Runtime adds these two reversible actions. Keeping the cast here lets the
-// desktop shell and renderer be rolled out together without widening the old
-// persisted-action contract during an upgrade.
-function reversibleAction(type: 'pomodoro:cancel' | 'reminder:undo'): AppAction {
-  return { type } as unknown as AppAction
-}
+const BUBBLE_VISIBLE_MS = 3_200
 
 function PetView(): React.JSX.Element {
   const [snapshot, act] = useSnapshot()
-  const [hovered, setHovered] = useState(false)
+  const [bubbleVisible, setBubbleVisible] = useState(false)
   const greetedAt = useRef(0)
+  const bubbleTimer = useRef<number | null>(null)
+  const lastBubbleKey = useRef('')
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
+  const showBubble = (): void => {
+    setBubbleVisible(true)
+    if (bubbleTimer.current !== null) window.clearTimeout(bubbleTimer.current)
+    bubbleTimer.current = window.setTimeout(() => setBubbleVisible(false), BUBBLE_VISIBLE_MS)
+  }
+  useEffect(() => () => {
+    if (bubbleTimer.current !== null) window.clearTimeout(bubbleTimer.current)
+  }, [])
+  useEffect(() => {
+    if (!snapshot) return
+    const key = `${snapshot.visual}:${snapshot.message}:${snapshot.reminder?.dueAt ?? ''}`
+    if (key !== lastBubbleKey.current) {
+      lastBubbleKey.current = key
+      showBubble()
+    }
+  }, [snapshot?.visual, snapshot?.message, snapshot?.reminder?.dueAt, snapshot?.pomodoro.phase])
   if (!snapshot) return <div className="pet-loading">桃屁屁醒来中…</div>
 
   const pointerDown = (event: React.PointerEvent): void => {
@@ -61,7 +74,7 @@ function PetView(): React.JSX.Element {
     if (!moved) void act({ type: 'pet:click' })
   }
   const enter = (): void => {
-    setHovered(true)
+    showBubble()
     const now = Date.now()
     if (now - greetedAt.current > 90_000 && snapshot.pomodoro.phase === 'idle') {
       greetedAt.current = now
@@ -69,15 +82,9 @@ function PetView(): React.JSX.Element {
     }
   }
   const focusing = snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused'
-  const showStatus = hovered || Boolean(snapshot.reminder) || snapshot.pomodoro.phase === 'awaiting_rest_confirmation'
-  return <main className="pet-shell" onMouseEnter={enter} onMouseLeave={() => setHovered(false)} onContextMenu={(event) => { event.preventDefault(); window.pipeach.showPetMenu() }}>
-    {showStatus && <section className="hover-status" aria-live="polite">
-      <strong>{snapshot.message}</strong>
-      {(snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused' || snapshot.pomodoro.phase === 'break') && <span>{snapshot.pomodoro.phase === 'break' ? '休息' : '还剩'} {formatTime(snapshot.pomodoro.remainingSeconds)}</span>}
-      {snapshot.reminder && <div><button onClick={() => void act({ type: 'reminder:complete', kind: snapshot.reminder!.kind })}>完成啦</button><button onClick={() => void act({ type: 'reminder:snooze', kind: snapshot.reminder!.kind })}>稍后</button></div>}
-      {focusing && !snapshot.reminder && <><em>点我是在为你加油：继续专注，别分心</em><div><button onClick={(event) => { event.stopPropagation(); void act(reversibleAction('pomodoro:cancel')) }}>取消专注</button></div></>}
-      {!snapshot.reminder && !focusing && <button className="undo-feedback" onClick={(event) => { event.stopPropagation(); void act(reversibleAction('reminder:undo')) }}>撤销刚才的反馈</button>}
-    </section>}
+  const bubbleCopy = getBubbleCopy(snapshot, focusing)
+  return <main className="pet-shell" onMouseEnter={enter} onContextMenu={(event) => { event.preventDefault(); window.pipeach.showPetMenu() }}>
+    {bubbleVisible && <section className="hover-status" aria-live="polite"><strong>{bubbleCopy}</strong></section>}
     <div className="pet-stage" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
       <PetMotion visual={snapshot.visual} pressureValue={snapshot.health.pressure} recovery={snapshot.health.recovery}/>
     </div>
@@ -249,6 +256,20 @@ function habitCount(today: AppSnapshot['trends'][number], kind: ReminderKind): n
 }
 function formatTime(seconds: number): string { return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}` }
 function formatDuration(seconds: number): string { const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); return h ? `${h}小时${m}分` : `${m}分钟` }
+function getBubbleCopy(snapshot: AppSnapshot, focusing: boolean): string {
+  if (snapshot.message === '保持专注') return '保持专注'
+  if (focusing) return `还剩 ${formatTime(snapshot.pomodoro.remainingSeconds)}`
+  if (snapshot.pomodoro.phase === 'break') return `休息 ${formatTime(snapshot.pomodoro.remainingSeconds)}`
+  if (snapshot.pomodoro.phase === 'awaiting_rest_confirmation') return '点我开始休息'
+  if (snapshot.reminder?.kind === 'water') return snapshot.visual === 'dry' ? '快喝水，我干裂啦' : '该喝水啦'
+  if (snapshot.reminder?.kind === 'stand') return '起来走走吧'
+  if (snapshot.reminder?.kind === 'eyes') return snapshot.visual === 'eye-strain' ? '眼睛红了，休息一下' : '看看远处吧'
+  if (snapshot.reminder?.kind === 'toilet') return '该去厕所啦'
+  if (snapshot.visual === 'pressure') return '该起来走走啦'
+  if (snapshot.visual === 'deflated') return '帮我恢复元气吧'
+  if (snapshot.visual === 'greeting' || snapshot.visual === 'wave') return '嗨，我陪着你'
+  return '我会安静陪你'
+}
 
 function App(): React.JSX.Element {
   const view = new URLSearchParams(location.search).get('view')

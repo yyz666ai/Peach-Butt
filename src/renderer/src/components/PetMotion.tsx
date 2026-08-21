@@ -7,7 +7,11 @@ import sleep from '../../../../assets/video/generated/sleep.webm'
 import toilet from '../../../../assets/video/generated/toilet.webm'
 import transform from '../../../../assets/video/generated/transform.webm'
 import dry from '../../../../assets/video/generated/dry.webm'
+import idleMotion from '../../../../assets/video/generated/idle.webm'
+import eyeStrainMotion from '../../../../assets/video/generated/eye-strain.webm'
 import idle from '../../../../assets/generated/final/idle.png'
+import idleMotionStill from '../../../../assets/generated/final/idle-motion.png'
+import eyeStrain from '../../../../assets/generated/final/eye-strain.png'
 import deflated from '../../../../assets/generated/final/deflated.png'
 import drink from '../../../../assets/generated/final/drink.png'
 import stretch from '../../../../assets/generated/final/stretch.png'
@@ -15,6 +19,8 @@ import eyeRest from '../../../../assets/generated/final/eye-rest.png'
 import { clipTimelines, nextPlaybackAction } from './pet-motion-timeline'
 
 const clips = {
+  idle: { src: idleMotion, ...clipTimelines.idle },
+  'eye-strain': { src: eyeStrainMotion, ...clipTimelines['eye-strain'] },
   focus: { src: focus, ...clipTimelines.focus },
   greeting: { src: greeting, ...clipTimelines.greeting },
   wave: { src: greeting, ...clipTimelines.greeting },
@@ -27,7 +33,7 @@ const clips = {
   'water-prompt': { src: dry, ...clipTimelines['water-prompt'] }
 } as const
 
-const stills: Record<string, string> = { idle, deflated, drink, stretch, 'eye-rest': eyeRest, reminder: idle }
+const stills: Record<string, string> = { idle: idleMotionStill, 'eye-strain': eyeStrain, deflated, drink, stretch, 'eye-rest': eyeRest, reminder: idle }
 
 export function PetMotion({ visual, pressureValue, recovery = 100 }: { visual: string; pressureValue: number; recovery?: number }): React.JSX.Element {
   const video = useRef<HTMLVideoElement>(null)
@@ -67,7 +73,7 @@ export function PetMotion({ visual, pressureValue, recovery = 100 }: { visual: s
     style={visual === 'pressure'
       ? { transform: `scale(${1.45 - Math.min(1, Math.max(0, (pressureValue - 55) / 45)) * 0.37})` }
       : visual === 'focus'
-        ? { filter: 'brightness(1.13) saturate(1.18) drop-shadow(0 8px 10px rgba(84, 48, 33, .2))' }
+        ? { filter: 'brightness(1.04) saturate(1.06) drop-shadow(0 8px 10px rgba(84, 48, 33, .16))' }
         : undefined}
     onError={() => setFailed(true)}
     onTimeUpdate={(event) => {

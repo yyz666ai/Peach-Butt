@@ -8,6 +8,8 @@ export interface ClipTimeline {
 }
 
 export const clipTimelines = {
+  idle: { start: 0, end: 4, playMode: 'loop' },
+  'eye-strain': { start: 0, end: 5, playMode: 'once' },
   focus: { start: 0.35, end: 9.82, playMode: 'loop' },
   greeting: { start: 0.1, end: 9.92, playMode: 'once' },
   pressure: { start: 0, end: 5.3, playMode: 'scrub' },

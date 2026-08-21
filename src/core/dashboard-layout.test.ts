@@ -31,4 +31,9 @@ describe('dashboard responsive layout contract', () => {
     expect(rule('.habit-dock')).toContain('overflow: hidden')
     expect(rule('.habit-dock button')).toContain('grid-template-rows: minmax(0, 1fr) 24px')
   })
+
+  it('centers copy inside the story note and growth title', () => {
+    expect(rule('.story-trigger > span')).toContain('text-align: center')
+    expect(rule('.growth-title')).toContain('left: 50%')
+  })
 })

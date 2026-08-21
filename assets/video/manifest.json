@@ -2,6 +2,8 @@
   "reference": "用户提供的七段固定镜头积木动画",
   "pipeline": "rembg u2netp at 12 fps, normalized to a shared 480 x 500 transparent canvas, VP9 alpha WebM",
   "clips": [
+    { "id": "idle", "file": "generated/idle.webm", "role": "静止陪伴时的低频眨眼、手脚小动作", "start": 0, "end": 4, "playMode": "loop" },
+    { "id": "eye-strain", "file": "generated/eye-strain.webm", "role": "忽略护眼提醒后逐级变红干裂并停在警示姿态", "start": 0, "end": 5, "playMode": "once" },
     { "id": "greeting", "file": "generated/greeting.webm", "role": "启动或悬停时完整播放一次的打招呼", "start": 0.1, "end": 9.92, "playMode": "once" },
     { "id": "focus", "file": "generated/focus.webm", "role": "专注时持续、轻微地敲电脑", "start": 0.35, "end": 9.82, "playMode": "loop" },
     { "id": "sleep", "file": "generated/sleep.webm", "role": "番茄休息和睡觉", "start": 0.2, "end": 4.25, "playMode": "loop" },

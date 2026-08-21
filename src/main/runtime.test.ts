@@ -140,8 +140,37 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot()).toMatchObject({
       pomodoro: { phase: 'work' },
       visual: 'focus',
-      message: '保持专注，别分心啦'
+      message: '保持专注'
     })
+  })
+
+  it('shows progressively dry red eyes when an eye reminder is ignored for ten minutes', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    const settings = runtime.snapshot().settings
+    runtime.dispatch({
+      type: 'settings:update',
+      settings: {
+        ...settings,
+        reminders: {
+          water: { enabled: false, intervalMinutes: 45 },
+          stand: { enabled: false, intervalMinutes: 50 },
+          toilet: { enabled: false, intervalMinutes: 120 },
+          eyes: { enabled: true, intervalMinutes: 20 }
+        }
+      }
+    })
+
+    runtime.tick(start + 20 * 60_000, 0)
+    runtime.tick(start + 29 * 60_000, 0)
+    expect(runtime.snapshot()).toMatchObject({ reminder: { kind: 'eyes' }, visual: 'eye-rest' })
+    runtime.tick(start + 30 * 60_000, 0)
+    expect(runtime.snapshot()).toMatchObject({ reminder: { kind: 'eyes' }, visual: 'eye-strain' })
+
+    vi.setSystemTime(start + 30 * 60_000)
+    runtime.dispatch({ type: 'reminder:complete', kind: 'eyes' })
+    expect(runtime.snapshot().reminder).toBeNull()
+    expect(runtime.snapshot().visual).not.toBe('eye-strain')
   })
 
   it('shows a dry pet when a water reminder has been unanswered for fifteen minutes', () => {

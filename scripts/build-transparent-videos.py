@@ -12,12 +12,13 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageEnhance
 from rembg import new_session, remove
 
 
 CANVAS = (480, 500)
 MOTION_NAMES = ("greeting", "focus", "sleep", "toilet", "pressure", "transform", "dry")
+BRIGHTNESS = {"greeting": 1.15, "focus": 1.2, "sleep": 1.1, "toilet": 1.1, "pressure": 1.1, "transform": 1.1, "dry": 1.12}
 TRIM_RANGES = {
     # Keep the complete jump, spin and visible tornado. Playback is sped up in
     # the renderer so the transformation does not delay focus for too long.
@@ -108,7 +109,30 @@ def convert(source: Path, destination: Path, fps: int, width: int, session: obje
         encode(keyed, destination, fps)
 
 
-def normalize_existing(source: Path, destination: Path, fps: int) -> None:
+def polish_frames(frames: list[Path], name: str) -> None:
+    for frame in frames:
+        with Image.open(frame) as source:
+            image = source.convert("RGBA")
+        alpha = image.getchannel("A")
+        rgb = ImageEnhance.Brightness(image.convert("RGB")).enhance(BRIGHTNESS[name])
+        rgb = ImageEnhance.Color(rgb).enhance(1.1)
+        polished = rgb.convert("RGBA")
+        polished.putalpha(alpha.point(lambda value: 0 if value < 22 else value))
+        if name == "greeting":
+            pixels = polished.load()
+            # The source has a light floor/shadow painted inside both loop feet.
+            # Clear only near-neutral bright pixels in the bottom band, keeping
+            # the dark loop legs and the peach body untouched.
+            for y in range(round(polished.height * .7), polished.height):
+                for x in range(polished.width):
+                    red, green, blue, value = pixels[x, y]
+                    neutral = max(red, green, blue) - min(red, green, blue) < 24
+                    if value and neutral and min(red, green, blue) > 145:
+                        pixels[x, y] = (red, green, blue, 0)
+        polished.save(frame, optimize=True)
+
+
+def normalize_existing(source: Path, destination: Path, fps: int, name: str) -> None:
     with tempfile.TemporaryDirectory(prefix="pipeach-video-normalize-") as temp:
         frames = Path(temp) / "frames"
         frames.mkdir()
@@ -116,7 +140,9 @@ def normalize_existing(source: Path, destination: Path, fps: int) -> None:
             "ffmpeg", "-loglevel", "error", "-y", "-c:v", "libvpx-vp9",
             "-i", str(source), "-vf", f"fps={fps}", str(frames / "%05d.png")
         )
-        normalize_frames(sorted(frames.glob("*.png")))
+        selected = sorted(frames.glob("*.png"))
+        polish_frames(selected, name)
+        normalize_frames(selected)
         encode(frames, destination, fps)
 
 
@@ -160,7 +186,7 @@ def main() -> None:
         destination = args.destination / f"{name}.webm"
         if args.normalize_existing:
             with tempfile.NamedTemporaryFile(suffix=".webm") as output:
-                normalize_existing(destination, Path(output.name), args.fps)
+                normalize_existing(destination, Path(output.name), args.fps, name)
                 destination.write_bytes(Path(output.name).read_bytes())
         else:
             assert session is not None

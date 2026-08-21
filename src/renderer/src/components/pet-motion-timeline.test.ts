@@ -28,4 +28,11 @@ describe('pet motion timelines', () => {
     expect(clipTimelines.dry.end).toBeLessThan(2)
     expect(clipTimelines.hydrating.end).toBeGreaterThan(5)
   })
+
+  it('keeps idle calmly moving and holds the final eye-strain warning', () => {
+    expect(clipTimelines.idle.playMode).toBe('loop')
+    expect(clipTimelines.idle.end).toBeGreaterThanOrEqual(3.9)
+    expect(clipTimelines['eye-strain'].playMode).toBe('once')
+    expect(clipTimelines['eye-strain'].end).toBeGreaterThanOrEqual(4.9)
+  })
 })

@@ -10,6 +10,11 @@ final result: passed
 - Responsive matrix: `docs/qa/dashboard-responsive-matrix.png`
 - Tested dashboard viewports: `960 × 650`, `1050 × 760`, and `1400 × 800` logical pixels on macOS high-DPI display
 - Explosion contact sheet: `docs/qa/explosion-contact-sheet.png`
+- Idle motion contact sheet: `docs/qa/idle-motion-contact-sheet.png`
+- Eye-strain contact sheet: `docs/qa/eye-strain-contact-sheet.png`
+- Brightened video/cutout review: `docs/qa/video-brightness-and-cutout.png`
+- Final one-line bubble: `docs/qa/pet-bubble-final.png`
+- Same hover after 4 seconds: `docs/qa/pet-bubble-auto-hidden.png`
 
 ## Comparison history
 
@@ -18,6 +23,8 @@ final result: passed
 3. Final motion behavior plays the dashboard character once on entry, freezes on a stable frame, and replays once on hover. Video and still containers share a fixed visual slot.
 4. Responsive repair replaced independently positioned major regions with one parent CSS grid. The energy title, score, summary, metrics, chart, action dock, character, and timer now occupy explicit rows or grid areas.
 5. Final repair removed the fixed CSS minimum viewport that exceeded the framed Electron content height, made the chart parent resize with the window, and reserved a clipped 24px label row inside every habit button.
+6. This pass centered the story copy inside its paper safe area and centered the growth title on its responsive card; both `960 × 650` and `1050 × 760` screenshots show separated energy title, score, summary, metrics, chart and dock.
+7. Desktop-pet motion now uses a calm generated idle loop and a progressive eye-strain warning; generated-frame Alpha was tightened and white-matte color removed, while the greeting cutout was checked against a warm desktop background after brightening and foot-shadow cleanup.
 
 ## Final checks
 
@@ -32,3 +39,4 @@ final result: passed
 - The seven-day line and peach nodes reflow with the chart container at every recorded width.
 - Habit names remain inside the dock even when the viewport is wide or at its minimum height.
 - Reference and implementation were inspected together in the side-by-side comparison image.
+- The speech bubble contains one short sentence, leaves the full body and feet visible, and disappears while the pointer remains over the pet.
