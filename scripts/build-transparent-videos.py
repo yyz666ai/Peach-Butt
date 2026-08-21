@@ -17,7 +17,14 @@ from rembg import new_session, remove
 
 
 CANVAS = (480, 500)
-MOTION_NAMES = ("greeting", "focus", "sleep", "toilet", "pressure")
+MOTION_NAMES = ("greeting", "focus", "sleep", "toilet", "pressure", "transform", "dry")
+TRIM_RANGES = {
+    # Keep the cheerful jump-and-spin only. The dark tornado starts immediately
+    # after this point and is deliberately excluded from the transition asset.
+    "transform": (0.08, 3.30),
+    # Show the complete thirsty-to-recovered arc, including the final happy pose.
+    "dry": (0.08, 9.90),
+}
 
 
 def run(*args: str) -> None:
@@ -77,17 +84,18 @@ def encode(frames: Path, destination: Path, fps: int) -> None:
     )
 
 
-def convert(source: Path, destination: Path, fps: int, width: int, session: object) -> None:
+def convert(source: Path, destination: Path, fps: int, width: int, session: object, trim: tuple[float, float] | None = None) -> None:
     with tempfile.TemporaryDirectory(prefix="pipeach-video-") as temp:
         work = Path(temp)
         frames = work / "frames"
         keyed = work / "keyed"
         frames.mkdir()
         keyed.mkdir()
-        run(
-            "ffmpeg", "-loglevel", "error", "-y", "-i", str(source),
-            "-vf", f"fps={fps},scale={width}:-2:flags=lanczos", str(frames / "%05d.png")
-        )
+        command = ["ffmpeg", "-loglevel", "error", "-y"]
+        if trim:
+            command.extend(["-ss", str(trim[0]), "-to", str(trim[1])])
+        command.extend(["-i", str(source), "-vf", f"fps={fps},scale={width}:-2:flags=lanczos", str(frames / "%05d.png")])
+        run(*command)
         for frame in sorted(frames.glob("*.png")):
             with Image.open(frame) as image:
                 result = remove(
@@ -156,7 +164,7 @@ def main() -> None:
                 destination.write_bytes(Path(output.name).read_bytes())
         else:
             assert session is not None
-            convert(args.sources / f"{name}.mp4", destination, args.fps, args.width, session)
+            convert(args.sources / f"{name}.mp4", destination, args.fps, args.width, session, TRIM_RANGES.get(name))
     build_explosion(args.destination / "pressure.webm", args.destination / "explosion.webm", args.fps)
 
 

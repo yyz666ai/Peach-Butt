@@ -30,6 +30,13 @@ function useSnapshot(): [AppSnapshot | null, (action: AppAction) => Promise<void
   return [snapshot, async (action) => { setSnapshot(await window.pipeach.action(action)) }]
 }
 
+// Runtime adds these two reversible actions. Keeping the cast here lets the
+// desktop shell and renderer be rolled out together without widening the old
+// persisted-action contract during an upgrade.
+function reversibleAction(type: 'pomodoro:cancel' | 'reminder:undo'): AppAction {
+  return { type } as unknown as AppAction
+}
+
 function PetView(): React.JSX.Element {
   const [snapshot, act] = useSnapshot()
   const [hovered, setHovered] = useState(false)
@@ -61,12 +68,15 @@ function PetView(): React.JSX.Element {
       void act({ type: 'pet:greet' })
     }
   }
+  const focusing = snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused'
   const showStatus = hovered || Boolean(snapshot.reminder) || snapshot.pomodoro.phase === 'awaiting_rest_confirmation'
   return <main className="pet-shell" onMouseEnter={enter} onMouseLeave={() => setHovered(false)} onContextMenu={(event) => { event.preventDefault(); window.pipeach.showPetMenu() }}>
     {showStatus && <section className="hover-status" aria-live="polite">
       <strong>{snapshot.message}</strong>
       {(snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused' || snapshot.pomodoro.phase === 'break') && <span>{snapshot.pomodoro.phase === 'break' ? '休息' : '还剩'} {formatTime(snapshot.pomodoro.remainingSeconds)}</span>}
       {snapshot.reminder && <div><button onClick={() => void act({ type: 'reminder:complete', kind: snapshot.reminder!.kind })}>完成啦</button><button onClick={() => void act({ type: 'reminder:snooze', kind: snapshot.reminder!.kind })}>稍后</button></div>}
+      {focusing && !snapshot.reminder && <><em>点我是在为你加油：继续专注，别分心</em><div><button onClick={(event) => { event.stopPropagation(); void act(reversibleAction('pomodoro:cancel')) }}>取消专注</button></div></>}
+      {!snapshot.reminder && !focusing && <button className="undo-feedback" onClick={(event) => { event.stopPropagation(); void act(reversibleAction('reminder:undo')) }}>撤销刚才的反馈</button>}
     </section>}
     <div className="pet-stage" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
       <PetMotion visual={snapshot.visual} pressureValue={snapshot.health.pressure} recovery={snapshot.health.recovery}/>
@@ -85,6 +95,7 @@ function Dashboard(): React.JSX.Element {
   const [snapshot, act] = useSnapshot()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [storyOpen, setStoryOpen] = useState(false)
+  const [dockHint, setDockHint] = useState(false)
   const [draft, setDraft] = useState<AppSettings | null>(null)
   const storyTrigger = useRef<HTMLButtonElement>(null)
   const storyClose = useRef<HTMLButtonElement>(null)
@@ -102,11 +113,16 @@ function Dashboard(): React.JSX.Element {
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [])
-  const chart = useMemo(() => snapshot?.trends.map((item) => ({ ...item, shortDate: item.date.slice(5).replace('-', '/'), energy: item.scoreEnd ?? 50 })) ?? [], [snapshot])
+  const chart = useMemo(() => snapshot?.trends.map((item) => ({ ...item, shortDate: item.date.slice(5).replace('-', '/'), energy: item.scoreEnd ?? 0 })) ?? [], [snapshot])
   if (!snapshot || !draft) return <main className="cottage-loading">正在布置桃桃小屋…</main>
   const today = snapshot.trends.at(-1)!
   const date = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
   const focusActive = snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused'
+  const chartCeiling = Math.max(100, ...chart.map((item) => item.energy))
+  const returnToPet = (): void => {
+    setDockHint(true)
+    window.setTimeout(() => window.close(), 700)
+  }
 
   return <main className="cottage" style={{ backgroundImage: `url(${roomBackground})` }}>
     <header className="cottage-topbar">
@@ -116,7 +132,7 @@ function Dashboard(): React.JSX.Element {
 
     <section className="energy-hero">
       <img src={energyArc} alt="桃桃能量进度"/>
-      <div className="energy-copy"><span>桃桃能量</span><strong>{Math.round(snapshot.health.score)}</strong><small>离 <b>100</b> 还差 {Math.max(0, 100 - Math.round(snapshot.health.score))}</small></div>
+      <div className="energy-copy"><span>桃桃能量</span><strong>{Math.round(snapshot.health.score)}</strong><small>今天已经积累 <b>{Math.round(snapshot.health.score)}</b> 点能量</small></div>
       <div className="hero-metrics"><div><span>今日专注</span><strong>{snapshot.pomodoro.completedToday}<small> 个</small></strong></div><div><span>休息</span><strong>{snapshot.health.restCount}<small> 次</small></strong></div><div><span>活跃</span><strong>{formatDuration(snapshot.health.activeSecondsToday)}</strong></div></div>
     </section>
 
@@ -130,17 +146,18 @@ function Dashboard(): React.JSX.Element {
     <section ref={growthCard} className="growth-card" tabIndex={-1} aria-label="7 天成长路线">
       <div className="growth-title">7 天成长路线</div>
       <ResponsiveContainer width="100%" height="100%"><LineChart data={chart} margin={{ top: 34, right: 35, bottom: 18, left: 35 }}>
-        <YAxis domain={[0, 100]} hide/><XAxis dataKey="shortDate" axisLine={false} tickLine={false} tick={{ fill: '#71452f', fontSize: 12 }} dy={13}/><Tooltip contentStyle={{ border: 0, borderRadius: 15, background: '#fff7e9', boxShadow: '0 8px 24px rgba(107,65,35,.16)' }} formatter={(value) => [`${value} 能量`, '桃桃能量']}/>
+        <YAxis domain={[0, chartCeiling]} hide/><XAxis dataKey="shortDate" axisLine={false} tickLine={false} tick={{ fill: '#71452f', fontSize: 12 }} dy={13}/><Tooltip contentStyle={{ border: 0, borderRadius: 15, background: '#fff7e9', boxShadow: '0 8px 24px rgba(107,65,35,.16)' }} formatter={(value) => [`${value} 能量`, '桃桃能量']}/>
         <Line type="monotone" dataKey="energy" stroke="#f17b62" strokeWidth={5} dot={<PeachDot/>} activeDot={{ r: 9, fill: '#a8cc45', stroke: '#fff7e9', strokeWidth: 4 }}/>
       </LineChart></ResponsiveContainer>
     </section>
 
     <section className="working-friend"><DashboardFriend/><p>{focusActive ? '你专注，我也认真做事' : '我先整理一下今天的小计划'}</p></section>
 
-    <nav className="habit-dock" aria-label="健康行为快捷记录">
-      {habitItems.map((item) => <button key={item.kind} onClick={() => void act({ type: 'reminder:complete', kind: item.kind })}><img src={item.asset} alt=""/><span>{item.label}</span><small>{habitCount(today, item.kind)}</small></button>)}
-      <button onClick={() => void act({ type: 'pet:click' })}><img src={calendarAsset} alt=""/><span>休息一下</span><small>{snapshot.health.restCount}</small></button>
+    <nav className="habit-dock" aria-label="今日健康记录。点击回到桌宠进行反馈">
+      {habitItems.map((item) => <button key={item.kind} onClick={returnToPet} title={`到桌宠记录${item.label}`}><img src={item.asset} alt=""/><span>{item.label}</span><small>{habitCount(today, item.kind)}</small></button>)}
+      <button onClick={returnToPet} title="到桌宠确认休息"><img src={calendarAsset} alt=""/><span>休息一下</span><small>{snapshot.health.restCount}</small></button>
     </nav>
+    {dockHint && <p className="dock-hint" aria-live="polite">回到桌宠，点桃屁屁确认这次健康行为</p>}
 
     <button className="timer-device" onClick={() => void act(focusActive ? { type: 'pomodoro:toggle-pause' } : { type: 'pomodoro:start' })} aria-label={focusActive ? '暂停专注' : '开始专注'}>
       <img src={timerAsset} alt=""/><strong>{formatTime(snapshot.pomodoro.remainingSeconds)}</strong><span>{focusActive ? '暂停一下' : '开始专注'}</span>

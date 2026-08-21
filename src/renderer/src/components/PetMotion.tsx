@@ -5,6 +5,8 @@ import greeting from '../../../../assets/video/generated/greeting.webm'
 import pressure from '../../../../assets/video/generated/pressure.webm'
 import sleep from '../../../../assets/video/generated/sleep.webm'
 import toilet from '../../../../assets/video/generated/toilet.webm'
+import transform from '../../../../assets/video/generated/transform.webm'
+import dry from '../../../../assets/video/generated/dry.webm'
 import idle from '../../../../assets/generated/final/idle.png'
 import deflated from '../../../../assets/generated/final/deflated.png'
 import drink from '../../../../assets/generated/final/drink.png'
@@ -18,7 +20,10 @@ const clips = {
   wave: { src: greeting, ...clipTimelines.greeting },
   pressure: { src: pressure, ...clipTimelines.pressure },
   sleep: { src: sleep, ...clipTimelines.sleep },
-  toilet: { src: toilet, ...clipTimelines.toilet }
+  toilet: { src: toilet, ...clipTimelines.toilet },
+  transform: { src: transform, ...clipTimelines.transform },
+  dry: { src: dry, ...clipTimelines.dry },
+  hydrating: { src: dry, ...clipTimelines.hydrating }
 } as const
 
 const stills: Record<string, string> = { idle, deflated, drink, stretch, 'eye-rest': eyeRest, reminder: idle }
@@ -57,7 +62,11 @@ export function PetMotion({ visual, pressureValue, recovery = 100 }: { visual: s
     muted
     autoPlay={clip.playMode !== 'scrub'}
     playsInline
-    style={visual === 'pressure' ? { transform: `scale(${1.45 - Math.min(1, Math.max(0, (pressureValue - 55) / 45)) * 0.37})` } : undefined}
+    style={visual === 'pressure'
+      ? { transform: `scale(${1.45 - Math.min(1, Math.max(0, (pressureValue - 55) / 45)) * 0.37})` }
+      : visual === 'focus'
+        ? { filter: 'brightness(1.13) saturate(1.18) drop-shadow(0 8px 10px rgba(84, 48, 33, .2))' }
+        : undefined}
     onError={() => setFailed(true)}
     onTimeUpdate={(event) => {
       const action = nextPlaybackAction(clip, event.currentTarget.currentTime)

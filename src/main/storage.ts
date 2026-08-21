@@ -139,8 +139,8 @@ export function createStorage(filename: string): Storage {
 export function emptyDailyStats(date: string): DailyStats {
   return {
     date,
-    scoreEnd: 50,
-    scoreMin: 50,
+    scoreEnd: 0,
+    scoreMin: 0,
     activeSeconds: 0,
     focusSeconds: 0,
     pomodoroCount: 0,

@@ -1,6 +1,7 @@
 export type ReminderKind = 'water' | 'stand' | 'toilet' | 'eyes'
 
 export interface HealthSnapshot {
+  day: string
   pressure: number
   score: number
   recovery: number
@@ -59,11 +60,13 @@ export type AppAction =
   | { type: 'pomodoro:configure-and-start'; workMinutes: number }
   | { type: 'pomodoro:toggle-pause' }
   | { type: 'pomodoro:reset' }
+  | { type: 'pomodoro:cancel' }
   | { type: 'pet:click' }
   | { type: 'pet:greet' }
   | { type: 'pet:size'; size: number }
   | { type: 'reminder:complete'; kind: ReminderKind }
   | { type: 'reminder:snooze'; kind: ReminderKind }
+  | { type: 'reminder:undo' }
   | { type: 'dashboard:open' }
   | { type: 'settings:update'; settings: AppSettings }
 

@@ -1,11 +1,13 @@
 {
-  "reference": "用户提供的五段固定镜头积木动画",
+  "reference": "用户提供的七段固定镜头积木动画",
   "pipeline": "rembg u2netp at 12 fps, normalized to a shared 480 x 500 transparent canvas, VP9 alpha WebM",
   "clips": [
-    { "id": "greeting", "file": "generated/greeting.webm", "role": "启动或悬停时只播放一次的打招呼", "start": 0.1, "end": 3.35, "playMode": "once" },
-    { "id": "focus", "file": "generated/focus.webm", "role": "专注时安静敲电脑，播放一次后停在稳定帧", "start": 0.35, "end": 4.55, "playMode": "once" },
+    { "id": "greeting", "file": "generated/greeting.webm", "role": "启动或悬停时完整播放一次的打招呼", "start": 0.1, "end": 9.92, "playMode": "once" },
+    { "id": "focus", "file": "generated/focus.webm", "role": "专注时持续、轻微地敲电脑", "start": 0.35, "end": 9.82, "playMode": "loop" },
     { "id": "sleep", "file": "generated/sleep.webm", "role": "番茄休息和睡觉", "start": 0.2, "end": 4.25, "playMode": "loop" },
     { "id": "toilet", "file": "generated/toilet.webm", "role": "上厕所提醒，播放一次", "start": 0.1, "end": 6.65, "playMode": "once" },
+    { "id": "transform", "file": "generated/transform.webm", "role": "从普通状态进入专注前的轻快跳起与旋转；已截去黑色龙卷风", "start": 0.08, "end": 3.3, "playMode": "once" },
+    { "id": "dry", "file": "generated/dry.webm", "role": "喝水提醒未响应时的干裂，到喝水后的恢复", "start": 0.08, "end": 9.9, "playMode": "once" },
     { "id": "pressure", "file": "generated/pressure.webm", "role": "按久坐压力定格到逐渐变红、膨胀的状态", "start": 0, "end": 5.3, "playMode": "scrub" },
     { "id": "explosion", "file": "generated/explosion.webm", "role": "只保留桃子破裂的短促全屏爆炸，椅子颜色已剔除", "start": 0, "end": 0.72, "playMode": "once" }
   ]

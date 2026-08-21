@@ -1,5 +1,5 @@
 import { Notification, powerMonitor } from 'electron'
-import { createHealthEngine, type HealthEvent, type HealthSnapshot, type ReminderKind } from '../core/health-engine'
+import { createHealthEngine, type HabitCompletion, type HealthEvent, type HealthSnapshot, type ReminderKind } from '../core/health-engine'
 import { createPomodoro, type PomodoroSnapshot } from '../core/pomodoro'
 import { createReminderScheduler } from '../core/reminders'
 import { selectPetVisual } from '../core/pet-visual-state'
@@ -7,7 +7,7 @@ import type { AppAction, AppSettings, AppSnapshot } from '../shared/contracts'
 import { emptyDailyStats, type DailyStats, type Storage } from './storage'
 
 const DEFAULT_SETTINGS: AppSettings = {
-  petSize: 170,
+  petSize: 140,
   workMinutes: 25,
   breakMinutes: 5,
   pressurePerMinute: 1,
@@ -42,7 +42,7 @@ export function createRuntime(storage: Storage): Runtime {
   let settings: AppSettings = {
     ...DEFAULT_SETTINGS,
     ...savedSettings,
-    petSize: savedSettings.petSize ?? DEFAULT_SETTINGS.petSize,
+    petSize: savedSettings.petSize === 170 || savedSettings.petSize === undefined ? DEFAULT_SETTINGS.petSize : savedSettings.petSize,
     reminders: { ...DEFAULT_SETTINGS.reminders, ...savedSettings.reminders }
   }
   const now = Date.now()
@@ -61,6 +61,7 @@ export function createRuntime(storage: Storage): Runtime {
   let lastTickAt = now
   const reminders = createReminderScheduler({ initialNow: now, settings: settings.reminders })
   let reminder: AppSnapshot['reminder'] = null
+  let lastCompletedHabit: { completion: HabitCompletion; at: number } | null = null
   let visualOverride: { id: string; until: number; message: string } | null = {
     id: 'wave', until: now + 2500, message: '你好呀，今天也要好好照顾自己'
   }
@@ -95,6 +96,12 @@ export function createRuntime(storage: Storage): Runtime {
         if (event.kind === 'toilet') current.toiletCount += 1
         if (event.kind === 'eyes') current.eyeRestCount += 1
       }
+      if (event.type === 'habit_undone') {
+        if (event.kind === 'water') current.waterCount = Math.max(0, current.waterCount - 1)
+        if (event.kind === 'stand') current.standCount = Math.max(0, current.standCount - 1)
+        if (event.kind === 'toilet') current.toiletCount = Math.max(0, current.toiletCount - 1)
+        if (event.kind === 'eyes') current.eyeRestCount = Math.max(0, current.eyeRestCount - 1)
+      }
       if (event.type === 'reminder_ignored') current.ignoreCount += 1
     }
     current.pomodoroCount = pomodoro.snapshot().completedToday
@@ -115,9 +122,14 @@ export function createRuntime(storage: Storage): Runtime {
   }
 
   const currentVisual = (): { id: string; message: string } => {
-    if (visualOverride && visualOverride.until > Date.now()) return visualOverride
+    if (visualOverride && visualOverride.until > lastTickAt) return visualOverride
     visualOverride = null
-    if (reminder) return { id: reminderVisual[reminder.kind], message: reminderCopy[reminder.kind] }
+    if (reminder) {
+      if (reminder.kind === 'water' && lastTickAt - reminder.dueAt >= 15 * 60_000) {
+        return { id: 'dry', message: '我都渴得干裂啦，快喝口水吧' }
+      }
+      return { id: reminderVisual[reminder.kind], message: reminderCopy[reminder.kind] }
+    }
     const p = pomodoro.snapshot()
     if (p.phase === 'awaiting_rest_confirmation') return { id: 'stretch', message: '番茄结束啦，点我开始休息' }
     if (p.phase === 'break') return { id: 'sleep', message: '休息中，放松一下吧' }
@@ -172,8 +184,12 @@ export function createRuntime(storage: Storage): Runtime {
     tick: doTick,
     dispatch(action) {
       const actionNow = Date.now()
+      lastTickAt = actionNow
       let events: HealthEvent[] = []
-      if (action.type === 'pomodoro:start') pomodoro.start(actionNow)
+      if (action.type === 'pomodoro:start') {
+        pomodoro.start(actionNow)
+        visualOverride = { id: 'transform', until: actionNow + 3_450, message: '变身专注搭子，开始啦' }
+      }
       if (action.type === 'pomodoro:configure-and-start') {
         const previous = pomodoro.snapshot()
         settings = { ...settings, workMinutes: action.workMinutes }
@@ -188,42 +204,65 @@ export function createRuntime(storage: Storage): Runtime {
           }
         })
         pomodoro.start(actionNow)
+        visualOverride = { id: 'transform', until: actionNow + 3_450, message: '变身专注搭子，开始啦' }
       }
       if (action.type === 'pomodoro:reset') pomodoro.reset()
+      if (action.type === 'pomodoro:cancel') {
+        pomodoro.reset()
+        visualOverride = { id: 'transform', until: actionNow + 3_450, message: '专注结束，变回陪伴模式' }
+      }
       if (action.type === 'pomodoro:toggle-pause') pomodoro.snapshot().phase === 'paused' ? pomodoro.resume(actionNow) : pomodoro.pause(actionNow)
       if (action.type === 'pet:click') {
-        if (pomodoro.snapshot().phase === 'awaiting_rest_confirmation') {
+        const phase = pomodoro.snapshot().phase
+        if (phase === 'work' || phase === 'paused') {
+          visualOverride = { id: 'focus', until: actionNow + 1_800, message: '保持专注，别分心啦' }
+        } else if (phase === 'awaiting_rest_confirmation') {
           visualOverride = null
           events.push(...health.startRest(actionNow))
           pomodoro.confirmRest(actionNow)
         } else if (reminder) {
           const kind = reminder.kind
+          const wasDry = kind === 'water' && actionNow - reminder.dueAt >= 15 * 60_000
           events.push(...health.completeHabit(kind, actionNow))
           reminders.complete(kind, actionNow)
           reminder = null
-          visualOverride = { id: 'happy', until: actionNow + 1800, message: '做得好！健康分正在恢复' }
+          visualOverride = wasDry
+            ? { id: 'hydrating', until: actionNow + 8_700, message: '喝到了！我正在慢慢恢复水润' }
+            : { id: 'happy', until: actionNow + 1800, message: '做得好！健康分正在恢复' }
         } else {
           events.push(...health.poke(actionNow))
           visualOverride = { id: 'happy', until: actionNow + 1200, message: '嘿嘿，被你发现啦' }
         }
       }
       if (action.type === 'pet:greet') {
-        visualOverride = { id: 'greeting', until: actionNow + 3600, message: '嗨！我会安静陪你，需要时再叫我' }
+        // Keep the runtime state alive for the entire authored greeting clip;
+        // ending this early used to cut the wave back to the idle still.
+        visualOverride = { id: 'greeting', until: actionNow + 10_150, message: '嗨！我会安静陪你，需要时再叫我' }
       }
       if (action.type === 'pet:size') {
-        settings = { ...settings, petSize: Math.max(140, Math.min(320, Math.round(action.size))) }
+        settings = { ...settings, petSize: Math.max(120, Math.min(320, Math.round(action.size))) }
         storage.setSetting('settings', settings)
       }
       if (action.type === 'reminder:complete') {
+        const wasDry = action.kind === 'water' && reminder?.kind === 'water' && actionNow - reminder.dueAt >= 15 * 60_000
         events.push(...health.completeHabit(action.kind, actionNow))
         reminders.complete(action.kind, actionNow)
         reminder = null
-        visualOverride = { id: 'happy', until: actionNow + 1800, message: '做得好！继续保持' }
+        visualOverride = wasDry
+          ? { id: 'hydrating', until: actionNow + 8_700, message: '喝到了！我正在慢慢恢复水润' }
+          : { id: 'happy', until: actionNow + 1800, message: '做得好！继续保持' }
       }
       if (action.type === 'reminder:snooze') {
         events.push(...health.ignoreReminder(action.kind, actionNow))
         reminders.snooze(action.kind, actionNow, 10)
         reminder = null
+      }
+      if (action.type === 'reminder:undo') {
+        if (lastCompletedHabit && actionNow - lastCompletedHabit.at <= 20_000) {
+          events.push(...health.undoHabit(lastCompletedHabit.completion, actionNow))
+          visualOverride = { id: 'idle', until: actionNow + 1_500, message: '已撤销刚刚的记录，没关系' }
+          lastCompletedHabit = null
+        }
       }
       if (action.type === 'settings:update') {
         const previous = pomodoro.snapshot()
@@ -231,6 +270,19 @@ export function createRuntime(storage: Storage): Runtime {
         storage.setSetting('settings', settings)
         reminders.updateSettings(settings.reminders, actionNow)
         pomodoro = createPomodoro({ ...settings, initialNow: actionNow, initialState: previous })
+      }
+      const completion = events.find((event): event is Extract<HealthEvent, { type: 'habit_completed' }> => event.type === 'habit_completed')
+      if (completion) {
+        lastCompletedHabit = {
+          completion: {
+            kind: completion.kind,
+            pressureRelief: completion.pressureRelief,
+            scoreDelta: completion.scoreDelta,
+            recoveryDelta: completion.recoveryDelta,
+            rewarded: completion.rewarded
+          },
+          at: actionNow
+        }
       }
       mutateStats(events, actionNow)
       persistRuntimeState()

@@ -3,10 +3,11 @@ import { describe, expect, it } from 'vitest'
 import { clipTimelines, nextPlaybackAction } from './pet-motion-timeline'
 
 describe('pet motion timelines', () => {
-  it('plays greeting and focus once instead of looping forever', () => {
+  it('plays the complete greeting once, then keeps focus looping', () => {
     expect(clipTimelines.greeting.playMode).toBe('once')
-    expect(clipTimelines.focus.playMode).toBe('once')
-    expect(nextPlaybackAction(clipTimelines.focus, clipTimelines.focus.end)).toBe('pause')
+    expect(clipTimelines.greeting.end).toBeGreaterThanOrEqual(9.5)
+    expect(clipTimelines.focus.playMode).toBe('loop')
+    expect(nextPlaybackAction(clipTimelines.focus, clipTimelines.focus.end)).toBe('rewind')
   })
 
   it('loops sleep before its source tail to avoid a visible seam', () => {
@@ -18,5 +19,13 @@ describe('pet motion timelines', () => {
   it('uses a dedicated short explosion clip instead of seeking through pressure footage', () => {
     expect(clipTimelines.explosion.end - clipTimelines.explosion.start).toBeLessThanOrEqual(0.8)
     expect(clipTimelines.explosion.playMode).toBe('once')
+  })
+
+  it('includes transform and dry reminder clips as first-class motions', () => {
+    expect(clipTimelines.transform.playMode).toBe('once')
+    expect(clipTimelines.transform.end).toBeLessThan(5)
+    expect(clipTimelines.dry.playMode).toBe('once')
+    expect(clipTimelines.dry.end).toBeLessThan(2)
+    expect(clipTimelines.hydrating.end).toBeGreaterThan(5)
   })
 })

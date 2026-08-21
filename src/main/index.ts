@@ -20,7 +20,7 @@ function load(window: BrowserWindow, view: 'pet' | 'dashboard' | 'explosion'): v
 
 function createPetWindow(): BrowserWindow {
   const area = screen.getPrimaryDisplay().workArea
-  const petSize = runtime?.snapshot().settings.petSize ?? 170
+  const petSize = runtime?.snapshot().settings.petSize ?? 140
   const width = petSize + 20
   const height = Math.round(width * 1.12)
   const window = new BrowserWindow({
@@ -41,7 +41,7 @@ function createPetWindow(): BrowserWindow {
 function resizePet(size: number): void {
   if (!petWindow || !Number.isFinite(size)) return
   const [x, y] = petWindow.getPosition()
-  const width = Math.max(160, Math.min(340, size + 20))
+  const width = Math.max(140, Math.min(340, size + 20))
   const height = Math.round(width * 1.12)
   petWindow.setBounds({ x, y, width, height }, true)
 }
@@ -101,7 +101,7 @@ function showPetMenu(): void {
         ...[25, 45, 60].map((minutes) => ({ label: `${minutes} 分钟`, click: () => dispatch({ type: 'pomodoro:configure-and-start', workMinutes: minutes }) })),
         { type: 'separator' as const },
         { label: snapshot.pomodoro.phase === 'work' ? '暂停' : running ? '继续' : '开始', click: () => dispatch(running ? { type: 'pomodoro:toggle-pause' } : { type: 'pomodoro:start' }) },
-        { label: '重置计时', click: () => dispatch({ type: 'pomodoro:reset' }) }
+        ...(running ? [{ label: '取消专注，回到初始', click: () => dispatch({ type: 'pomodoro:cancel' as const }) }] : [])
       ]
     },
     {
@@ -110,17 +110,10 @@ function showPetMenu(): void {
         { label: '喝水', click: () => dispatch({ type: 'reminder:complete', kind: 'water' }) },
         { label: '起身活动', click: () => dispatch({ type: 'reminder:complete', kind: 'stand' }) },
         { label: '休息眼睛', click: () => dispatch({ type: 'reminder:complete', kind: 'eyes' }) },
-        { label: '上厕所', click: () => dispatch({ type: 'reminder:complete', kind: 'toilet' }) }
+        { label: '上厕所', click: () => dispatch({ type: 'reminder:complete', kind: 'toilet' }) },
+        { type: 'separator' as const },
+        { label: '撤销刚刚完成的行为', click: () => dispatch({ type: 'reminder:undo' }) }
       ]
-    },
-    {
-      label: '桌宠大小',
-      submenu: [140, 170, 210, 260].map((size) => ({
-        label: ({ 140: '很小', 170: '小', 210: '标准', 260: '大' } as Record<number, string>)[size],
-        type: 'radio' as const,
-        checked: Math.abs(snapshot.settings.petSize - size) < 15,
-        click: () => { resizePet(size); dispatch({ type: 'pet:size', size }) }
-      }))
     },
     { type: 'separator' },
     { label: '打开桃桃小屋与设置', click: openDashboard }
@@ -189,7 +182,7 @@ function isFinitePoint(value: unknown): value is { x: number; y: number } {
 function isSafeAction(value: unknown): value is AppAction {
   if (!value || typeof value !== 'object') return false
   const action = value as Partial<AppAction> & Record<string, unknown>
-  const types = new Set<AppAction['type']>(['pomodoro:start', 'pomodoro:configure-and-start', 'pomodoro:toggle-pause', 'pomodoro:reset', 'pet:click', 'pet:greet', 'pet:size', 'reminder:complete', 'reminder:snooze', 'dashboard:open', 'settings:update'])
+  const types = new Set<AppAction['type']>(['pomodoro:start', 'pomodoro:configure-and-start', 'pomodoro:toggle-pause', 'pomodoro:reset', 'pomodoro:cancel', 'pet:click', 'pet:greet', 'pet:size', 'reminder:complete', 'reminder:snooze', 'reminder:undo', 'dashboard:open', 'settings:update'])
   if (typeof action.type !== 'string' || !types.has(action.type as AppAction['type'])) return false
   if (action.type === 'pet:size') return typeof action.size === 'number' && Number.isFinite(action.size) && action.size >= 120 && action.size <= 320
   if (action.type === 'pomodoro:configure-and-start') return typeof action.workMinutes === 'number' && Number.isFinite(action.workMinutes) && action.workMinutes >= 1 && action.workMinutes <= 120

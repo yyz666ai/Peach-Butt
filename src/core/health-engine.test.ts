@@ -2,17 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { createHealthEngine } from './health-engine'
 
 describe('health engine', () => {
-  it('starts each day hungry at 50 points', () => {
+  it('starts each day at zero points', () => {
     const engine = createHealthEngine({ initialNow: 0 })
-    expect(engine.snapshot()).toMatchObject({ score: 50, recovery: 100 })
+    expect(engine.snapshot()).toMatchObject({ score: 0, recovery: 100 })
   })
 
   it('rewards healthy actions but not active time', () => {
     const engine = createHealthEngine({ initialNow: 0 })
     engine.tick({ now: 60_000, idleSeconds: 0 })
-    expect(engine.snapshot().score).toBe(50)
+    expect(engine.snapshot().score).toBe(0)
     engine.completeHabit('stand', 61_000)
-    expect(engine.snapshot().score).toBe(58)
+    expect(engine.snapshot().score).toBe(12)
   })
 
   it('adds pressure and active time while the computer is active', () => {
@@ -98,15 +98,14 @@ describe('health engine', () => {
 
     expect(engine.snapshot()).toMatchObject({
       pressure: 0,
-      score: 35,
+      score: 0,
       recovery: 0,
       explosionsToday: 1,
       mode: 'deflated'
     })
     expect(events).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'explode', penalty: 15 }),
-        expect.objectContaining({ type: 'score_changed', delta: -15 })
+        expect.objectContaining({ type: 'explode', penalty: 0 })
       ])
     )
   })
@@ -117,12 +116,12 @@ describe('health engine', () => {
 
     const events = engine.completeHabit('water', 101 * 60_000)
 
-    expect(engine.snapshot()).toMatchObject({ score: 40, recovery: 20, pressure: 0, mode: 'deflated' })
+    expect(engine.snapshot()).toMatchObject({ score: 8, recovery: 32, pressure: 0, mode: 'deflated' })
     engine.completeHabit('water', 102 * 60_000)
     engine.completeHabit('water', 103 * 60_000)
-    engine.completeHabit('water', 104 * 60_000)
-    const finalEvents = engine.completeHabit('water', 105 * 60_000)
-    expect(engine.snapshot()).toMatchObject({ score: 60, recovery: 100, mode: 'active' })
+    const finalEvents = engine.completeHabit('water', 104 * 60_000)
+    engine.completeHabit('water', 105 * 60_000)
+    expect(engine.snapshot()).toMatchObject({ score: 40, recovery: 100, mode: 'active' })
     expect(events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: 'habit_completed', kind: 'water' }),
@@ -182,7 +181,7 @@ describe('health engine', () => {
     const events = engine.ignoreReminder('stand', 1_000)
 
     expect(engine.snapshot().pressure).toBe(10)
-    expect(engine.snapshot().score).toBe(47)
+    expect(engine.snapshot().score).toBe(0)
     expect(events).toContainEqual(
       expect.objectContaining({ type: 'reminder_ignored', kind: 'stand', pressureAdded: 10 })
     )
@@ -198,12 +197,47 @@ describe('health engine', () => {
 
     expect(engine.snapshot()).toMatchObject({
       pressure: 0,
-      score: 50,
+      score: 0,
       recovery: 100,
       explosionsToday: 0,
       activeSecondsToday: 0,
       restCount: 0,
       mode: 'active'
     })
+  })
+
+  it('starts from zero, gives weighted habit points, and caps repeated rewards', () => {
+    const engine = createHealthEngine({ initialNow: 0 })
+
+    expect(engine.snapshot().score).toBe(0)
+    engine.completeHabit('water', 1_000)
+    engine.completeHabit('stand', 2_000)
+    expect(engine.snapshot().score).toBeGreaterThan(0)
+
+    for (let index = 0; index < 12; index += 1) engine.completeHabit('water', 3_000 + index)
+    expect(engine.snapshot().score).toBe(52)
+  })
+
+  it('undoes only the exact score, recovery, pressure and daily reward of a completed habit', () => {
+    const engine = createHealthEngine({ initialNow: 0 })
+    engine.tick({ now: 12 * 60_000, idleSeconds: 0 })
+    const completion = engine.completeHabit('stand', 12 * 60_000 + 1)
+      .find((event): event is Extract<typeof event, { type: 'habit_completed' }> => event.type === 'habit_completed')!
+
+    engine.undoHabit(completion, 12 * 60_000 + 2)
+
+    expect(engine.snapshot()).toMatchObject({ score: 0, recovery: 100, pressure: 12 })
+    expect(engine.snapshot().habitRewards.stand).toBe(0)
+  })
+
+  it('resets a persisted score when reopened on a new local day', () => {
+    const firstDay = new Date(2026, 7, 20, 9).getTime()
+    const nextDay = new Date(2026, 7, 21, 9).getTime()
+    const first = createHealthEngine({ initialNow: firstDay })
+    first.completeHabit('stand', firstDay + 1_000)
+
+    const reopened = createHealthEngine({ initialNow: nextDay, initialState: first.snapshot() })
+
+    expect(reopened.snapshot()).toMatchObject({ score: 0, habitRewards: { stand: 0 } })
   })
 })
