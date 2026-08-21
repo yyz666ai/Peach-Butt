@@ -4,10 +4,11 @@ final result: passed
 
 ## Evidence
 
-- Visual source: `/Users/yangzhou/.codex/generated_images/01a01d5f-e8c8-7dd0-ba6a-e23840644704/exec-fa04e291-294c-46bf-bc47-a82186114145.png`
+- Visual source for this responsive repair: `/var/folders/4f/fh1kxjb14gldyxx4wqlg9pcc0000gn/T/codex-clipboard-a522c30c-31d2-44be-aef2-2df86e53d64a.png`
 - Implementation screenshot: `docs/qa/dashboard-final.png`
 - Side-by-side comparison: `docs/qa/dashboard-comparison.png`
-- Tested dashboard viewport: `1050 × 760` logical pixels on macOS high-DPI display
+- Responsive matrix: `docs/qa/dashboard-responsive-matrix.png`
+- Tested dashboard viewports: `960 × 650`, `1050 × 760`, and `1400 × 800` logical pixels on macOS high-DPI display
 - Explosion contact sheet: `docs/qa/explosion-contact-sheet.png`
 
 ## Comparison history
@@ -15,6 +16,8 @@ final result: passed
 1. Initial implementation was too dim, used small type, allowed story text to overflow its note, and gave the working character too much continuous motion.
 2. Revised implementation raised peach/coral saturation and brightness, enlarged the type hierarchy, restored safe margins, separated energy/summary/growth/action zones, and changed the story note into a fixed entry that opens a stable dialog.
 3. Final motion behavior plays the dashboard character once on entry, freezes on a stable frame, and replays once on hover. Video and still containers share a fixed visual slot.
+4. Responsive repair replaced independently positioned major regions with one parent CSS grid. The energy title, score, summary, metrics, chart, action dock, character, and timer now occupy explicit rows or grid areas.
+5. Final repair removed the fixed CSS minimum viewport that exceeded the framed Electron content height, made the chart parent resize with the window, and reserved a clipped 24px label row inside every habit button.
 
 ## Final checks
 
@@ -24,5 +27,8 @@ final result: passed
 - All visible controls in the main journey have an action.
 - Dynamic copy is constrained to a fixed dialog rather than laid directly over a variable-size generated note.
 - Peach, energy arc, timer, and behavior objects remain visually dominant over the room background.
-- No dashboard text visibly crosses its container boundary in the recorded viewport.
+- No dashboard text visibly crosses its container boundary at any of the three recorded viewport sizes.
+- The energy title no longer intersects the leaf/arc asset; the score and summary occupy separate alignment positions.
+- The seven-day line and peach nodes reflow with the chart container at every recorded width.
+- Habit names remain inside the dock even when the viewport is wide or at its minimum height.
 - Reference and implementation were inspected together in the side-by-side comparison image.
