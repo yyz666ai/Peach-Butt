@@ -19,9 +19,9 @@ from rembg import new_session, remove
 CANVAS = (480, 500)
 MOTION_NAMES = ("greeting", "focus", "sleep", "toilet", "pressure", "transform", "dry")
 TRIM_RANGES = {
-    # Keep the cheerful jump-and-spin only. The dark tornado starts immediately
-    # after this point and is deliberately excluded from the transition asset.
-    "transform": (0.08, 3.30),
+    # Keep the complete jump, spin and visible tornado. Playback is sped up in
+    # the renderer so the transformation does not delay focus for too long.
+    "transform": (0.08, 6.50),
     # Show the complete thirsty-to-recovered arc, including the final happy pose.
     "dry": (0.08, 9.90),
 }

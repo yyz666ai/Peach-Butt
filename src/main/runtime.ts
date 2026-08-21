@@ -22,11 +22,11 @@ const DEFAULT_SETTINGS: AppSettings = {
 }
 
 const reminderCopy: Record<ReminderKind, string> = {
-  water: '喝口水吧，点我完成提醒', stand: '起来走走，活动一下身体',
+  water: '该喝水啦，看看我怎么补充水分', stand: '这一轮结束啦，起来走走再休息',
   toilet: '别憋着，该去上厕所啦', eyes: '看看远处，让眼睛休息一下'
 }
 const reminderVisual: Record<ReminderKind, string> = {
-  water: 'drink', stand: 'stretch', toilet: 'toilet', eyes: 'eye-rest'
+  water: 'water-prompt', stand: 'stretch', toilet: 'toilet', eyes: 'eye-rest'
 }
 
 export interface Runtime {
@@ -162,10 +162,20 @@ export function createRuntime(storage: Storage): Runtime {
     for (const event of pomodoro.tick(tickNow)) {
       storage.appendEvent({ type: event.type, ts: event.ts, meta: event })
       if (event.type === 'work_completed') {
-        visualOverride = { id: 'stretch', until: Number.POSITIVE_INFINITY, message: '番茄结束啦，点我开始休息' }
-        if (Notification.isSupported()) new Notification({ title: '桃屁屁', body: '番茄结束啦，点一下桃屁屁开始休息' }).show()
+        // A finished work block always asks for a real standing break before
+        // the break timer can begin. The one visible reminder stays actionable.
+        reminder = { kind: 'stand', dueAt: tickNow }
+        visualOverride = null
+        if (Notification.isSupported()) new Notification({ title: '桃屁屁', body: '这一轮结束啦，起来走走再休息' }).show()
       }
-      if (event.type === 'break_completed') mutateStats(health.completeHabit('pomodoro_break', tickNow), tickNow)
+      if (event.type === 'break_completed') {
+        mutateStats(health.completeHabit('pomodoro_break', tickNow), tickNow)
+        if (pomodoro.snapshot().completedToday % 2 === 0) {
+          reminder = { kind: 'water', dueAt: tickNow }
+          visualOverride = null
+          if (Notification.isSupported()) new Notification({ title: '桃屁屁', body: '完成两轮专注啦，跟我一起喝口水' }).show()
+        }
+      }
     }
     const due = reminder ? [] : reminders.tick(tickNow, pomodoro.snapshot().phase === 'work')
     if (due[0]) {
@@ -188,7 +198,7 @@ export function createRuntime(storage: Storage): Runtime {
       let events: HealthEvent[] = []
       if (action.type === 'pomodoro:start') {
         pomodoro.start(actionNow)
-        visualOverride = { id: 'transform', until: actionNow + 3_450, message: '变身专注搭子，开始啦' }
+        visualOverride = { id: 'transform', until: actionNow + 5_400, message: '变身专注搭子，开始啦' }
       }
       if (action.type === 'pomodoro:configure-and-start') {
         const previous = pomodoro.snapshot()
@@ -204,22 +214,18 @@ export function createRuntime(storage: Storage): Runtime {
           }
         })
         pomodoro.start(actionNow)
-        visualOverride = { id: 'transform', until: actionNow + 3_450, message: '变身专注搭子，开始啦' }
+        visualOverride = { id: 'transform', until: actionNow + 5_400, message: '变身专注搭子，开始啦' }
       }
       if (action.type === 'pomodoro:reset') pomodoro.reset()
       if (action.type === 'pomodoro:cancel') {
         pomodoro.reset()
-        visualOverride = { id: 'transform', until: actionNow + 3_450, message: '专注结束，变回陪伴模式' }
+        visualOverride = { id: 'transform', until: actionNow + 5_400, message: '专注结束，变回陪伴模式' }
       }
       if (action.type === 'pomodoro:toggle-pause') pomodoro.snapshot().phase === 'paused' ? pomodoro.resume(actionNow) : pomodoro.pause(actionNow)
       if (action.type === 'pet:click') {
         const phase = pomodoro.snapshot().phase
         if (phase === 'work' || phase === 'paused') {
           visualOverride = { id: 'focus', until: actionNow + 1_800, message: '保持专注，别分心啦' }
-        } else if (phase === 'awaiting_rest_confirmation') {
-          visualOverride = null
-          events.push(...health.startRest(actionNow))
-          pomodoro.confirmRest(actionNow)
         } else if (reminder) {
           const kind = reminder.kind
           const wasDry = kind === 'water' && actionNow - reminder.dueAt >= 15 * 60_000
@@ -229,6 +235,14 @@ export function createRuntime(storage: Storage): Runtime {
           visualOverride = wasDry
             ? { id: 'hydrating', until: actionNow + 8_700, message: '喝到了！我正在慢慢恢复水润' }
             : { id: 'happy', until: actionNow + 1800, message: '做得好！健康分正在恢复' }
+          if (phase === 'awaiting_rest_confirmation' && kind === 'stand') {
+            events.push(...health.startRest(actionNow))
+            pomodoro.confirmRest(actionNow)
+          }
+        } else if (phase === 'awaiting_rest_confirmation') {
+          visualOverride = null
+          events.push(...health.startRest(actionNow))
+          pomodoro.confirmRest(actionNow)
         } else {
           events.push(...health.poke(actionNow))
           visualOverride = { id: 'happy', until: actionNow + 1200, message: '嘿嘿，被你发现啦' }
@@ -244,6 +258,7 @@ export function createRuntime(storage: Storage): Runtime {
         storage.setSetting('settings', settings)
       }
       if (action.type === 'reminder:complete') {
+        const phase = pomodoro.snapshot().phase
         const wasDry = action.kind === 'water' && reminder?.kind === 'water' && actionNow - reminder.dueAt >= 15 * 60_000
         events.push(...health.completeHabit(action.kind, actionNow))
         reminders.complete(action.kind, actionNow)
@@ -251,6 +266,10 @@ export function createRuntime(storage: Storage): Runtime {
         visualOverride = wasDry
           ? { id: 'hydrating', until: actionNow + 8_700, message: '喝到了！我正在慢慢恢复水润' }
           : { id: 'happy', until: actionNow + 1800, message: '做得好！继续保持' }
+        if (phase === 'awaiting_rest_confirmation' && action.kind === 'stand') {
+          events.push(...health.startRest(actionNow))
+          pomodoro.confirmRest(actionNow)
+        }
       }
       if (action.type === 'reminder:snooze') {
         events.push(...health.ignoreReminder(action.kind, actionNow))

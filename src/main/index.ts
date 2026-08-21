@@ -10,6 +10,7 @@ let explosionWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let runtime: Runtime | null = null
 let dragOffset = { x: 0, y: 0 }
+const PET_WINDOW_HEIGHT_RATIO = 1.5
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
 
@@ -22,7 +23,9 @@ function createPetWindow(): BrowserWindow {
   const area = screen.getPrimaryDisplay().workArea
   const petSize = runtime?.snapshot().settings.petSize ?? 140
   const width = petSize + 20
-  const height = Math.round(width * 1.12)
+  // The transparent window is deliberately taller than the visible pet. This
+  // gives the speech bubble its own space and keeps feet/chair legs in frame.
+  const height = Math.round(width * PET_WINDOW_HEIGHT_RATIO)
   const window = new BrowserWindow({
     width, height,
     x: area.x + area.width - width - 28, y: area.y + area.height - height - 28,
@@ -42,7 +45,7 @@ function resizePet(size: number): void {
   if (!petWindow || !Number.isFinite(size)) return
   const [x, y] = petWindow.getPosition()
   const width = Math.max(140, Math.min(340, size + 20))
-  const height = Math.round(width * 1.12)
+  const height = Math.round(width * PET_WINDOW_HEIGHT_RATIO)
   petWindow.setBounds({ x, y, width, height }, true)
 }
 

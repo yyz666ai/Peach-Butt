@@ -23,7 +23,8 @@ const clips = {
   toilet: { src: toilet, ...clipTimelines.toilet },
   transform: { src: transform, ...clipTimelines.transform },
   dry: { src: dry, ...clipTimelines.dry },
-  hydrating: { src: dry, ...clipTimelines.hydrating }
+  hydrating: { src: dry, ...clipTimelines.hydrating },
+  'water-prompt': { src: dry, ...clipTimelines['water-prompt'] }
 } as const
 
 const stills: Record<string, string> = { idle, deflated, drink, stretch, 'eye-rest': eyeRest, reminder: idle }
@@ -43,6 +44,7 @@ export function PetMotion({ visual, pressureValue, recovery = 100 }: { visual: s
       : clip.start
     const seek = (): void => {
       element.currentTime = position
+      element.playbackRate = 'rate' in clip ? clip.rate : 1
       if (clip.playMode === 'scrub') element.pause()
       else void element.play().catch(() => setFailed(true))
     }

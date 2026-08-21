@@ -200,6 +200,43 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot().visual).toBe('greeting')
   })
 
+  it('turns every completed pomodoro into a standing reminder before the break starts', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 1 })
+
+    runtime.tick(start + 60_000, 0)
+
+    expect(runtime.snapshot()).toMatchObject({
+      pomodoro: { phase: 'awaiting_rest_confirmation', completedToday: 1 },
+      reminder: { kind: 'stand' },
+      visual: 'stretch'
+    })
+  })
+
+  it('demonstrates drinking after the second pomodoro break', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 1 })
+    runtime.tick(start + 60_000, 0)
+    vi.setSystemTime(start + 60_000)
+    runtime.dispatch({ type: 'pet:click' })
+    runtime.tick(start + 6 * 60_000, 0)
+
+    vi.setSystemTime(start + 6 * 60_000)
+    runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 1 })
+    runtime.tick(start + 7 * 60_000, 0)
+    vi.setSystemTime(start + 7 * 60_000)
+    runtime.dispatch({ type: 'pet:click' })
+    runtime.tick(start + 12 * 60_000, 0)
+
+    expect(runtime.snapshot()).toMatchObject({
+      pomodoro: { phase: 'idle', completedToday: 2 },
+      reminder: { kind: 'water' },
+      visual: 'water-prompt'
+    })
+  })
+
   it('undoes the most recent completed habit once', () => {
     const storage = memoryStorage()
     const runtime = createRuntime(storage)

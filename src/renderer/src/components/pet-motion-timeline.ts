@@ -4,6 +4,7 @@ export interface ClipTimeline {
   start: number
   end: number
   playMode: PlaybackMode
+  rate?: number
 }
 
 export const clipTimelines = {
@@ -12,7 +13,8 @@ export const clipTimelines = {
   pressure: { start: 0, end: 5.3, playMode: 'scrub' },
   sleep: { start: 0.2, end: 4.25, playMode: 'loop' },
   toilet: { start: 0.1, end: 6.65, playMode: 'once' },
-  transform: { start: 0.08, end: 3.3, playMode: 'once' },
+  transform: { start: 0.08, end: 6.5, playMode: 'once', rate: 1.25 },
+  'water-prompt': { start: 1.45, end: 9.9, playMode: 'once' },
   // An ignored water reminder holds the cracked pose; the drinking portion is
   // reserved for an actual completed-water confirmation.
   dry: { start: 0.08, end: 1.45, playMode: 'once' },
