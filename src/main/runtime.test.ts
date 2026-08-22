@@ -268,6 +268,93 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot().health.pressure).toBe(0)
   })
 
+  it('starts a safe continuous-work window when restored work is missing its start time', () => {
+    const storage = memoryStorage()
+    storage.settings.set('settings', { continuousWorkLimitMinutes: 3 })
+    storage.runtime.set('runtime', {
+      health: {
+        day: '2026-08-20', pressure: 0, score: 0, recovery: 100,
+        activeSecondsToday: 0, continuousActiveSeconds: 0, restCount: 0,
+        explosionsToday: 0, mode: 'active', habitRewards: {}
+      },
+      pomodoro: {
+        phase: 'work', remainingSeconds: 1500, completedToday: 0,
+        breakKind: null, day: '2026-8-20', pausedPhase: null
+      },
+      session: {
+        restSession: null, continuousWorkStartedAt: null,
+        recoveryRestStartedAt: null, overlaySequence: 0,
+        usage: { state: 'focus', startedAt: start - 60_000, checkpointAt: start }
+      }
+    })
+
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+    runtime.tick(start + 179_000, 0)
+    expect(runtime.snapshot().health.mode).toBe('active')
+
+    runtime.tick(start + 180_000, 0)
+    expect(runtime.snapshot().health.mode).toBe('deflated')
+  })
+
+  it('restarts continuous-work timing at now when its usage checkpoint is damaged', () => {
+    const storage = memoryStorage()
+    storage.settings.set('settings', { continuousWorkLimitMinutes: 3 })
+    storage.runtime.set('runtime', {
+      health: {
+        day: '2026-08-20', pressure: 0, score: 0, recovery: 100,
+        activeSecondsToday: 0, continuousActiveSeconds: 0, restCount: 0,
+        explosionsToday: 0, mode: 'active', habitRewards: {}
+      },
+      pomodoro: {
+        phase: 'work', remainingSeconds: 1500, completedToday: 0,
+        breakKind: null, day: '2026-8-20', pausedPhase: null
+      },
+      session: {
+        restSession: null, continuousWorkStartedAt: start - 60 * 60_000,
+        recoveryRestStartedAt: null, overlaySequence: 0,
+        usage: { state: 'focus', startedAt: start - 60_000, checkpointAt: 'damaged' }
+      }
+    })
+
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+    runtime.tick(start, 0)
+    expect(runtime.snapshot().health.mode).toBe('active')
+
+    runtime.tick(start + 179_000, 0)
+    expect(runtime.snapshot().health.mode).toBe('active')
+    runtime.tick(start + 180_000, 0)
+    expect(runtime.snapshot().health.mode).toBe('deflated')
+  })
+
+  it('clears a stale continuous-work start restored during a break', () => {
+    const storage = memoryStorage()
+    storage.runtime.set('runtime', {
+      health: {
+        day: '2026-08-20', pressure: 0, score: 0, recovery: 100,
+        activeSecondsToday: 0, continuousActiveSeconds: 0, restCount: 0,
+        explosionsToday: 0, mode: 'resting', habitRewards: {}
+      },
+      pomodoro: {
+        phase: 'break', remainingSeconds: 300, completedToday: 1,
+        breakKind: 'short', day: '2026-8-20', pausedPhase: null
+      },
+      session: {
+        restSession: null, continuousWorkStartedAt: start - 60_000,
+        recoveryRestStartedAt: null, overlaySequence: 0,
+        usage: { state: 'short_break', startedAt: start - 30_000, checkpointAt: start }
+      }
+    })
+
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+
+    expect(storage.runtime.get('runtime')).toMatchObject({
+      session: { continuousWorkStartedAt: null }
+    })
+  })
+
   it('records focus seconds from elapsed focused time', () => {
     const storage = memoryStorage()
     const runtime = createRuntime(storage)

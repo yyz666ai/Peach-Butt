@@ -110,6 +110,7 @@ export function createRuntime(storage: Storage): Runtime {
   })
   let restSession: RestSession | null = restoreRestSession(restoredSession.restSession)
   let continuousWorkStartedAt = finiteOrNull(restoredSession.continuousWorkStartedAt)
+  const restoredUsage = validUsageCheckpoint(restoredSession.usage)
   let recoveryRestStartedAt = finiteOrNull(restoredSession.recoveryRestStartedAt)
   let overlaySequence = Number.isSafeInteger(restoredSession.overlaySequence) && restoredSession.overlaySequence >= 0
     ? restoredSession.overlaySequence
@@ -124,6 +125,29 @@ export function createRuntime(storage: Storage): Runtime {
     const canRestoreSession = restoredPhase.phase === 'break' ||
       (restoredPhase.phase === 'paused' && restoredPhase.pausedPhase === 'break')
     if (!canRestoreSession) restSession = null
+    const continuesWork = restoredPhase.phase === 'work' ||
+      restoredPhase.phase === 'awaiting_rest_confirmation' ||
+      (restoredPhase.phase === 'paused' && restoredPhase.pausedPhase === 'work')
+    if (!continuesWork) {
+      continuousWorkStartedAt = null
+    } else {
+      const expectedUsageState: UsageState = restoredPhase.phase === 'work'
+        ? 'focus'
+        : restoredPhase.phase === 'awaiting_rest_confirmation'
+          ? 'rest_due'
+          : 'idle'
+      if (
+        continuousWorkStartedAt !== null &&
+        restoredUsage !== null &&
+        restoredUsage.state === expectedUsageState &&
+        continuousWorkStartedAt <= restoredUsage.checkpointAt &&
+        restoredUsage.checkpointAt <= now
+      ) {
+        continuousWorkStartedAt += now - restoredUsage.checkpointAt
+      } else {
+        continuousWorkStartedAt = now
+      }
+    }
   }
   let lastTickAt = now
   const reminders = createReminderScheduler({ initialNow: now, settings: settings.reminders })
@@ -150,10 +174,6 @@ export function createRuntime(storage: Storage): Runtime {
     return 'idle'
   }
 
-  const restoredUsage = validUsageCheckpoint(restoredSession.usage)
-  if (continuousWorkStartedAt !== null && restoredUsage && now > restoredUsage.checkpointAt) {
-    continuousWorkStartedAt += now - restoredUsage.checkpointAt
-  }
   let usage: UsageCheckpoint = { state: currentUsageState(), startedAt: now, checkpointAt: now }
 
   const persistRuntimeState = (): void => {
