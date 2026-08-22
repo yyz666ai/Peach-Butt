@@ -89,8 +89,26 @@ export function createStorage(filename: string): Storage {
   const insertUsage = db.prepare(
     'INSERT INTO usage_sessions (date, state, started_at, ended_at, seconds) VALUES (?, ?, ?, ?, ?)'
   )
+  const selectLastUsage = db.prepare(
+    'SELECT id, state, started_at, ended_at FROM usage_sessions WHERE date = ? ORDER BY started_at DESC, id DESC LIMIT 1'
+  )
+  const extendUsage = db.prepare(
+    'UPDATE usage_sessions SET ended_at = ?, seconds = ? WHERE id = ?'
+  )
   const insertUsageParts = db.transaction((parts: UsageSession[]) => {
-    for (const part of parts) insertUsage.run(part.date, part.state, part.startedAt, part.endedAt, part.seconds)
+    for (const part of parts) {
+      const previous = selectLastUsage.get(part.date) as {
+        id: number
+        state: UsageState
+        started_at: number
+        ended_at: number
+      } | undefined
+      if (previous?.state === part.state && previous.ended_at === part.startedAt) {
+        extendUsage.run(part.endedAt, (part.endedAt - previous.started_at) / 1000, previous.id)
+      } else {
+        insertUsage.run(part.date, part.state, part.startedAt, part.endedAt, part.seconds)
+      }
+    }
   })
   const selectUsage = db.prepare(
     'SELECT id, date, state, started_at, ended_at, seconds FROM usage_sessions WHERE date >= ? AND date <= ? ORDER BY started_at, id'

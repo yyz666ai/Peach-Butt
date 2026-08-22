@@ -41,10 +41,10 @@ const reminderVisual: Record<ReminderKind, string> = {
   water: 'water-prompt', stand: 'stretch', toilet: 'toilet', eyes: 'eye-rest'
 }
 const restOverlayMessages = [
-  '起来伸展一下',
-  '喝点水补充水分',
-  '去趟洗手间吧',
-  '看看远处放松眼睛'
+  '起来活动一下啦！',
+  '要去喝水啦！',
+  '该去上个厕所啦！',
+  '让眼睛休息一下吧！'
 ]
 
 interface UsageCheckpoint {
@@ -135,13 +135,6 @@ export function createRuntime(storage: Storage): Runtime {
   if (continuousWorkStartedAt !== null && restoredUsage && now > restoredUsage.checkpointAt) {
     continuousWorkStartedAt += now - restoredUsage.checkpointAt
   }
-  if (restoredUsage && restoredUsage.checkpointAt > restoredUsage.startedAt) {
-    storage.appendUsageSession({
-      state: restoredUsage.state,
-      startedAt: restoredUsage.startedAt,
-      endedAt: restoredUsage.checkpointAt
-    })
-  }
   let usage: UsageCheckpoint = { state: currentUsageState(), startedAt: now, checkpointAt: now }
 
   const persistRuntimeState = (): void => {
@@ -207,9 +200,11 @@ export function createRuntime(storage: Storage): Runtime {
   const advanceUsage = (at: number): void => {
     const checkpointAt = Math.max(usage.checkpointAt, at)
     addUsageSeconds(usage.state, usage.checkpointAt, checkpointAt)
+    if (checkpointAt > usage.checkpointAt) {
+      storage.appendUsageSession({ state: usage.state, startedAt: usage.checkpointAt, endedAt: checkpointAt })
+    }
     const nextState = currentUsageState()
     if (nextState !== usage.state) {
-      storage.appendUsageSession({ state: usage.state, startedAt: usage.startedAt, endedAt: checkpointAt })
       usage = { state: nextState, startedAt: checkpointAt, checkpointAt }
       return
     }
@@ -315,8 +310,8 @@ export function createRuntime(storage: Storage): Runtime {
     recoveryRestStartedAt = null
     restSession = null
     reminder = null
-    visualOverride = { id: 'exploding', until: at + 3000, message: '快去休息啦' }
-    publishOverlay('explosion', ['快去休息啦'])
+    visualOverride = { id: 'exploding', until: at + 3000, message: '快去休息啦！' }
+    publishOverlay('explosion', ['快去休息啦！'])
   }
 
   const doTick = (tickNow = Date.now(), idleSeconds = powerMonitor.getSystemIdleTime()): AppSnapshot => {
@@ -376,7 +371,12 @@ export function createRuntime(storage: Storage): Runtime {
     dispatch(action) {
       const actionNow = Date.now()
       const phaseBeforeAction = pomodoro.snapshot().phase
-      if (phaseBeforeAction === 'paused' && continuousWorkStartedAt !== null && actionNow > lastTickAt) {
+      if (
+        phaseBeforeAction !== 'work' &&
+        phaseBeforeAction !== 'awaiting_rest_confirmation' &&
+        continuousWorkStartedAt !== null &&
+        actionNow > lastTickAt
+      ) {
         continuousWorkStartedAt += actionNow - lastTickAt
       }
       lastTickAt = actionNow
@@ -385,7 +385,7 @@ export function createRuntime(storage: Storage): Runtime {
       if (action.type === 'pomodoro:start' && !locked) {
         pomodoro.start(actionNow)
         restSession = null
-        continuousWorkStartedAt = actionNow
+        continuousWorkStartedAt ??= actionNow
         visualOverride = { id: 'transform', until: actionNow + 5400, message: '变身专注搭子，开始啦' }
       }
       if (action.type === 'pomodoro:configure-and-start' && !locked) {
@@ -405,12 +405,11 @@ export function createRuntime(storage: Storage): Runtime {
         })
         pomodoro.start(actionNow)
         restSession = null
-        continuousWorkStartedAt = actionNow
+        continuousWorkStartedAt ??= actionNow
         visualOverride = { id: 'transform', until: actionNow + 5400, message: '变身专注搭子，开始啦' }
       }
       if (action.type === 'pomodoro:reset') {
         pomodoro.reset()
-        continuousWorkStartedAt = null
         restSession = null
       }
       if (action.type === 'pomodoro:cancel') {
@@ -519,10 +518,6 @@ export function createRuntime(storage: Storage): Runtime {
       clearInterval(timer)
       const closedAt = Math.max(lastTickAt, Date.now())
       advanceUsage(closedAt)
-      if (closedAt > usage.startedAt) {
-        storage.appendUsageSession({ state: usage.state, startedAt: usage.startedAt, endedAt: closedAt })
-        usage = { state: usage.state, startedAt: closedAt, checkpointAt: closedAt }
-      }
       persistRuntimeState()
       storage.close()
     }

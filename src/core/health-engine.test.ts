@@ -57,6 +57,16 @@ describe('health engine', () => {
     })
   })
 
+  it('caps explicit-focus pressure without exploding until the runtime forces it', () => {
+    const engine = createHealthEngine({ initialNow: 0, pressurePerMinute: 100 })
+
+    const focusedEvents = engine.tick({ now: 60_000, idleSeconds: 0, focusing: true })
+
+    expect(engine.snapshot()).toMatchObject({ pressure: 100, mode: 'active', explosionsToday: 0 })
+    expect(focusedEvents).not.toContainEqual(expect.objectContaining({ type: 'explode' }))
+    expect(engine.forceExplosion(180_000)).toContainEqual(expect.objectContaining({ type: 'explode' }))
+  })
+
   it.each([1, 60, 179])('treats %i idle seconds as continued use', (idleSeconds) => {
     const engine = createHealthEngine({ initialNow: 0, pressurePerMinute: 1 })
 

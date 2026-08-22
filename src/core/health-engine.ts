@@ -171,7 +171,7 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
       const delta = (elapsedSeconds / 60) * pressurePerMinute
       state.pressure = Math.min(100, state.pressure + delta)
       state.continuousActiveSeconds += elapsedSeconds
-      if (state.pressure >= 100) {
+      if (state.pressure >= 100 && focusing === undefined) {
         return explode(now, { type: 'pressure_changed', ts: now, delta, pressure: 100 })
       }
       return delta > 0

@@ -376,8 +376,55 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot()).toMatchObject({
       health: { mode: 'deflated', explosionsToday: 1 },
       pomodoro: { phase: 'idle' },
-      overlay: { kind: 'explosion', messages: ['快去休息啦'] }
+      overlay: { kind: 'explosion', messages: ['快去休息啦！'] }
     })
+  })
+
+  it.each([
+    ['start', { type: 'pomodoro:start' } as const],
+    ['configure-and-start', { type: 'pomodoro:configure-and-start', workMinutes: 1 } as const]
+  ])('does not reset continuous focus when %s is dispatched while rest is due', (_label, action) => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({
+      type: 'settings:update',
+      settings: { ...runtime.snapshot().settings, continuousWorkLimitMinutes: 3 }
+    })
+    runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 1 })
+    runtime.tick(start + 60_000, 0)
+    vi.setSystemTime(start + 60_000)
+
+    runtime.dispatch(action)
+    runtime.tick(start + 180_000, 0)
+
+    expect(runtime.snapshot()).toMatchObject({
+      health: { mode: 'deflated', explosionsToday: 1 },
+      pomodoro: { phase: 'idle' }
+    })
+  })
+
+  it('does not let old capped pressure explode before a new focus reaches its exact limit', () => {
+    const storage = memoryStorage()
+    storage.runtime.set('health', {
+      day: '2026-08-20', pressure: 99, score: 0, recovery: 100,
+      activeSecondsToday: 0, continuousActiveSeconds: 0, restCount: 0,
+      explosionsToday: 0, mode: 'resting',
+      habitRewards: { water: 0, stand: 0, toilet: 0, eyes: 0, pomodoro_break: 0 }
+    })
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+    runtime.dispatch({
+      type: 'settings:update',
+      settings: { ...runtime.snapshot().settings, continuousWorkLimitMinutes: 3 }
+    })
+    runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 5 })
+
+    runtime.tick(start + 60_000, 0)
+    expect(runtime.snapshot().health).toMatchObject({ pressure: 100, mode: 'active', explosionsToday: 0 })
+    runtime.tick(start + 179_000, 0)
+    expect(runtime.snapshot().health.mode).toBe('active')
+    runtime.tick(start + 180_000, 0)
+    expect(runtime.snapshot().health).toMatchObject({ mode: 'deflated', explosionsToday: 1 })
   })
 
   it('counts only work and rest-due intervals toward the exact explosion limit', () => {
@@ -394,6 +441,26 @@ describe('runtime data integrity', () => {
     runtime.tick(start + 180_000, 0)
     vi.setSystemTime(start + 180_000)
     runtime.dispatch({ type: 'pomodoro:toggle-pause' })
+
+    runtime.tick(start + 299_000, 0)
+    expect(runtime.snapshot().health.mode).toBe('active')
+    runtime.tick(start + 300_000, 0)
+    expect(runtime.snapshot().health.mode).toBe('deflated')
+  })
+
+  it('preserves but does not advance continuous focus across an explicit reset gap', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({
+      type: 'settings:update',
+      settings: { ...runtime.snapshot().settings, continuousWorkLimitMinutes: 3 }
+    })
+    runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 5 })
+    runtime.tick(start + 60_000, 0)
+    vi.setSystemTime(start + 60_000)
+    runtime.dispatch({ type: 'pomodoro:reset' })
+    vi.setSystemTime(start + 180_000)
+    runtime.dispatch({ type: 'pomodoro:start' })
 
     runtime.tick(start + 299_000, 0)
     expect(runtime.snapshot().health.mode).toBe('active')
@@ -473,8 +540,8 @@ describe('runtime data integrity', () => {
       id: 1,
       kind: 'rest-reminder',
       messages: [
-        '起来伸展一下', '喝点水补充水分',
-        '去趟洗手间吧', '看看远处放松眼睛'
+        '起来活动一下啦！', '要去喝水啦！',
+        '该去上个厕所啦！', '让眼睛休息一下吧！'
       ]
     })
     expect(storage.runtime.get('session')).toMatchObject({ overlaySequence: 1 })
@@ -573,6 +640,10 @@ describe('runtime data integrity', () => {
     runtime.tick(start + 90_000, 0)
 
     expect(storage.daily.get('2026-08-20')?.stateSeconds).toMatchObject({ idle: 30, focus: 60 })
+    expect(storage.getUsageSessions('2026-08-20', '2026-08-20').map(({ state, seconds }) => ({ state, seconds }))).toEqual([
+      { state: 'idle', seconds: 30 },
+      { state: 'focus', seconds: 60 }
+    ])
   })
 
   it('splits a runtime usage interval across local midnight', () => {

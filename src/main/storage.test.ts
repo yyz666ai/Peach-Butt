@@ -105,6 +105,20 @@ describe('storage', () => {
     ])
   })
 
+  it('merges contiguous usage increments for the same local date and state', () => {
+    storage = createStorage(':memory:')
+    const startedAt = new Date(2026, 7, 20, 9, 0).getTime()
+
+    storage.appendUsageSession({ state: 'focus', startedAt, endedAt: startedAt + 30_000 })
+    storage.appendUsageSession({ state: 'focus', startedAt: startedAt + 30_000, endedAt: startedAt + 90_000 })
+
+    expect(storage.getUsageSessions('2026-08-20', '2026-08-20')).toEqual([
+      expect.objectContaining({
+        state: 'focus', startedAt, endedAt: startedAt + 90_000, seconds: 90
+      })
+    ])
+  })
+
   it('zero-fills every usage state in empty daily statistics', () => {
     storage = createStorage(':memory:')
 
