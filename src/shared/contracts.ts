@@ -1,5 +1,14 @@
 export type ReminderKind = 'water' | 'stand' | 'toilet' | 'eyes'
 
+export interface RestSessionSnapshot {
+  startedAt: number
+  longBreak: boolean
+  pending: ReminderKind[]
+  completed: ReminderKind[]
+  current: ReminderKind | null
+  allCompleted: boolean
+}
+
 export interface HealthSnapshot {
   day: string
   pressure: number
@@ -55,6 +64,7 @@ export interface AppSnapshot {
   health: HealthSnapshot
   pomodoro: PomodoroSnapshot
   reminder: { kind: ReminderKind; dueAt: number } | null
+  restSession: RestSessionSnapshot | null
   visual: string
   message: string
   settings: AppSettings
@@ -74,6 +84,7 @@ export type AppAction =
   | { type: 'reminder:complete'; kind: ReminderKind }
   | { type: 'reminder:snooze'; kind: ReminderKind }
   | { type: 'reminder:undo' }
+  | { type: 'rest:complete'; kind: ReminderKind }
   | { type: 'dashboard:open' }
   | { type: 'settings:update'; settings: AppSettings }
 
