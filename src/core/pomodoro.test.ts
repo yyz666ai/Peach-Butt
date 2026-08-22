@@ -172,6 +172,14 @@ describe('pomodoro', () => {
       completedToday: 0,
       breakKind: null
     })
+
+    timer.confirmRest(nextDay)
+
+    expect(timer.snapshot()).toMatchObject({
+      phase: 'break',
+      breakKind: 'short',
+      remainingSeconds: 5 * 60
+    })
   })
 
   it('restores snapshots saved before break kind was recorded', () => {

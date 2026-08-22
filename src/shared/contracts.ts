@@ -40,9 +40,9 @@ export interface AppSettings {
   petSize: number
   workMinutes: number
   breakMinutes: number
-  continuousWorkLimitMinutes?: number
-  longBreakMinutes?: number
-  longBreakEvery?: number
+  continuousWorkLimitMinutes: number
+  longBreakMinutes: number
+  longBreakEvery: number
   pressurePerMinute: number
   reminders: Record<ReminderKind, { enabled: boolean; intervalMinutes: number }>
   launchAtLogin: boolean

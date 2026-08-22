@@ -46,6 +46,7 @@ export function createPomodoro(settings: {
   let remainingSeconds = restored?.remainingSeconds ?? settings.workMinutes * 60
   let completedToday = restored?.completedToday ?? 0
   let breakKind: 'short' | 'long' | null = restored?.breakKind ?? null
+  let pendingBreakKind: 'short' | 'long' | null = null
   let targetAt: number | null = phase === 'work' || phase === 'break'
     ? initialNow + remainingSeconds * 1000
     : null
@@ -57,6 +58,7 @@ export function createPomodoro(settings: {
       targetAt = now + settings.workMinutes * 60_000
       remainingSeconds = settings.workMinutes * 60
       breakKind = null
+      pendingBreakKind = null
       return [{ type: 'work_started', ts: now }]
     },
     pause(now) {
@@ -76,9 +78,8 @@ export function createPomodoro(settings: {
     confirmRest(now) {
       if (phase !== 'awaiting_rest_confirmation') return []
       phase = 'break'
-      breakKind = settings.longBreakEvery !== undefined && settings.longBreakEvery > 0 && completedToday % settings.longBreakEvery === 0
-        ? 'long'
-        : 'short'
+      breakKind = pendingBreakKind ?? 'short'
+      pendingBreakKind = null
       remainingSeconds = (breakKind === 'long' ? settings.longBreakMinutes ?? settings.breakMinutes : settings.breakMinutes) * 60
       targetAt = now + remainingSeconds * 1000
       return [{ type: 'break_started', ts: now }]
@@ -88,6 +89,7 @@ export function createPomodoro(settings: {
       targetAt = null
       remainingSeconds = settings.workMinutes * 60
       breakKind = null
+      pendingBreakKind = null
     },
     tick(now) {
       const nextDay = localDayKey(now)
@@ -103,12 +105,16 @@ export function createPomodoro(settings: {
         targetAt = null
         remainingSeconds = settings.workMinutes * 60
         breakKind = null
+        pendingBreakKind = null
         return [{ type: 'break_completed', ts: now }]
       }
       phase = 'awaiting_rest_confirmation'
       targetAt = null
       breakKind = null
       completedToday += 1
+      pendingBreakKind = settings.longBreakEvery !== undefined && settings.longBreakEvery > 0 && completedToday % settings.longBreakEvery === 0
+        ? 'long'
+        : 'short'
       return [{ type: 'work_completed', ts: now }]
     },
     snapshot() {
