@@ -190,6 +190,19 @@ expect(runtime.snapshot()).toMatchObject({ visual: 'exploding', health: { mode: 
 
 再增加：等待时点击开始休息、休息四项打卡移出当前队列、爆炸后禁止专注、系统空闲满 5 分钟才恢复、重启后恢复 `restSession` 与连续工作起点。
 
+增加状态使用时长测试：
+
+```ts
+runtime.tick(start + 30_000, 0)
+runtime.dispatch({ type: 'pomodoro:start' })
+runtime.tick(start + 90_000, 0)
+const usage = storage.getUsageSessions(dateKey(start), dateKey(start))
+expect(usage).toEqual(expect.arrayContaining([
+  expect.objectContaining({ state: 'idle', durationSeconds: 30 }),
+  expect.objectContaining({ state: 'focus', durationSeconds: 60 })
+]))
+```
+
 - [ ] **Step 2: 运行目标测试确认红灯**
 
 Run: `npm test -- src/main/runtime.test.ts src/core/pet-visual-state.test.ts src/main/storage.test.ts`
@@ -220,6 +233,8 @@ Runtime 规则：
 - 连续工作达到设置阈值时触发一次爆炸，持久化 `deflated_locked`。
 - `deflated_locked` 拦截所有开始专注动作；点击后开始恢复休息，系统空闲满 5 分钟才清除锁定。
 - 进入、退出专注和恢复成功时发布 `transform` 覆盖；专注点击只改变消息，不改变主状态。
+- 主状态变化时关闭上一个使用区间并开启新使用区间；每次 tick 更新当前区间检查点，重启后从最后检查点继续，跨日时按本地午夜拆分区间。
+- 健康打卡事件记录 `restStartedAt` 到点击完成的 `responseSeconds`，不把响应时间描述成行为本身耗时。
 
 - [ ] **Step 4: 保存并恢复新状态**
 
@@ -232,6 +247,20 @@ storage.saveRuntimeState('session', {
   recoveryRestStartedAt,
   overlaySequence
 })
+```
+
+`storage.ts` 新增 `usage_sessions` 表和接口：
+
+```ts
+export interface UsageSession {
+  state: 'idle' | 'focus' | 'rest_due' | 'short_break' | 'long_break' | 'deflated' | 'recovering'
+  startedAt: number
+  endedAt: number
+  durationSeconds: number
+}
+
+appendUsageSession(session: UsageSession): void
+getUsageSessions(startDate: string, endDate: string): UsageSession[]
 ```
 
 跨日清零当天番茄和计分，但不能通过跨日或重启绕过正在进行的扁桃恢复锁定。
@@ -269,6 +298,8 @@ expect(rendererSource).not.toContain('<MonthCalendar')
 expect(rendererSource).not.toContain('<BarChart3')
 expect(mainSource).toContain("view: 'alert'")
 expect(mainSource).toContain("phase === 'break'")
+expect(rendererSource).not.toContain('energyArc')
+expect(rendererSource).toContain('role="progressbar"')
 ```
 
 - [ ] **Step 2: 运行测试确认红灯**
@@ -294,6 +325,7 @@ Expected: FAIL，仍存在自动问候、月视图、统计按钮，尚无四项
 - [ ] **Step 5: 删除月视图与无效按钮并补设置字段**
 
 - Dashboard 只保留 7 天折线，删除 `MonthCalendar` import、月视图切换和右上角 `BarChart3`。
+- 删除生成式能量弧图片；标题、大号数字、说明和真实进度条使用独立网格行。进度条 `aria-valuenow` 使用当前分数，`aria-valuemax=100` 作为今日基础目标；超过 100 时视觉保持满格但数字继续真实显示。
 - 设置面板增加连续工作阈值、短休息、长休息和长休息周期。
 - 保留 `monthStats` 后台数据，不在前端呈现。
 
@@ -460,6 +492,15 @@ git commit -m "feat: add cross-platform Pipeach app icon"
 - Create: `docs/qa/rest-checkin-bubble.png`
 - Create: `docs/qa/fullscreen-rest-reminder.png`
 - Create: `docs/qa/dashboard-week-only.png`
+- Create: `docs/qa/state-idle.png`
+- Create: `docs/qa/state-focus.png`
+- Create: `docs/qa/state-rest-due.png`
+- Create: `docs/qa/state-resting-checklist.png`
+- Create: `docs/qa/state-long-rest.png`
+- Create: `docs/qa/state-pressure.png`
+- Create: `docs/qa/state-explosion.png`
+- Create: `docs/qa/state-deflated.png`
+- Create: `docs/qa/state-recovering.png`
 
 - [ ] **Step 1: 运行完整自动化验证**
 
@@ -482,7 +523,7 @@ Expected: 全部退出码 0。
 
 - [ ] **Step 3: 响应式与透明边缘截图**
 
-截取桌宠默认大小、气泡展开、全屏提醒、周统计 960×650 和 1050×760。逐张检查文字不重叠、气泡贴近角色、脚和椅脚完整、底部无横线。
+逐一截取并检查 idle、focus、rest_due、resting 四项气泡、long_rest、pressure、explosion、deflated、recovering。另截取周统计 960×650、1050×760、1400×800。逐张检查文字不重叠、进度条随宽度重排、气泡贴近角色、脚和椅脚完整、底部无横线。
 
 - [ ] **Step 4: Windows 可验证项**
 
