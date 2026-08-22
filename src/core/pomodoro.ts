@@ -15,7 +15,11 @@ export interface PomodoroSnapshot {
   phase: PomodoroPhase
   remainingSeconds: number
   completedToday: number
+  breakKind: 'short' | 'long' | null
 }
+
+type RestoredPomodoroSnapshot = Omit<PomodoroSnapshot, 'breakKind'> &
+  Partial<Pick<PomodoroSnapshot, 'breakKind'>>
 
 export interface Pomodoro {
   start(now: number): PomodoroEvent[]
@@ -30,8 +34,10 @@ export interface Pomodoro {
 export function createPomodoro(settings: {
   workMinutes: number
   breakMinutes: number
+  longBreakMinutes?: number
+  longBreakEvery?: number
   initialNow?: number
-  initialState?: PomodoroSnapshot
+  initialState?: RestoredPomodoroSnapshot
 }): Pomodoro {
   const initialNow = settings.initialNow ?? Date.now()
   const restored = settings.initialState
@@ -39,6 +45,7 @@ export function createPomodoro(settings: {
   let phase: PomodoroPhase = restored?.phase ?? 'idle'
   let remainingSeconds = restored?.remainingSeconds ?? settings.workMinutes * 60
   let completedToday = restored?.completedToday ?? 0
+  let breakKind: 'short' | 'long' | null = restored?.breakKind ?? null
   let targetAt: number | null = phase === 'work' || phase === 'break'
     ? initialNow + remainingSeconds * 1000
     : null
@@ -49,6 +56,7 @@ export function createPomodoro(settings: {
       phase = 'work'
       targetAt = now + settings.workMinutes * 60_000
       remainingSeconds = settings.workMinutes * 60
+      breakKind = null
       return [{ type: 'work_started', ts: now }]
     },
     pause(now) {
@@ -68,7 +76,10 @@ export function createPomodoro(settings: {
     confirmRest(now) {
       if (phase !== 'awaiting_rest_confirmation') return []
       phase = 'break'
-      remainingSeconds = settings.breakMinutes * 60
+      breakKind = settings.longBreakEvery !== undefined && settings.longBreakEvery > 0 && completedToday % settings.longBreakEvery === 0
+        ? 'long'
+        : 'short'
+      remainingSeconds = (breakKind === 'long' ? settings.longBreakMinutes ?? settings.breakMinutes : settings.breakMinutes) * 60
       targetAt = now + remainingSeconds * 1000
       return [{ type: 'break_started', ts: now }]
     },
@@ -76,6 +87,7 @@ export function createPomodoro(settings: {
       phase = 'idle'
       targetAt = null
       remainingSeconds = settings.workMinutes * 60
+      breakKind = null
     },
     tick(now) {
       const nextDay = localDayKey(now)
@@ -90,15 +102,17 @@ export function createPomodoro(settings: {
         phase = 'idle'
         targetAt = null
         remainingSeconds = settings.workMinutes * 60
+        breakKind = null
         return [{ type: 'break_completed', ts: now }]
       }
       phase = 'awaiting_rest_confirmation'
       targetAt = null
+      breakKind = null
       completedToday += 1
       return [{ type: 'work_completed', ts: now }]
     },
     snapshot() {
-      return { phase, remainingSeconds, completedToday }
+      return { phase, remainingSeconds, completedToday, breakKind }
     }
   }
 }

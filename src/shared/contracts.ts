@@ -16,6 +16,7 @@ export interface PomodoroSnapshot {
   phase: 'idle' | 'work' | 'paused' | 'awaiting_rest_confirmation' | 'break'
   remainingSeconds: number
   completedToday: number
+  breakKind: 'short' | 'long' | null
 }
 
 export interface DailyStats {
@@ -39,6 +40,9 @@ export interface AppSettings {
   petSize: number
   workMinutes: number
   breakMinutes: number
+  continuousWorkLimitMinutes?: number
+  longBreakMinutes?: number
+  longBreakEvery?: number
   pressurePerMinute: number
   reminders: Record<ReminderKind, { enabled: boolean; intervalMinutes: number }>
   launchAtLogin: boolean

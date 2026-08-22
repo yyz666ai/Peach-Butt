@@ -15,6 +15,27 @@ describe('pomodoro', () => {
     expect(events).toContainEqual(expect.objectContaining({ type: 'work_completed' }))
   })
 
+  it('keeps waiting after work until the user explicitly starts rest', () => {
+    const timer = createPomodoro({
+      workMinutes: 25,
+      breakMinutes: 5,
+      longBreakMinutes: 15,
+      longBreakEvery: 4,
+      initialNow: 0
+    })
+
+    timer.start(0)
+    timer.tick(25 * 60_000)
+    const events = timer.tick(40 * 60_000)
+
+    expect(timer.snapshot()).toMatchObject({
+      phase: 'awaiting_rest_confirmation',
+      completedToday: 1,
+      breakKind: null
+    })
+    expect(events).toEqual([])
+  })
+
   it('preserves remaining time while paused', () => {
     const timer = createPomodoro({ workMinutes: 25, breakMinutes: 5 })
     timer.start(0)
@@ -37,6 +58,61 @@ describe('pomodoro', () => {
 
     expect(timer.snapshot()).toMatchObject({ phase: 'break', remainingSeconds: 5 * 60 })
     expect(events).toContainEqual(expect.objectContaining({ type: 'break_started' }))
+  })
+
+  it('uses short breaks for the first three completed pomodoros', () => {
+    const timer = createPomodoro({
+      workMinutes: 1,
+      breakMinutes: 5,
+      longBreakMinutes: 15,
+      longBreakEvery: 4,
+      initialNow: 0
+    })
+    let now = 0
+
+    for (let index = 0; index < 3; index += 1) {
+      timer.start(now)
+      now += 60_000
+      timer.tick(now)
+      timer.confirmRest(now)
+
+      expect(timer.snapshot()).toMatchObject({
+        phase: 'break',
+        breakKind: 'short',
+        remainingSeconds: 5 * 60
+      })
+
+      now += 5 * 60_000
+      timer.tick(now)
+    }
+  })
+
+  it('uses a long break after the fourth completed pomodoro', () => {
+    const timer = createPomodoro({
+      workMinutes: 1,
+      breakMinutes: 5,
+      longBreakMinutes: 15,
+      longBreakEvery: 4,
+      initialNow: 0
+    })
+    let now = 0
+
+    for (let index = 0; index < 4; index += 1) {
+      timer.start(now)
+      now += 60_000
+      timer.tick(now)
+      timer.confirmRest(now)
+      if (index < 3) {
+        now += 5 * 60_000
+        timer.tick(now)
+      }
+    }
+
+    expect(timer.snapshot()).toMatchObject({
+      phase: 'break',
+      breakKind: 'long',
+      remainingSeconds: 15 * 60
+    })
   })
 
   it('returns to idle when the break finishes', () => {
@@ -79,12 +155,44 @@ describe('pomodoro', () => {
   it('resets completed count on a new local day', () => {
     const start = new Date(2026, 7, 20, 23, 58).getTime()
     const nextDay = new Date(2026, 7, 21, 0, 1).getTime()
-    const timer = createPomodoro({ workMinutes: 1, breakMinutes: 5, initialNow: start })
+    const timer = createPomodoro({
+      workMinutes: 1,
+      breakMinutes: 5,
+      longBreakMinutes: 15,
+      longBreakEvery: 4,
+      initialNow: start
+    })
     timer.start(start)
     timer.tick(start + 60_000)
 
     timer.tick(nextDay)
 
-    expect(timer.snapshot().completedToday).toBe(0)
+    expect(timer.snapshot()).toMatchObject({
+      phase: 'awaiting_rest_confirmation',
+      completedToday: 0,
+      breakKind: null
+    })
+  })
+
+  it('restores snapshots saved before break kind was recorded', () => {
+    const timer = createPomodoro({
+      workMinutes: 25,
+      breakMinutes: 5,
+      longBreakMinutes: 15,
+      longBreakEvery: 4,
+      initialNow: 0,
+      initialState: {
+        phase: 'break',
+        remainingSeconds: 120,
+        completedToday: 2
+      }
+    })
+
+    expect(timer.snapshot()).toEqual({
+      phase: 'break',
+      remainingSeconds: 120,
+      completedToday: 2,
+      breakKind: null
+    })
   })
 })
