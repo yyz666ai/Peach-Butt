@@ -8,8 +8,14 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from PIL import Image, ImageEnhance, ImageFilter
-from rembg import new_session, remove
+try:
+    from PIL import Image, ImageEnhance, ImageFilter
+    from rembg import new_session, remove
+except ModuleNotFoundError as error:
+    raise SystemExit(
+        "Missing video build dependencies. Run: python3 -m pip install "
+        "-r scripts/requirements-video.txt"
+    ) from error
 
 
 CANVAS = (480, 500)
@@ -82,6 +88,25 @@ def split_and_key(sheet_path: Path, output: Path, session: object) -> list[Image
     return aligned
 
 
+def clear_leg_loop_fill(frames: list[Image.Image]) -> None:
+    for image in frames:
+        pixels = image.load()
+        warm_rows = [0] * image.height
+        for y in range(image.height):
+            for x in range(image.width):
+                red, green, blue, alpha = pixels[x, y]
+                if alpha > 80 and red > 150 and red - green > 14 and red - blue > 9:
+                    warm_rows[y] += 1
+        strong = [y for y, count in enumerate(warm_rows) if count >= image.width * .04]
+        if not strong:
+            continue
+        for y in range(max(strong) + 1, image.height):
+            for x in range(image.width):
+                red, green, blue, alpha = pixels[x, y]
+                if alpha and max(red, green, blue) > 88:
+                    pixels[x, y] = (red, green, blue, 0)
+
+
 def encode(sequence: list[Image.Image], destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="pipeach-generated-motion-") as temp:
@@ -107,6 +132,9 @@ def main() -> None:
     session = new_session("u2netp")
     idle = split_and_key(args.idle_sheet, args.frame_output / "idle-motion", session)
     eyes = split_and_key(args.eye_sheet, args.frame_output / "eye-strain", session)
+    clear_leg_loop_fill(eyes)
+    for index, frame in enumerate(eyes, start=1):
+        frame.save(args.frame_output / "eye-strain" / f"frame-{index}.png", optimize=True)
 
     # Mostly still: one tiny blink/hand-foot movement every few seconds.
     idle_sequence = idle[0:1] * 22 + idle[1:2] * 3 + idle[2:3] * 20 + idle[3:4] * 3

@@ -438,6 +438,18 @@ describe('runtime data integrity', () => {
     })
   })
 
+  it('keeps the transform override alive for the complete 1.55x tornado clip', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'pomodoro:start' })
+
+    runtime.tick(start + 6_000, 0)
+    expect(runtime.snapshot().visual).toBe('transform')
+
+    runtime.tick(start + 6_600, 0)
+    expect(runtime.snapshot().visual).toBe('focus')
+  })
+
   it('keeps the pet focused when clicked during a running pomodoro', () => {
     const runtime = createRuntime(memoryStorage())
     runtimes.push(runtime)

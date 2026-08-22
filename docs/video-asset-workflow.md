@@ -25,15 +25,18 @@ ffprobe -v error -show_streams -show_format -of json assets/video/source/action.
 
 ## 3. 抽帧与去背
 
-项目脚本：`scripts/build-transparent-videos.py`。推荐在一次性 Python 虚拟环境中安装 `Pillow`、`rembg` 和 CPU 推理依赖。最终 WebM 随应用交付，普通用户无需安装这些工具。
+项目脚本：`scripts/build-transparent-videos.py`。依赖版本固定在 `scripts/requirements-video.txt`；脚本缺少依赖时会直接给出安装命令。最终 WebM 随应用交付，普通用户无需安装这些工具。
 
 脚本默认流程：FFmpeg 按 12fps 抽帧并缩放到 560px 宽；`rembg` 使用 `u2netp` 模型逐帧分割；保留 RGBA PNG；编码为 VP9 Alpha WebM。
 
 ```bash
-npm run videos:build
+python3 -m venv .venv-video
+.venv-video/bin/python -m pip install -r scripts/requirements-video.txt
+.venv-video/bin/python scripts/build-transparent-videos.py \
+  assets/video/source assets/video/generated
 
 # 只重做某个动作
-python3 scripts/build-transparent-videos.py \
+.venv-video/bin/python scripts/build-transparent-videos.py \
   assets/video/source assets/video/generated \
   --only focus
 ```
@@ -66,7 +69,7 @@ python3 scripts/build-transparent-videos.py \
 
 问候、厕所、变身和爆炸是单次动作：去掉动作前后的空等帧，播放结束后由状态机回到待机或主状态，不循环整段。问候必须让运行时状态覆盖完整素材时长，不能只裁好了视频又被状态机提前切走。变身若关键结果（例如旋风）在后半段才出现，必须保留到该结果，优先适度提高播放速度而不是提前裁断。
 
-专注和睡觉只循环安静段。当前专注循环使用 `0.35s–3.67s`，避开后半段大表情回到平静表情的跳变。选择首尾点时检查主体轮廓、手/叶子/眼睛/道具位置、亮度与 Alpha 差、播放速度。如果末帧与首帧割裂，向前裁掉末尾回位帧；不要用持续缩放或晃动掩盖接缝。最终连续播放 10 个循环肉眼检查。
+专注和睡觉只循环安静段。当前专注循环使用 `0.35s–3.67s`；睡觉尾部用 12 帧交叉淡化回首帧，避免气泡瞬间消失。选择首尾点时检查主体轮廓、手/叶子/眼睛/道具位置、亮度与 Alpha 差、播放速度。如果末帧与首帧割裂，向前裁掉末尾回位帧或做短交叉淡化；不要用持续缩放或晃动掩盖接缝。最终连续播放 10 个循环肉眼检查。
 
 在 `assets/video/manifest.json` 记录运行时间段：
 
@@ -154,7 +157,7 @@ npm run videos:check
 python3 scripts/build-video-contact-sheets.py
 ```
 
-当前自动校验确认：文件存在、VP9 Alpha、无音轨、480×500、12fps、manifest 时间范围、休息五种映射完整、脚底安全区和非道具动作的浅色边缘比例。最终验收图：
+当前自动校验确认：文件存在、VP9 Alpha、无音轨、480×500、12fps、manifest 时间范围、休息五种映射完整，并分别抽查每段的起始/中间/结束帧。专注、压力和爆炸另查底部椅子残片；专注与睡觉另查循环首尾像素差。最终仍必须在深色与棋盘图上人工验收：
 
 - `docs/qa/video-motion-dark-contact-sheet.png`
 - `docs/qa/video-motion-checker-contact-sheet.png`

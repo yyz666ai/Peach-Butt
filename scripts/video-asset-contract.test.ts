@@ -46,6 +46,15 @@ describe('video asset contract', () => {
     expect(byId('transform').end).toBeGreaterThanOrEqual(9.7)
   })
 
+  it('splits the dry warning from the hydrating recovery in the manifest', () => {
+    expect(byId('dry')).toMatchObject({ start: 0.08, end: 1.45, playMode: 'once' })
+    expect(byId('hydrating')).toMatchObject({ file: 'generated/dry.webm', start: 1.45, end: 9.8, playMode: 'once' })
+  })
+
+  it('starts toilet only after the full pet enters the fixed camera', () => {
+    expect(byId('toilet').start).toBeGreaterThanOrEqual(0.8)
+  })
+
   it('gives the seated focus clip extra breathing room below the chair', () => {
     expect(byId('focus').bottomSafeMargin).toBeGreaterThanOrEqual(18)
   })

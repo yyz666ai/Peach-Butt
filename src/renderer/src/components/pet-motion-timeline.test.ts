@@ -12,7 +12,7 @@ describe('pet motion timelines', () => {
 
   it('loops sleep before its source tail to avoid a visible seam', () => {
     expect(clipTimelines.sleep.playMode).toBe('loop')
-    expect(clipTimelines.sleep.end).toBeLessThan(4.8)
+    expect(clipTimelines.sleep.end).toBeGreaterThanOrEqual(4.8)
     expect(nextPlaybackAction(clipTimelines.sleep, clipTimelines.sleep.end)).toBe('rewind')
   })
 

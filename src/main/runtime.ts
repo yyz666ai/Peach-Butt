@@ -49,6 +49,7 @@ const restVisualDurationMs: Record<ReminderKind, number> = {
   toilet: 6_500,
   eyes: 5_000
 }
+const TRANSFORM_OVERRIDE_MS = 6_500
 const restOverlayMessages = [
   '起来活动一下啦！',
   '要去喝水啦！',
@@ -297,6 +298,7 @@ export function createRuntime(storage: Storage): Runtime {
       if (reminder.kind === 'eyes' && lastTickAt - reminder.dueAt >= 10 * 60_000) return { id: 'eye-strain', message: '眼睛又红又干啦，看看远处吧' }
       return { id: reminderVisual[reminder.kind], message: reminderCopy[reminder.kind] }
     }
+    if (visualOverride?.id === 'transform' && visualOverride.until > lastTickAt) return visualOverride
     const selected = selectPetVisual({
       focusing: p.phase === 'work' || (p.phase === 'paused' && p.pausedPhase === 'work'),
       pressure: h.pressure,
@@ -392,7 +394,7 @@ export function createRuntime(storage: Storage): Runtime {
       if (recoveryEvents.length) {
         healthEvents.push(...recoveryEvents)
         recoveryRestStartedAt = null
-        visualOverride = { id: 'transform', until: effectiveNow + 5400, message: '休息够啦，恢复活力！' }
+        visualOverride = { id: 'transform', until: effectiveNow + TRANSFORM_OVERRIDE_MS, message: '休息够啦，恢复活力！' }
       }
     }
     handleExplosion(healthEvents, effectiveNow)
@@ -433,7 +435,7 @@ export function createRuntime(storage: Storage): Runtime {
         restSession = null
         restRotationAt = null
         continuousWorkStartedAt ??= actionNow
-        visualOverride = { id: 'transform', until: actionNow + 5400, message: '变身专注搭子，开始啦' }
+        visualOverride = { id: 'transform', until: actionNow + TRANSFORM_OVERRIDE_MS, message: '变身专注搭子，开始啦' }
       }
       if (action.type === 'pomodoro:configure-and-start' && !locked) {
         const previous = pomodoro.snapshot()
@@ -454,7 +456,7 @@ export function createRuntime(storage: Storage): Runtime {
         restSession = null
         restRotationAt = null
         continuousWorkStartedAt ??= actionNow
-        visualOverride = { id: 'transform', until: actionNow + 5400, message: '变身专注搭子，开始啦' }
+        visualOverride = { id: 'transform', until: actionNow + TRANSFORM_OVERRIDE_MS, message: '变身专注搭子，开始啦' }
       }
       if (action.type === 'pomodoro:reset') {
         pomodoro.reset()
@@ -466,7 +468,7 @@ export function createRuntime(storage: Storage): Runtime {
         continuousWorkStartedAt = null
         restSession = null
         restRotationAt = null
-        visualOverride = { id: 'transform', until: actionNow + 5400, message: '专注结束，变回陪伴模式' }
+        visualOverride = { id: 'transform', until: actionNow + TRANSFORM_OVERRIDE_MS, message: '专注结束，变回陪伴模式' }
       }
       if (action.type === 'pomodoro:toggle-pause') pomodoro.snapshot().phase === 'paused' ? pomodoro.resume(actionNow) : pomodoro.pause(actionNow)
       if (action.type === 'pet:click') {
