@@ -200,7 +200,9 @@ describe('pomodoro', () => {
       phase: 'break',
       remainingSeconds: 120,
       completedToday: 2,
-      breakKind: null
+      breakKind: null,
+      day: '1970-1-1',
+      pausedPhase: null
     })
   })
 
@@ -244,8 +246,10 @@ describe('pomodoro', () => {
 
   it('restores a frozen long break before rest confirmation', () => {
     const settings = { workMinutes: 1, breakMinutes: 5, longBreakMinutes: 15, longBreakEvery: 4 }
-    const timer = createPomodoro({ ...settings, initialNow: 0 })
-    let now = 0
+    const start = new Date(2026, 7, 20, 23, 30).getTime()
+    const nextDay = new Date(2026, 7, 21, 0, 1).getTime()
+    const timer = createPomodoro({ ...settings, initialNow: start })
+    let now = start
 
     for (let index = 0; index < 4; index += 1) {
       timer.start(now)
@@ -264,13 +268,78 @@ describe('pomodoro', () => {
       breakKind: 'long'
     })
 
-    const restored = createPomodoro({ ...settings, initialNow: now, initialState: timer.snapshot() })
-    restored.confirmRest(now)
+    const restored = createPomodoro({ ...settings, initialNow: nextDay, initialState: timer.snapshot() })
+
+    expect(restored.snapshot()).toMatchObject({
+      phase: 'awaiting_rest_confirmation',
+      completedToday: 0,
+      breakKind: 'long',
+      day: '2026-8-21'
+    })
+
+    restored.confirmRest(nextDay)
 
     expect(restored.snapshot()).toMatchObject({
       phase: 'break',
       breakKind: 'long',
       remainingSeconds: 15 * 60
+    })
+  })
+
+  it('clears yesterday completed pomodoros before the next day starts work', () => {
+    const settings = { workMinutes: 1, breakMinutes: 5, longBreakMinutes: 15, longBreakEvery: 4 }
+    const start = new Date(2026, 7, 20, 23, 30).getTime()
+    const nextDay = new Date(2026, 7, 21, 0, 1).getTime()
+    const timer = createPomodoro({ ...settings, initialNow: start })
+    let now = start
+
+    for (let index = 0; index < 3; index += 1) {
+      timer.start(now)
+      now += 60_000
+      timer.tick(now)
+      timer.confirmRest(now)
+      now += 5 * 60_000
+      timer.tick(now)
+    }
+
+    const restarted = createPomodoro({ ...settings, initialNow: nextDay, initialState: timer.snapshot() })
+    expect(restarted.snapshot()).toMatchObject({ completedToday: 0, day: '2026-8-21' })
+
+    restarted.start(nextDay)
+    restarted.tick(nextDay + 60_000)
+
+    expect(restarted.snapshot()).toMatchObject({
+      phase: 'awaiting_rest_confirmation',
+      completedToday: 1,
+      breakKind: 'short'
+    })
+  })
+
+  it('resumes a restored paused break', () => {
+    const settings = { workMinutes: 1, breakMinutes: 5, longBreakMinutes: 15, longBreakEvery: 4 }
+    const timer = createPomodoro({ ...settings, initialNow: 0 })
+    timer.start(0)
+    timer.tick(60_000)
+    timer.confirmRest(60_000)
+    timer.pause(120_000)
+
+    expect(timer.snapshot()).toMatchObject({
+      phase: 'paused',
+      remainingSeconds: 4 * 60,
+      breakKind: 'short',
+      pausedPhase: 'break'
+    })
+
+    const restored = createPomodoro({ ...settings, initialNow: 120_000, initialState: timer.snapshot() })
+    restored.resume(120_000)
+    const events = restored.tick(360_000)
+
+    expect(events).toContainEqual(expect.objectContaining({ type: 'break_completed' }))
+    expect(restored.snapshot()).toMatchObject({
+      phase: 'idle',
+      completedToday: 1,
+      breakKind: null,
+      pausedPhase: null
     })
   })
 })

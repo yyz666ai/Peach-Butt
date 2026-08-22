@@ -17,6 +17,8 @@ export interface PomodoroSnapshot {
   remainingSeconds: number
   completedToday: number
   breakKind: 'short' | 'long' | null
+  day: string
+  pausedPhase: 'work' | 'break' | null
 }
 
 export interface DailyStats {
