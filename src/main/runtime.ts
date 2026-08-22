@@ -40,6 +40,9 @@ const reminderCopy: Record<ReminderKind, string> = {
 const reminderVisual: Record<ReminderKind, string> = {
   water: 'water-prompt', stand: 'stretch', toilet: 'toilet', eyes: 'eye-rest'
 }
+const restVisual: Record<ReminderKind, string> = {
+  water: 'water-prompt', stand: 'activity', toilet: 'toilet', eyes: 'eye-strain'
+}
 const restOverlayMessages = [
   '起来活动一下啦！',
   '要去喝水啦！',
@@ -153,9 +156,8 @@ export function createRuntime(storage: Storage): Runtime {
   const reminders = createReminderScheduler({ initialNow: now, settings: settings.reminders })
   let reminder: AppSnapshot['reminder'] = null
   let lastCompletedHabit: { completion: HabitCompletion; at: number } | null = null
-  let visualOverride: { id: string; until: number; message: string } | null = {
-    id: 'wave', until: now + 2500, message: '你好呀，今天也要好好照顾自己'
-  }
+  let restRotationAt: number | null = restSession ? now : null
+  let visualOverride: { id: string; until: number; message: string } | null = null
   const listeners = new Set<(snapshot: AppSnapshot) => void>()
 
   const dateKey = (ts = Date.now()): string => {
@@ -276,7 +278,7 @@ export function createRuntime(storage: Storage): Runtime {
         : { id: 'deflated', message: '正在恢复，离开电脑休息满 5 分钟吧' }
     }
     const session = restSession?.snapshot()
-    if (session?.current) return { id: reminderVisual[session.current], message: reminderCopy[session.current] }
+    if (session?.current) return { id: restVisual[session.current], message: reminderCopy[session.current] }
     if (session?.allCompleted && (p.phase === 'break' || (p.phase === 'paused' && p.pausedPhase === 'break'))) {
       return session.longBreak
         ? { id: 'sleep', message: '四项都完成啦，安心睡一会儿' }
@@ -333,6 +335,7 @@ export function createRuntime(storage: Storage): Runtime {
     continuousWorkStartedAt = null
     recoveryRestStartedAt = null
     restSession = null
+    restRotationAt = null
     reminder = null
     visualOverride = { id: 'exploding', until: at + 3000, message: '快去休息啦！' }
     publishOverlay('explosion', ['快去休息啦！'])
@@ -353,6 +356,7 @@ export function createRuntime(storage: Storage): Runtime {
       if (event.type === 'work_completed') {
         reminder = null
         restSession = null
+        restRotationAt = null
         visualOverride = null
         publishOverlay('rest-reminder', restOverlayMessages)
         if (Notification.isSupported()) new Notification({ title: '桃屁屁', body: '这一轮结束啦，点我开始休息' }).show()
@@ -360,7 +364,12 @@ export function createRuntime(storage: Storage): Runtime {
       if (event.type === 'break_completed') {
         healthEvents.push(...health.completeHabit('pomodoro_break', effectiveNow))
         restSession = null
+        restRotationAt = null
       }
+    }
+    if (restSession && effectiveNow > (restRotationAt ?? effectiveNow)) {
+      restSession.next()
+      restRotationAt = effectiveNow
     }
     if (
       continuousWorkStartedAt !== null &&
@@ -411,6 +420,7 @@ export function createRuntime(storage: Storage): Runtime {
       if (action.type === 'pomodoro:start' && !locked) {
         pomodoro.start(actionNow)
         restSession = null
+        restRotationAt = null
         continuousWorkStartedAt ??= actionNow
         visualOverride = { id: 'transform', until: actionNow + 5400, message: '变身专注搭子，开始啦' }
       }
@@ -431,17 +441,20 @@ export function createRuntime(storage: Storage): Runtime {
         })
         pomodoro.start(actionNow)
         restSession = null
+        restRotationAt = null
         continuousWorkStartedAt ??= actionNow
         visualOverride = { id: 'transform', until: actionNow + 5400, message: '变身专注搭子，开始啦' }
       }
       if (action.type === 'pomodoro:reset') {
         pomodoro.reset()
         restSession = null
+        restRotationAt = null
       }
       if (action.type === 'pomodoro:cancel') {
         pomodoro.reset()
         continuousWorkStartedAt = null
         restSession = null
+        restRotationAt = null
         visualOverride = { id: 'transform', until: actionNow + 5400, message: '专注结束，变回陪伴模式' }
       }
       if (action.type === 'pomodoro:toggle-pause') pomodoro.snapshot().phase === 'paused' ? pomodoro.resume(actionNow) : pomodoro.pause(actionNow)
@@ -454,6 +467,7 @@ export function createRuntime(storage: Storage): Runtime {
           visualOverride = { id: 'focus', until: actionNow + 1800, message: '保持专注' }
         } else if (phase === 'awaiting_rest_confirmation') {
           restSession = createRestSession({ startedAt: actionNow, longBreak: pomodoro.snapshot().breakKind === 'long' })
+          restRotationAt = actionNow
           continuousWorkStartedAt = null
           visualOverride = null
           events.push(...health.startRest(actionNow))
@@ -489,6 +503,7 @@ export function createRuntime(storage: Storage): Runtime {
       if (action.type === 'rest:complete' && restSession) {
         const restCompletion = restSession.complete(action.kind, actionNow)
         if (restCompletion) {
+          restRotationAt = actionNow
           events.push(...health.completeHabit(action.kind, actionNow, restCompletion))
           reminders.complete(action.kind, actionNow)
           reminder = null

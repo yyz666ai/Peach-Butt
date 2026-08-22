@@ -102,6 +102,16 @@ describe('runtime data integrity', () => {
     vi.useRealTimers()
   })
 
+  it('starts idle without playing the full greeting automatically', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'idle',
+      message: '点我互动，右键可以开始专注'
+    })
+  })
+
   it('returns every day of the current month with missing dates zero-filled', () => {
     const storage = memoryStorage()
     storage.daily.set('2026-08-02', {
@@ -559,8 +569,115 @@ describe('runtime data integrity', () => {
         current: 'stand',
         allCompleted: false
       },
-      visual: 'stretch'
+      visual: 'activity'
     })
+  })
+
+  it('rotates the active rest queue in order without republishing its overlay', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 1 })
+    runtime.tick(start + 60_000, 0)
+    vi.setSystemTime(start + 60_000)
+    runtime.dispatch({ type: 'pet:click' })
+
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'activity', message: '这一轮结束啦，起来走走再休息', restSession: { current: 'stand' }
+    })
+    runtime.tick(start + 61_000, 0)
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'water-prompt', message: '该喝水啦，看看我怎么补充水分', restSession: { current: 'water' }
+    })
+    runtime.tick(start + 62_000, 0)
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'toilet', message: '别憋着，该去上厕所啦', restSession: { current: 'toilet' }
+    })
+    runtime.tick(start + 63_000, 0)
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'eye-strain', message: '看看远处，让眼睛休息一下', restSession: { current: 'eyes' }
+    })
+    runtime.tick(start + 64_000, 0)
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'activity',
+      restSession: { current: 'stand' },
+      overlay: { id: 1, kind: 'rest-reminder' }
+    })
+  })
+
+  it('removes a completed current item and skips it in subsequent rotation', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 1 })
+    runtime.tick(start + 60_000, 0)
+    vi.setSystemTime(start + 60_000)
+    runtime.dispatch({ type: 'pet:click' })
+    runtime.tick(start + 61_000, 0)
+    vi.setSystemTime(start + 61_000)
+
+    runtime.dispatch({ type: 'rest:complete', kind: 'water' })
+
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'toilet',
+      restSession: { pending: ['stand', 'toilet', 'eyes'], current: 'toilet' }
+    })
+    runtime.tick(start + 62_000, 0)
+    expect(runtime.snapshot()).toMatchObject({ visual: 'eye-strain', restSession: { current: 'eyes' } })
+  })
+
+  it('stops rotating after completion, resting quietly on short breaks and sleeping on long breaks', () => {
+    const shortRuntime = createRuntime(memoryStorage())
+    runtimes.push(shortRuntime)
+    shortRuntime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 1 })
+    shortRuntime.tick(start + 60_000, 0)
+    vi.setSystemTime(start + 60_000)
+    shortRuntime.dispatch({ type: 'pet:click' })
+    for (const kind of ['stand', 'water', 'toilet', 'eyes'] as const) {
+      shortRuntime.dispatch({ type: 'rest:complete', kind })
+    }
+    expect(shortRuntime.snapshot()).toMatchObject({
+      visual: 'rest',
+      restSession: { pending: [], current: null, allCompleted: true },
+      overlay: { id: 1 }
+    })
+
+    const longStorage = memoryStorage()
+    longStorage.runtime.set('pomodoro', {
+      phase: 'idle', remainingSeconds: 60, completedToday: 3,
+      breakKind: null, day: '2026-8-20', pausedPhase: null
+    })
+    const longRuntime = createRuntime(longStorage)
+    runtimes.push(longRuntime)
+    longRuntime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 1 })
+    longRuntime.tick(start + 120_000, 0)
+    vi.setSystemTime(start + 120_000)
+    longRuntime.dispatch({ type: 'pet:click' })
+    expect(longRuntime.snapshot()).toMatchObject({ visual: 'activity', restSession: { current: 'stand' } })
+    for (const kind of ['stand', 'water', 'toilet', 'eyes'] as const) {
+      longRuntime.dispatch({ type: 'rest:complete', kind })
+    }
+    expect(longRuntime.snapshot()).toMatchObject({
+      visual: 'sleep',
+      restSession: { longBreak: true, pending: [], current: null, allCompleted: true }
+    })
+  })
+
+  it('restores the persisted rest rotation cursor after restart', () => {
+    const storage = memoryStorage()
+    const first = createRuntime(storage)
+    runtimes.push(first)
+    first.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 1 })
+    first.tick(start + 60_000, 0)
+    vi.setSystemTime(start + 60_000)
+    first.dispatch({ type: 'pet:click' })
+    first.tick(start + 61_000, 0)
+    vi.setSystemTime(start + 61_000)
+
+    const restored = createRuntime(storage)
+    runtimes.push(restored)
+    expect(restored.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
+
+    restored.tick(start + 62_000, 0)
+    expect(restored.snapshot()).toMatchObject({ visual: 'toilet', restSession: { current: 'toilet' } })
   })
 
   it('closes the current health queue when its pomodoro break ends', () => {
