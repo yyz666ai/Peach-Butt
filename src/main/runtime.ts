@@ -128,25 +128,25 @@ export function createRuntime(storage: Storage): Runtime {
     const continuesWork = restoredPhase.phase === 'work' ||
       restoredPhase.phase === 'awaiting_rest_confirmation' ||
       (restoredPhase.phase === 'paused' && restoredPhase.pausedPhase === 'work')
-    if (!continuesWork) {
-      continuousWorkStartedAt = null
+    const expectedUsageState: UsageState | null = restoredPhase.phase === 'work'
+      ? 'focus'
+      : restoredPhase.phase === 'awaiting_rest_confirmation'
+        ? 'rest_due'
+        : restoredPhase.phase === 'idle' ||
+            (restoredPhase.phase === 'paused' && restoredPhase.pausedPhase === 'work')
+          ? 'idle'
+          : null
+    if (
+      continuousWorkStartedAt !== null &&
+      restoredUsage !== null &&
+      expectedUsageState !== null &&
+      restoredUsage.state === expectedUsageState &&
+      continuousWorkStartedAt <= restoredUsage.checkpointAt &&
+      restoredUsage.checkpointAt <= now
+    ) {
+      continuousWorkStartedAt += now - restoredUsage.checkpointAt
     } else {
-      const expectedUsageState: UsageState = restoredPhase.phase === 'work'
-        ? 'focus'
-        : restoredPhase.phase === 'awaiting_rest_confirmation'
-          ? 'rest_due'
-          : 'idle'
-      if (
-        continuousWorkStartedAt !== null &&
-        restoredUsage !== null &&
-        restoredUsage.state === expectedUsageState &&
-        continuousWorkStartedAt <= restoredUsage.checkpointAt &&
-        restoredUsage.checkpointAt <= now
-      ) {
-        continuousWorkStartedAt += now - restoredUsage.checkpointAt
-      } else {
-        continuousWorkStartedAt = now
-      }
+      continuousWorkStartedAt = continuesWork ? now : null
     }
   }
   let lastTickAt = now

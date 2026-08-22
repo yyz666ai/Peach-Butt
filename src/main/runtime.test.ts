@@ -414,7 +414,8 @@ describe('runtime data integrity', () => {
   })
 
   it('cancels focus back to the initial state with a short transform transition', () => {
-    const runtime = createRuntime(memoryStorage())
+    const storage = memoryStorage()
+    const runtime = createRuntime(storage)
     runtimes.push(runtime)
     runtime.dispatch({ type: 'pomodoro:start' })
 
@@ -422,6 +423,9 @@ describe('runtime data integrity', () => {
 
     expect(runtime.snapshot().pomodoro.phase).toBe('idle')
     expect(runtime.snapshot().visual).toBe('transform')
+    expect(storage.runtime.get('runtime')).toMatchObject({
+      session: { continuousWorkStartedAt: null }
+    })
   })
 
   it('keeps the pet focused when clicked during a running pomodoro', () => {
@@ -708,6 +712,32 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot().health.mode).toBe('active')
     runtime.tick(start + 300_000, 0)
     expect(runtime.snapshot().health.mode).toBe('deflated')
+  })
+
+  it('preserves accumulated focus across reset, restart and an idle gap', () => {
+    const storage = memoryStorage()
+    const first = createRuntime(storage)
+    runtimes.push(first)
+    first.dispatch({
+      type: 'settings:update',
+      settings: { ...first.snapshot().settings, continuousWorkLimitMinutes: 3 }
+    })
+    first.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 5 })
+    first.tick(start + 60_000, 0)
+    vi.setSystemTime(start + 60_000)
+    first.dispatch({ type: 'pomodoro:reset' })
+    first.close()
+
+    const restored = createRuntime(storage)
+    runtimes.push(restored)
+    restored.tick(start + 180_000, 0)
+    vi.setSystemTime(start + 180_000)
+    restored.dispatch({ type: 'pomodoro:start' })
+
+    restored.tick(start + 299_000, 0)
+    expect(restored.snapshot().health.mode).toBe('active')
+    restored.tick(start + 300_000, 0)
+    expect(restored.snapshot().health.mode).toBe('deflated')
   })
 
   it('keeps rest-due time focused and pressurized until the pet is clicked', () => {
