@@ -132,7 +132,7 @@ function Dashboard(): React.JSX.Element {
 
     <section className="energy-hero">
       <div className="energy-copy"><span>桃桃能量</span><strong>{energyScore}</strong><small className="energy-summary">今天已经积累 <b>{energyScore}</b> 点能量{energyScore > 100 ? ` · 超出目标 ${energyScore - 100}` : ''}</small></div>
-      <div className="energy-progress" role="progressbar" aria-label="今日基础能量目标" aria-valuemin={0} aria-valuemax={100} aria-valuenow={energyPercent}>
+      <div className="energy-progress" role="progressbar" aria-label="今日基础能量目标" aria-valuemin={0} aria-valuemax={100} aria-valuenow={energyScore} aria-valuetext={`今日 ${energyScore} 点能量`}>
         <span style={{ width: `${energyPercent}%` }}><i aria-hidden="true"/></span>
       </div>
       <div className="hero-metrics"><div><span>今日专注</span><strong>{snapshot.pomodoro.completedToday}<small> 个</small></strong></div><div><span>休息</span><strong>{snapshot.health.restCount}<small> 次</small></strong></div><div><span>活跃</span><strong>{formatDuration(snapshot.health.activeSecondsToday)}</strong></div></div>

@@ -29,9 +29,15 @@ describe('dashboard responsive layout contract', () => {
     expect(rule('.energy-progress')).toContain('grid-row: 4')
     expect(rule('.hero-metrics')).toContain('grid-template-columns: repeat(3')
     expect(renderer).toContain('role="progressbar"')
+    expect(renderer).toContain('aria-valuenow={energyScore}')
     expect(renderer).toContain('Math.min(100, Math.max(0, energyScore))')
     expect(renderer).toContain('<span style={{ width: `${energyPercent}%` }}><i')
     expect(renderer).not.toContain('energyArc')
+  })
+
+  it('keeps compact pet bubbles inside short windows and preserves reduced-motion fades', () => {
+    expect(styles).toContain('@media (max-height: 240px)')
+    expect(styles).toContain('@keyframes reduced-fade')
   })
 
   it('reserves a fixed label row inside every habit button', () => {
