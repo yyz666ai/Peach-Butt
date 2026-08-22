@@ -199,7 +199,7 @@ describe('pomodoro', () => {
     expect(timer.snapshot()).toEqual({
       phase: 'break',
       remainingSeconds: 120,
-      completedToday: 2,
+      completedToday: 0,
       breakKind: null,
       day: '1970-1-1',
       pausedPhase: null
@@ -341,5 +341,72 @@ describe('pomodoro', () => {
       breakKind: null,
       pausedPhase: null
     })
+  })
+
+  it('resets a legacy snapshot count before the first new work interval', () => {
+    const settings = { workMinutes: 1, breakMinutes: 5, longBreakMinutes: 15, longBreakEvery: 4 }
+    const now = new Date(2026, 7, 21, 9).getTime()
+
+    for (const phase of ['idle', 'work'] as const) {
+      const restored = createPomodoro({
+        ...settings,
+        initialNow: now,
+        initialState: { phase, remainingSeconds: 60, completedToday: 3 }
+      })
+
+      expect(restored.snapshot()).toMatchObject({ completedToday: 0, day: '2026-8-21' })
+
+      restored.start(now)
+      restored.tick(now + 60_000)
+      expect(restored.snapshot()).toMatchObject({
+        phase: 'awaiting_rest_confirmation',
+        completedToday: 1,
+        breakKind: 'short'
+      })
+    }
+  })
+
+  it('keeps a legacy awaiting long break after clearing its count', () => {
+    const settings = { workMinutes: 1, breakMinutes: 5, longBreakMinutes: 15, longBreakEvery: 4 }
+    const timer = createPomodoro({
+      ...settings,
+      initialNow: 0,
+      initialState: {
+        phase: 'awaiting_rest_confirmation',
+        remainingSeconds: 0,
+        completedToday: 4,
+        breakKind: 'long'
+      }
+    })
+
+    expect(timer.snapshot()).toMatchObject({ completedToday: 0, breakKind: 'long' })
+    timer.confirmRest(0)
+
+    expect(timer.snapshot()).toMatchObject({
+      phase: 'break',
+      breakKind: 'long',
+      remainingSeconds: 15 * 60
+    })
+  })
+
+  it('infers a paused break from a legacy break kind', () => {
+    const settings = { workMinutes: 1, breakMinutes: 5, longBreakMinutes: 15, longBreakEvery: 4 }
+    const timer = createPomodoro({
+      ...settings,
+      initialNow: 0,
+      initialState: {
+        phase: 'paused',
+        remainingSeconds: 4 * 60,
+        completedToday: 1,
+        breakKind: 'short'
+      }
+    })
+
+    expect(timer.snapshot()).toMatchObject({ phase: 'paused', pausedPhase: 'break' })
+    timer.resume(0)
+    const events = timer.tick(4 * 60_000)
+
+    expect(events).toContainEqual(expect.objectContaining({ type: 'break_completed' }))
+    expect(timer.snapshot()).toMatchObject({ phase: 'idle', completedToday: 0 })
   })
 })

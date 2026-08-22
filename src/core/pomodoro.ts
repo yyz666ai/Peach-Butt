@@ -44,7 +44,7 @@ export function createPomodoro(settings: {
   const initialNow = settings.initialNow ?? Date.now()
   const restored = settings.initialState
   const initialDay = localDayKey(initialNow)
-  const restoredIsStale = restored?.day !== undefined && restored.day !== initialDay
+  const restoredIsStale = restored?.day !== initialDay
   let currentDay = initialDay
   let phase: PomodoroPhase = restored?.phase ?? 'idle'
   let remainingSeconds = restored?.remainingSeconds ?? settings.workMinutes * 60
@@ -56,7 +56,7 @@ export function createPomodoro(settings: {
     ? initialNow + remainingSeconds * 1000
     : null
   let pausedPhase: 'work' | 'break' | null = phase === 'paused'
-    ? restored?.pausedPhase ?? 'work'
+    ? restored?.pausedPhase ?? (breakKind === null ? 'work' : 'break')
     : null
 
   return {
