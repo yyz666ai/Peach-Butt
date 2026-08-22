@@ -573,7 +573,7 @@ describe('runtime data integrity', () => {
     })
   })
 
-  it('rotates the active rest queue in order without republishing its overlay', () => {
+  it('rotates only after each active rest clip reaches its full duration', () => {
     const runtime = createRuntime(memoryStorage())
     runtimes.push(runtime)
     runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 1 })
@@ -584,19 +584,27 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot()).toMatchObject({
       visual: 'activity', message: '这一轮结束啦，起来走走再休息', restSession: { current: 'stand' }
     })
-    runtime.tick(start + 61_000, 0)
+    runtime.tick(start + 63_999, 0)
+    expect(runtime.snapshot()).toMatchObject({ visual: 'activity', restSession: { current: 'stand' } })
+    runtime.tick(start + 64_000, 0)
     expect(runtime.snapshot()).toMatchObject({
       visual: 'water-prompt', message: '该喝水啦，看看我怎么补充水分', restSession: { current: 'water' }
     })
-    runtime.tick(start + 62_000, 0)
+    runtime.tick(start + 71_999, 0)
+    expect(runtime.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
+    runtime.tick(start + 72_000, 0)
     expect(runtime.snapshot()).toMatchObject({
       visual: 'toilet', message: '别憋着，该去上厕所啦', restSession: { current: 'toilet' }
     })
-    runtime.tick(start + 63_000, 0)
+    runtime.tick(start + 78_499, 0)
+    expect(runtime.snapshot()).toMatchObject({ visual: 'toilet', restSession: { current: 'toilet' } })
+    runtime.tick(start + 78_500, 0)
     expect(runtime.snapshot()).toMatchObject({
       visual: 'eye-strain', message: '看看远处，让眼睛休息一下', restSession: { current: 'eyes' }
     })
-    runtime.tick(start + 64_000, 0)
+    runtime.tick(start + 83_499, 0)
+    expect(runtime.snapshot()).toMatchObject({ visual: 'eye-strain', restSession: { current: 'eyes' } })
+    runtime.tick(start + 83_500, 0)
     expect(runtime.snapshot()).toMatchObject({
       visual: 'activity',
       restSession: { current: 'stand' },
@@ -611,17 +619,18 @@ describe('runtime data integrity', () => {
     runtime.tick(start + 60_000, 0)
     vi.setSystemTime(start + 60_000)
     runtime.dispatch({ type: 'pet:click' })
-    runtime.tick(start + 61_000, 0)
     vi.setSystemTime(start + 61_000)
 
-    runtime.dispatch({ type: 'rest:complete', kind: 'water' })
+    runtime.dispatch({ type: 'rest:complete', kind: 'stand' })
 
     expect(runtime.snapshot()).toMatchObject({
-      visual: 'toilet',
-      restSession: { pending: ['stand', 'toilet', 'eyes'], current: 'toilet' }
+      visual: 'water-prompt',
+      restSession: { pending: ['water', 'toilet', 'eyes'], current: 'water' }
     })
-    runtime.tick(start + 62_000, 0)
-    expect(runtime.snapshot()).toMatchObject({ visual: 'eye-strain', restSession: { current: 'eyes' } })
+    runtime.tick(start + 68_999, 0)
+    expect(runtime.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
+    runtime.tick(start + 69_000, 0)
+    expect(runtime.snapshot()).toMatchObject({ visual: 'toilet', restSession: { current: 'toilet' } })
   })
 
   it('stops rotating after completion, resting quietly on short breaks and sleeping on long breaks', () => {
@@ -651,7 +660,7 @@ describe('runtime data integrity', () => {
     longRuntime.tick(start + 120_000, 0)
     vi.setSystemTime(start + 120_000)
     longRuntime.dispatch({ type: 'pet:click' })
-    expect(longRuntime.snapshot()).toMatchObject({ visual: 'activity', restSession: { current: 'stand' } })
+    expect(longRuntime.snapshot()).toMatchObject({ visual: 'sleep', restSession: { current: 'stand' } })
     for (const kind of ['stand', 'water', 'toilet', 'eyes'] as const) {
       longRuntime.dispatch({ type: 'rest:complete', kind })
     }
@@ -669,14 +678,16 @@ describe('runtime data integrity', () => {
     first.tick(start + 60_000, 0)
     vi.setSystemTime(start + 60_000)
     first.dispatch({ type: 'pet:click' })
-    first.tick(start + 61_000, 0)
-    vi.setSystemTime(start + 61_000)
+    first.tick(start + 64_000, 0)
+    vi.setSystemTime(start + 70_000)
 
     const restored = createRuntime(storage)
     runtimes.push(restored)
     expect(restored.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
 
-    restored.tick(start + 62_000, 0)
+    restored.tick(start + 77_999, 0)
+    expect(restored.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
+    restored.tick(start + 78_000, 0)
     expect(restored.snapshot()).toMatchObject({ visual: 'toilet', restSession: { current: 'toilet' } })
   })
 

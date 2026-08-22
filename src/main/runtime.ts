@@ -43,6 +43,12 @@ const reminderVisual: Record<ReminderKind, string> = {
 const restVisual: Record<ReminderKind, string> = {
   water: 'water-prompt', stand: 'activity', toilet: 'toilet', eyes: 'eye-strain'
 }
+const restVisualDurationMs: Record<ReminderKind, number> = {
+  stand: 4_000,
+  water: 8_000,
+  toilet: 6_500,
+  eyes: 5_000
+}
 const restOverlayMessages = [
   '起来活动一下啦！',
   '要去喝水啦！',
@@ -278,6 +284,9 @@ export function createRuntime(storage: Storage): Runtime {
         : { id: 'deflated', message: '正在恢复，离开电脑休息满 5 分钟吧' }
     }
     const session = restSession?.snapshot()
+    if (session?.longBreak && (p.phase === 'break' || (p.phase === 'paused' && p.pausedPhase === 'break'))) {
+      return { id: 'sleep', message: '长休息中，好好放松吧' }
+    }
     if (session?.current) return { id: restVisual[session.current], message: reminderCopy[session.current] }
     if (session?.allCompleted && (p.phase === 'break' || (p.phase === 'paused' && p.pausedPhase === 'break'))) {
       return session.longBreak
@@ -367,8 +376,14 @@ export function createRuntime(storage: Storage): Runtime {
         restRotationAt = null
       }
     }
-    if (restSession && effectiveNow > (restRotationAt ?? effectiveNow)) {
-      restSession.next()
+    const rotation = restSession?.snapshot()
+    if (
+      rotation?.current &&
+      !rotation.longBreak &&
+      restRotationAt !== null &&
+      effectiveNow - restRotationAt >= restVisualDurationMs[rotation.current]
+    ) {
+      restSession?.next()
       restRotationAt = effectiveNow
     }
     if (
@@ -501,9 +516,10 @@ export function createRuntime(storage: Storage): Runtime {
           : { id: 'happy', until: actionNow + 1800, message: '做得好！继续保持' }
       }
       if (action.type === 'rest:complete' && restSession) {
+        const completedCurrent = restSession.snapshot().current === action.kind
         const restCompletion = restSession.complete(action.kind, actionNow)
         if (restCompletion) {
-          restRotationAt = actionNow
+          if (completedCurrent) restRotationAt = actionNow
           events.push(...health.completeHabit(action.kind, actionNow, restCompletion))
           reminders.complete(action.kind, actionNow)
           reminder = null
