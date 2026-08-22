@@ -633,7 +633,7 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot()).toMatchObject({ visual: 'toilet', restSession: { current: 'toilet' } })
   })
 
-  it('stops rotating after completion, resting quietly on short breaks and sleeping on long breaks', () => {
+  it('rotates the fourth-pomodoro queue before sleeping, while short breaks finish in rest', () => {
     const shortRuntime = createRuntime(memoryStorage())
     runtimes.push(shortRuntime)
     shortRuntime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 1 })
@@ -660,7 +660,11 @@ describe('runtime data integrity', () => {
     longRuntime.tick(start + 120_000, 0)
     vi.setSystemTime(start + 120_000)
     longRuntime.dispatch({ type: 'pet:click' })
-    expect(longRuntime.snapshot()).toMatchObject({ visual: 'sleep', restSession: { current: 'stand' } })
+    expect(longRuntime.snapshot()).toMatchObject({ visual: 'activity', restSession: { current: 'stand' } })
+    longRuntime.tick(start + 123_999, 0)
+    expect(longRuntime.snapshot()).toMatchObject({ visual: 'activity', restSession: { current: 'stand' } })
+    longRuntime.tick(start + 124_000, 0)
+    expect(longRuntime.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
     for (const kind of ['stand', 'water', 'toilet', 'eyes'] as const) {
       longRuntime.dispatch({ type: 'rest:complete', kind })
     }

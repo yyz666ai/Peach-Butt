@@ -284,9 +284,6 @@ export function createRuntime(storage: Storage): Runtime {
         : { id: 'deflated', message: '正在恢复，离开电脑休息满 5 分钟吧' }
     }
     const session = restSession?.snapshot()
-    if (session?.longBreak && (p.phase === 'break' || (p.phase === 'paused' && p.pausedPhase === 'break'))) {
-      return { id: 'sleep', message: '长休息中，好好放松吧' }
-    }
     if (session?.current) return { id: restVisual[session.current], message: reminderCopy[session.current] }
     if (session?.allCompleted && (p.phase === 'break' || (p.phase === 'paused' && p.pausedPhase === 'break'))) {
       return session.longBreak
@@ -379,7 +376,6 @@ export function createRuntime(storage: Storage): Runtime {
     const rotation = restSession?.snapshot()
     if (
       rotation?.current &&
-      !rotation.longBreak &&
       restRotationAt !== null &&
       effectiveNow - restRotationAt >= restVisualDurationMs[rotation.current]
     ) {
