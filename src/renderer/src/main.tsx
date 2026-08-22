@@ -1,15 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
-import { BarChart3, Settings, X } from 'lucide-react'
+import { Settings, X } from 'lucide-react'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { AppAction, AppSettings, AppSnapshot, ReminderKind } from '../../shared/contracts'
-import { MonthCalendar } from './components/MonthCalendar'
 import { PetMotion } from './components/PetMotion'
 import './styles.css'
 
 import idle from '../../../assets/generated/final/idle.png'
 import roomBackground from '../../../assets/dashboard/room-background.png'
-import energyArc from '../../../assets/dashboard/energy-arc.png'
 import waterAsset from '../../../assets/dashboard/water.png'
 import activityStretchAsset from '../../../assets/dashboard/activity-stretch.png'
 import eyeMaskAsset from '../../../assets/dashboard/eye-mask.png'
@@ -33,7 +31,7 @@ const BUBBLE_VISIBLE_MS = 3_200
 function PetView(): React.JSX.Element {
   const [snapshot, act] = useSnapshot()
   const [bubbleVisible, setBubbleVisible] = useState(false)
-  const greetedAt = useRef(0)
+  const [petHovered, setPetHovered] = useState(false)
   const bubbleTimer = useRef<number | null>(null)
   const lastBubbleKey = useRef('')
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
@@ -71,18 +69,20 @@ function PetView(): React.JSX.Element {
     drag.current = null
     if (!moved) void act({ type: 'pet:click' })
   }
-  const enter = (): void => {
-    showBubble()
-    const now = Date.now()
-    if (now - greetedAt.current > 90_000 && snapshot.pomodoro.phase === 'idle') {
-      greetedAt.current = now
-      void act({ type: 'pet:greet' })
-    }
-  }
+  const enter = (): void => { setPetHovered(true); showBubble() }
   const focusing = snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused'
   const bubbleCopy = getBubbleCopy(snapshot, focusing)
-  return <main className="pet-shell" onMouseEnter={enter} onContextMenu={(event) => { event.preventDefault(); window.pipeach.showPetMenu() }}>
-    {bubbleVisible && <section className="hover-status" aria-live="polite"><strong>{bubbleCopy}</strong></section>}
+  const restChoices = snapshot.restSession?.pending ?? []
+  return <main className="pet-shell" onMouseEnter={enter} onMouseLeave={() => setPetHovered(false)} onContextMenu={(event) => { event.preventDefault(); window.pipeach.showPetMenu() }}>
+    {restChoices.length > 0 && petHovered
+      ? <section className="rest-checkins" aria-label="这次休息还没完成的事">
+          {habitItems.filter((item) => restChoices.includes(item.kind)).map((item) => <button
+            key={item.kind}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => { event.stopPropagation(); void act({ type: 'rest:complete', kind: item.kind }) }}
+          ><img src={item.asset} alt=""/><span>{item.label}</span></button>)}
+        </section>
+      : bubbleVisible && <section className="hover-status" aria-live="polite"><strong>{bubbleCopy}</strong></section>}
     <div className="pet-stage" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
       <PetMotion visual={snapshot.visual} pressureValue={snapshot.health.pressure} recovery={snapshot.health.recovery}/>
     </div>
@@ -96,29 +96,14 @@ const habitItems: Array<{ kind: ReminderKind; label: string; asset: string }> = 
   { kind: 'toilet', label: '上厕所', asset: toiletAsset }
 ]
 
-const habitIcons: Record<ReminderKind, string> = {
-  water: waterAsset,
-  stand: activityStretchAsset,
-  eyes: eyeMaskAsset,
-  toilet: toiletAsset
-}
-
 function Dashboard(): React.JSX.Element {
   const [snapshot, act] = useSnapshot()
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [growthView, setGrowthView] = useState<'week' | 'month'>(() => new URLSearchParams(location.search).get('range') === 'month' ? 'month' : 'week')
-  const [selectedDate, setSelectedDate] = useState('')
   const [dockHint, setDockHint] = useState(false)
   const [draft, setDraft] = useState<AppSettings | null>(null)
   const settingsTrigger = useRef<HTMLButtonElement>(null)
   const growthCard = useRef<HTMLElement>(null)
   useEffect(() => { if (snapshot && !draft) setDraft(snapshot.settings) }, [snapshot, draft])
-  useEffect(() => {
-    if (snapshot?.monthStats.length && !selectedDate) {
-      const today = localDateKey(new Date())
-      setSelectedDate(snapshot.monthStats.find((item) => item.date === today)?.date ?? snapshot.monthStats.at(-1)!.date)
-    }
-  }, [snapshot?.monthStats, selectedDate])
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') setSettingsOpen(false)
@@ -132,6 +117,8 @@ function Dashboard(): React.JSX.Element {
   const date = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
   const focusActive = snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused'
   const chartCeiling = Math.max(100, ...chart.map((item) => item.energy))
+  const energyScore = Math.round(snapshot.health.score)
+  const energyPercent = Math.min(100, Math.max(0, energyScore))
   const returnToPet = (): void => {
     setDockHint(true)
     window.setTimeout(() => window.close(), 700)
@@ -140,12 +127,14 @@ function Dashboard(): React.JSX.Element {
   return <main className="cottage" style={{ backgroundImage: `url(${roomBackground})` }}>
     <header className="cottage-topbar">
       <div className="cottage-brand"><img src={idle} alt=""/><div><strong>桃屁屁</strong><span>你的健康小助手</span></div></div>
-      <div className="date-actions"><time>{date}</time><button ref={settingsTrigger} aria-label="设置" onClick={() => setSettingsOpen(true)}><Settings/></button><button aria-label="查看 7 天成长路线" onClick={() => growthCard.current?.focus()}><BarChart3/></button><button aria-label="关闭" onClick={() => window.close()}><X/></button></div>
+      <div className="date-actions"><time>{date}</time><button ref={settingsTrigger} aria-label="设置" onClick={() => setSettingsOpen(true)}><Settings/></button><button aria-label="关闭" onClick={() => window.close()}><X/></button></div>
     </header>
 
     <section className="energy-hero">
-      <img src={energyArc} alt="桃桃能量进度"/>
-      <div className="energy-copy"><span>桃桃能量</span><strong>{Math.round(snapshot.health.score)}</strong><small>今天已经积累 <b>{Math.round(snapshot.health.score)}</b> 点能量</small></div>
+      <div className="energy-copy"><span>桃桃能量</span><strong>{energyScore}</strong><small className="energy-summary">今天已经积累 <b>{energyScore}</b> 点能量{energyScore > 100 ? ` · 超出目标 ${energyScore - 100}` : ''}</small></div>
+      <div className="energy-progress" role="progressbar" aria-label="今日基础能量目标" aria-valuemin={0} aria-valuemax={100} aria-valuenow={energyPercent}>
+        <span style={{ width: `${energyPercent}%` }}><i aria-hidden="true"/></span>
+      </div>
       <div className="hero-metrics"><div><span>今日专注</span><strong>{snapshot.pomodoro.completedToday}<small> 个</small></strong></div><div><span>休息</span><strong>{snapshot.health.restCount}<small> 次</small></strong></div><div><span>活跃</span><strong>{formatDuration(snapshot.health.activeSecondsToday)}</strong></div></div>
     </section>
 
@@ -153,20 +142,13 @@ function Dashboard(): React.JSX.Element {
 
     <section ref={growthCard} className="growth-card" tabIndex={-1} aria-label="健康成长记录">
       <header className="growth-toolbar">
-        <div><strong>健康成长记录</strong><span>{growthView === 'week' ? '最近 7 天的能量变化' : '每天都看得见的小进步'}</span></div>
-        <div className="growth-tabs" role="tablist" aria-label="成长记录范围">
-          <button role="tab" aria-selected={growthView === 'week'} onClick={() => setGrowthView('week')}>7 天</button>
-          <button role="tab" aria-selected={growthView === 'month'} onClick={() => setGrowthView('month')}>本月</button>
-        </div>
+        <div><strong>近 7 天成长路线</strong><span>能量和健康习惯都记录在本地</span></div>
       </header>
       <div className="growth-content">
-        {growthView === 'week'
-          ? <div className="week-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={chart} margin={{ top: 30, right: 35, bottom: 18, left: 35 }}>
+        <div className="week-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={chart} margin={{ top: 30, right: 35, bottom: 18, left: 35 }}>
               <YAxis domain={[0, chartCeiling]} hide/><XAxis dataKey="shortDate" axisLine={false} tickLine={false} tick={{ fill: '#71452f', fontSize: 12 }} dy={13}/><Tooltip contentStyle={{ border: 0, borderRadius: 15, background: '#fff7e9', boxShadow: '0 8px 24px rgba(107,65,35,.16)' }} formatter={(value) => [`${value} 能量`, '桃桃能量']}/>
               <Line type="monotone" dataKey="energy" stroke="#f17b62" strokeWidth={5} dot={<PeachDot/>} activeDot={{ r: 9, fill: '#a8cc45', stroke: '#fff7e9', strokeWidth: 4 }}/>
             </LineChart></ResponsiveContainer></div>
-          : <MonthCalendar stats={snapshot.monthStats} selectedDate={selectedDate} onSelect={setSelectedDate} icons={habitIcons}/>
-        }
       </div>
     </section>
 
@@ -227,7 +209,10 @@ function SettingsPanel({ draft, setDraft, save, close }: { draft: AppSettings; s
       <header><div><span>桃桃设置</span><strong id="settings-title">按你的节奏来</strong></div><button ref={closeButton} aria-label="关闭设置" onClick={close}><X/></button></header>
       <div className="setting-pair">
         <label>专注时长<input type="number" min="1" max="120" value={draft.workMinutes} onChange={(e) => setDraft({ ...draft, workMinutes: Number(e.target.value) })}/><span>分钟</span></label>
-        <label>休息时长<input type="number" min="1" max="60" value={draft.breakMinutes} onChange={(e) => setDraft({ ...draft, breakMinutes: Number(e.target.value) })}/><span>分钟</span></label>
+        <label>连续专注上限<input type="number" min="1" max="240" value={draft.continuousWorkLimitMinutes} onChange={(e) => setDraft({ ...draft, continuousWorkLimitMinutes: Number(e.target.value) })}/><span>分钟</span></label>
+        <label>短休息<input type="number" min="1" max="60" value={draft.breakMinutes} onChange={(e) => setDraft({ ...draft, breakMinutes: Number(e.target.value) })}/><span>分钟</span></label>
+        <label>长休息<input type="number" min="1" max="120" value={draft.longBreakMinutes} onChange={(e) => setDraft({ ...draft, longBreakMinutes: Number(e.target.value) })}/><span>分钟</span></label>
+        <label>长休息周期<input type="number" min="1" max="12" value={draft.longBreakEvery} onChange={(e) => setDraft({ ...draft, longBreakEvery: Number(e.target.value) })}/><span>个番茄</span></label>
       </div>
       <h3>生活提醒</h3>
       {(Object.keys(draft.reminders) as ReminderKind[]).map((kind) => <label className="setting-reminder" key={kind}>
@@ -241,15 +226,30 @@ function SettingsPanel({ draft, setDraft, save, close }: { draft: AppSettings; s
   </div>
 }
 
-function ExplosionView(): React.JSX.Element {
+const defaultRestMessages = ['起来活动一下啦！', '要去喝水啦！', '该去上个厕所啦！', '让眼睛休息一下吧！']
+
+function AlertView(): React.JSX.Element {
+  const [snapshot] = useSnapshot()
   const video = useRef<HTMLVideoElement>(null)
+  const [messageIndex, setMessageIndex] = useState(0)
+  const overlay = snapshot?.overlay
+  const explosion = overlay?.kind === 'explosion'
+  const messages = explosion ? ['快去休息啦！'] : (overlay?.messages.length ? overlay.messages : defaultRestMessages)
+  useEffect(() => {
+    if (messages.length < 2) return
+    const timer = window.setInterval(() => setMessageIndex((index) => (index + 1) % messages.length), 2_050)
+    return () => window.clearInterval(timer)
+  }, [messages.join('|')])
   useEffect(() => {
     const element = video.current
-    if (!element) return
+    if (!element || !explosion) return
     const play = (): void => { element.currentTime = 0; void element.play() }
     if (element.readyState >= 1) play(); else element.addEventListener('loadedmetadata', play, { once: true })
-  }, [])
-  return <main className="explosion-view"><video ref={video} src={explosionVideo} muted playsInline/><div><strong>该休息啦！</strong><span>起来走走、喝水，让桃屁屁慢慢恢复</span></div></main>
+  }, [explosion])
+  return <main className={`alert-view ${explosion ? 'is-explosion' : 'is-rest'}`}>
+    {explosion ? <video ref={video} src={explosionVideo} muted playsInline/> : <img src={idle} alt=""/>}
+    <div key={`${overlay?.id ?? 'preview'}-${messageIndex}`}><strong>{messages[messageIndex % messages.length]}</strong><span>{explosion ? '桃屁屁已经扁掉了，休息满 5 分钟才能恢复' : '现在就去照顾一下自己吧'}</span></div>
+  </main>
 }
 
 function habitCount(today: AppSnapshot['trends'][number], kind: ReminderKind): number {
@@ -257,7 +257,6 @@ function habitCount(today: AppSnapshot['trends'][number], kind: ReminderKind): n
 }
 function formatTime(seconds: number): string { return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}` }
 function formatDuration(seconds: number): string { const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); return h ? `${h}小时${m}分` : `${m}分钟` }
-function localDateKey(date: Date): string { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function getBubbleCopy(snapshot: AppSnapshot, focusing: boolean): string {
   if (snapshot.message === '保持专注') return '保持专注'
   if (focusing) return `还剩 ${formatTime(snapshot.pomodoro.remainingSeconds)}`
@@ -276,7 +275,7 @@ function getBubbleCopy(snapshot: AppSnapshot, focusing: boolean): string {
 function App(): React.JSX.Element {
   const view = new URLSearchParams(location.search).get('view')
   if (view === 'dashboard') return <Dashboard/>
-  if (view === 'explosion') return <ExplosionView/>
+  if (view === 'alert') return <AlertView/>
   return <PetView/>
 }
 

@@ -1,12 +1,14 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, Tray } from 'electron'
-import type { AppAction } from '../shared/contracts'
+import { getPlatformStatus } from '../core/platform-status'
+import type { AppAction, AppSettings, AppSnapshot, ReminderKind } from '../shared/contracts'
 import { createRuntime, type Runtime } from './runtime'
 import { createStorage } from './storage'
 
 let petWindow: BrowserWindow | null = null
 let dashboardWindow: BrowserWindow | null = null
-let explosionWindow: BrowserWindow | null = null
+let alertWindow: BrowserWindow | null = null
+let lastOverlayId: number | null = null
 let tray: Tray | null = null
 let runtime: Runtime | null = null
 let dragOffset = { x: 0, y: 0 }
@@ -14,9 +16,8 @@ const PET_WINDOW_HEIGHT_RATIO = 1.5
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
 
-function load(window: BrowserWindow, view: 'pet' | 'dashboard' | 'explosion'): void {
+function load(window: BrowserWindow, view: 'pet' | 'dashboard' | 'alert'): void {
   const query: Record<string, string> = { view }
-  if (view === 'dashboard' && process.env.PIPEACH_DASHBOARD_RANGE === 'month') query.range = 'month'
   if (process.env.ELECTRON_RENDERER_URL) void window.loadURL(`${process.env.ELECTRON_RENDERER_URL}?${new URLSearchParams(query).toString()}`)
   else void window.loadFile(join(__dirname, '../renderer/index.html'), { query })
 }
@@ -51,23 +52,28 @@ function resizePet(size: number): void {
   petWindow.setBounds({ x, y, width, height }, true)
 }
 
-function showExplosion(): void {
-  if (explosionWindow) return
+function showOverlay(snapshot: AppSnapshot): void {
+  const overlay = snapshot.overlay
+  if (!overlay || overlay.id === lastOverlayId) return
+  lastOverlayId = overlay.id
+  alertWindow?.close()
   const bounds = petWindow
     ? screen.getDisplayMatching(petWindow.getBounds()).bounds
     : screen.getPrimaryDisplay().bounds
-  explosionWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     ...bounds, transparent: true, frame: false, alwaysOnTop: true,
     focusable: false, skipTaskbar: true, hasShadow: false, show: false,
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: true }
   })
-  explosionWindow.setIgnoreMouseEvents(true)
-  explosionWindow.setAlwaysOnTop(true, 'screen-saver')
-  explosionWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  load(explosionWindow, 'explosion')
-  explosionWindow.webContents.once('did-finish-load', () => explosionWindow?.showInactive())
-  explosionWindow.on('closed', () => { explosionWindow = null })
-  setTimeout(() => explosionWindow?.close(), process.env.PIPEACH_PREVIEW_EXPLOSION === '1' ? 10_000 : 3000)
+  alertWindow = window
+  window.setIgnoreMouseEvents(true)
+  window.setAlwaysOnTop(true, 'screen-saver')
+  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  load(window, 'alert')
+  window.webContents.once('did-finish-load', () => window.showInactive())
+  window.on('closed', () => { if (alertWindow === window) alertWindow = null })
+  const duration = overlay.kind === 'explosion' ? 5_200 : Math.max(4_200, overlay.messages.length * 2_150)
+  setTimeout(() => { if (!window.isDestroyed()) window.close() }, process.env.PIPEACH_PREVIEW_EXPLOSION === '1' ? 10_000 : duration)
 }
 
 function openDashboard(): void {
@@ -118,6 +124,7 @@ function showPetMenu(): void {
         { label: '上厕所', click: () => dispatch({ type: 'reminder:complete', kind: 'toilet' }) }
       ]
     },
+    { label: '打招呼', click: () => dispatch({ type: 'pet:greet' }) },
     { type: 'separator' },
     { label: '打开桃桃小屋与设置', click: openDashboard }
   ])
@@ -130,19 +137,28 @@ app.whenReady().then(() => {
   petWindow = createPetWindow()
   createTray()
   if (process.env.PIPEACH_OPEN_DASHBOARD === '1') openDashboard()
-  if (process.env.PIPEACH_PREVIEW_EXPLOSION === '1') showExplosion()
+  if (process.env.PIPEACH_PREVIEW_EXPLOSION === '1') {
+    showOverlay({ ...runtime.snapshot(), overlay: { id: -1, kind: 'explosion', messages: ['快去休息啦！'] } })
+  }
   runtime.subscribe((snapshot) => {
-    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('pipeach:snapshot', snapshot)
-    if (process.platform === 'darwin') tray?.setTitle(
-      snapshot.pomodoro.phase === 'work' ? ` ${formatTime(snapshot.pomodoro.remainingSeconds)}` : '',
-      { fontType: 'monospacedDigit' }
-    )
-    if (process.platform === 'win32') {
-      const active = snapshot.pomodoro.phase === 'work'
-      petWindow?.setProgressBar(active ? 1 - snapshot.pomodoro.remainingSeconds / Math.max(1, snapshot.settings.workMinutes * 60) : -1)
-      tray?.setToolTip(active ? `桃屁屁 · 还剩 ${formatTime(snapshot.pomodoro.remainingSeconds)}` : '桃屁屁健康助手')
+    for (const window of BrowserWindow.getAllWindows()) {
+      try {
+        if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('pipeach:snapshot', snapshot)
+      } catch {
+        // A development reload can dispose the renderer frame between the
+        // liveness check and send. The next runtime tick provides the snapshot.
+      }
     }
-    if (snapshot.visual === 'exploding') showExplosion()
+    const platformStatus = getPlatformStatus(snapshot)
+    if (process.platform === 'darwin') {
+      tray?.setTitle(platformStatus.menuBarTitle, { fontType: 'monospacedDigit' })
+      tray?.setToolTip(platformStatus.trayTooltip)
+    }
+    if (process.platform === 'win32') {
+      petWindow?.setProgressBar(platformStatus.taskbar.value, { mode: platformStatus.taskbar.mode })
+      tray?.setToolTip(platformStatus.trayTooltip)
+    }
+    showOverlay(snapshot)
   })
   ipcMain.handle('pipeach:snapshot', () => runtime?.snapshot())
   ipcMain.handle('pipeach:action', (_event, action: AppAction) => {
@@ -172,10 +188,6 @@ app.on('second-instance', () => {
 app.on('before-quit', () => runtime?.close())
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 
-function formatTime(seconds: number): string {
-  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
-}
-
 function isFinitePoint(value: unknown): value is { x: number; y: number } {
   if (!value || typeof value !== 'object') return false
   const point = value as { x?: unknown; y?: unknown }
@@ -185,14 +197,33 @@ function isFinitePoint(value: unknown): value is { x: number; y: number } {
 function isSafeAction(value: unknown): value is AppAction {
   if (!value || typeof value !== 'object') return false
   const action = value as Partial<AppAction> & Record<string, unknown>
-  const types = new Set<AppAction['type']>(['pomodoro:start', 'pomodoro:configure-and-start', 'pomodoro:toggle-pause', 'pomodoro:reset', 'pomodoro:cancel', 'pet:click', 'pet:greet', 'pet:size', 'reminder:complete', 'reminder:snooze', 'reminder:undo', 'dashboard:open', 'settings:update'])
+  const types = new Set<AppAction['type']>(['pomodoro:start', 'pomodoro:configure-and-start', 'pomodoro:toggle-pause', 'pomodoro:reset', 'pomodoro:cancel', 'pet:click', 'pet:greet', 'pet:size', 'reminder:complete', 'reminder:snooze', 'reminder:undo', 'rest:complete', 'dashboard:open', 'settings:update'])
   if (typeof action.type !== 'string' || !types.has(action.type as AppAction['type'])) return false
   if (action.type === 'pet:size') return typeof action.size === 'number' && Number.isFinite(action.size) && action.size >= 120 && action.size <= 320
   if (action.type === 'pomodoro:configure-and-start') return typeof action.workMinutes === 'number' && Number.isFinite(action.workMinutes) && action.workMinutes >= 1 && action.workMinutes <= 120
-  if (action.type === 'reminder:complete' || action.type === 'reminder:snooze') return ['water', 'stand', 'toilet', 'eyes'].includes(String(action.kind))
+  if (action.type === 'reminder:complete' || action.type === 'reminder:snooze' || action.type === 'rest:complete') return isReminderKind(action.kind)
   if (action.type === 'settings:update') {
-    const settings = action.settings
-    return Boolean(settings) && typeof settings === 'object'
+    return isSafeSettings(action.settings)
   }
   return true
+}
+
+function isReminderKind(value: unknown): value is ReminderKind {
+  return ['water', 'stand', 'toilet', 'eyes'].includes(String(value))
+}
+
+function isSafeSettings(value: unknown): value is AppSettings {
+  if (!value || typeof value !== 'object') return false
+  const settings = value as Partial<AppSettings>
+  const inRange = (candidate: unknown, min: number, max: number): boolean =>
+    typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= min && candidate <= max
+  if (!inRange(settings.petSize, 120, 320) || !inRange(settings.workMinutes, 1, 120) ||
+      !inRange(settings.breakMinutes, 1, 60) || !inRange(settings.continuousWorkLimitMinutes, 1, 240) ||
+      !inRange(settings.longBreakMinutes, 1, 120) || !inRange(settings.longBreakEvery, 1, 12) ||
+      !inRange(settings.pressurePerMinute, 0, 20) || typeof settings.launchAtLogin !== 'boolean' ||
+      typeof settings.soundEnabled !== 'boolean' || !settings.reminders || typeof settings.reminders !== 'object') return false
+  return (['water', 'stand', 'toilet', 'eyes'] as const).every((kind) => {
+    const reminder = settings.reminders?.[kind]
+    return Boolean(reminder) && typeof reminder?.enabled === 'boolean' && inRange(reminder.intervalMinutes, 5, 240)
+  })
 }

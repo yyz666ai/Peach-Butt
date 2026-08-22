@@ -25,7 +25,13 @@ describe('dashboard responsive layout contract', () => {
     expect(rule('.energy-copy')).toContain('display: contents')
     expect(rule('.energy-copy > span')).toContain('grid-row: 1')
     expect(rule('.energy-copy > strong')).toContain('grid-row: 2')
+    expect(rule('.energy-summary')).toContain('grid-row: 3')
+    expect(rule('.energy-progress')).toContain('grid-row: 4')
     expect(rule('.hero-metrics')).toContain('grid-template-columns: repeat(3')
+    expect(renderer).toContain('role="progressbar"')
+    expect(renderer).toContain('Math.min(100, Math.max(0, energyScore))')
+    expect(renderer).toContain('<span style={{ width: `${energyPercent}%` }}><i')
+    expect(renderer).not.toContain('energyArc')
   })
 
   it('reserves a fixed label row inside every habit button', () => {
@@ -40,9 +46,14 @@ describe('dashboard responsive layout contract', () => {
 
   it('keeps the dashboard statistical and removes story, timer, and generic rest controls', () => {
     expect(renderer).toContain('活动一下')
-    expect(renderer).toContain("'month'")
-    for (const removed of ['今日的话', 'timer-device', 'story-trigger', 'calendarAsset', '<span>休息一下</span>']) {
+    for (const removed of ['今日的话', 'timer-device', 'story-trigger', 'calendarAsset', '<span>休息一下</span>', 'MonthCalendar', 'BarChart3', "'month'"]) {
       expect(renderer).not.toContain(removed)
+    }
+  })
+
+  it('exposes every focus and break cadence setting', () => {
+    for (const setting of ['continuousWorkLimitMinutes', 'breakMinutes', 'longBreakMinutes', 'longBreakEvery']) {
+      expect(renderer).toContain(setting)
     }
   })
 })
