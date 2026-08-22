@@ -35,9 +35,10 @@ describe('dashboard responsive layout contract', () => {
     expect(renderer).not.toContain('energyArc')
   })
 
-  it('keeps compact pet bubbles inside short windows and preserves reduced-motion fades', () => {
-    expect(styles).toContain('@media (max-height: 240px)')
-    expect(styles).toContain('@keyframes reduced-fade')
+  it('keeps the default bubble beside the pet and preserves reduced-motion fades', () => {
+    expect(styles).not.toContain('@media (max-height: 240px)')
+    expect(styles).toContain('@keyframes reduced-alert')
+    expect(styles).toContain('animation: reduced-alert 2.05s')
   })
 
   it('reserves a fixed label row inside every habit button', () => {
