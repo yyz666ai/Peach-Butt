@@ -37,6 +37,22 @@ describe('rest session', () => {
     })
   })
 
+  it('returns completion timing and ignores repeated completion', () => {
+    const session = createRestSession({ startedAt: 1_000, longBreak: false })
+
+    expect(session.complete('water', 6_000)).toEqual({
+      kind: 'water',
+      completedAt: 6_000,
+      responseSeconds: 5
+    })
+    expect(session.complete('water', 7_000)).toBeNull()
+    expect(session.complete('stand', 500)).toEqual({
+      kind: 'stand',
+      completedAt: 500,
+      responseSeconds: 0
+    })
+  })
+
   it('stops rotating when all four habits are completed', () => {
     const session = createRestSession({ startedAt: 1_000, longBreak: true })
 
@@ -67,7 +83,7 @@ describe('rest session', () => {
     expect(restored.next()).toBe('toilet')
   })
 
-  it('filters invalid and duplicate restored data', () => {
+  it('uses completed items as the authoritative restored partition', () => {
     const session = createRestSession({
       startedAt: 1_000,
       longBreak: false,
@@ -84,11 +100,57 @@ describe('rest session', () => {
     expect(session.snapshot()).toEqual({
       startedAt: 1_000,
       longBreak: false,
-      pending: ['water', 'eyes'],
-      completed: ['stand'],
-      current: 'water',
+      pending: ['toilet', 'eyes'],
+      completed: ['stand', 'water'],
+      current: 'toilet',
       allCompleted: false
     })
+  })
+
+  it('rebuilds all remaining habits from a partial completed list', () => {
+    const session = createRestSession({
+      startedAt: 1_000,
+      longBreak: false,
+      initialState: {
+        startedAt: 1_000,
+        longBreak: false,
+        pending: ['stand'],
+        completed: ['water'],
+        current: 'water',
+        allCompleted: true
+      }
+    })
+
+    expect(session.snapshot()).toMatchObject({
+      pending: ['stand', 'toilet', 'eyes'],
+      completed: ['water'],
+      current: 'stand',
+      allCompleted: false
+    })
+  })
+
+  it('rejects a snapshot with missing or malformed completed data', () => {
+    for (const completed of [undefined, 'water'] as const) {
+      const session = createRestSession({
+        startedAt: 1_000,
+        longBreak: false,
+        initialState: {
+          startedAt: 1_000,
+          longBreak: false,
+          pending: [],
+          completed,
+          current: null,
+          allCompleted: true
+        } as never
+      })
+
+      expect(session.snapshot()).toMatchObject({
+        pending: ['stand', 'water', 'toilet', 'eyes'],
+        completed: [],
+        current: 'stand',
+        allCompleted: false
+      })
+    }
   })
 
   it('does not carry a prior session queue into a new rest', () => {
@@ -114,5 +176,19 @@ describe('rest session', () => {
     expect(session.snapshot().current).toBe('toilet')
     expect(session.next()).toBe('toilet')
     expect(session.next()).toBe('eyes')
+  })
+
+  it('captures the session identity instead of retaining mutable input options', () => {
+    const options = { startedAt: 1_000, longBreak: false }
+    const session = createRestSession(options)
+    options.startedAt = 3_000
+    options.longBreak = true
+
+    expect(session.snapshot()).toMatchObject({ startedAt: 1_000, longBreak: false })
+    expect(session.complete('stand', 2_000)).toEqual({
+      kind: 'stand',
+      completedAt: 2_000,
+      responseSeconds: 1
+    })
   })
 })
