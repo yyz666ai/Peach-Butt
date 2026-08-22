@@ -45,8 +45,10 @@ export function createPomodoro(settings: {
   let phase: PomodoroPhase = restored?.phase ?? 'idle'
   let remainingSeconds = restored?.remainingSeconds ?? settings.workMinutes * 60
   let completedToday = restored?.completedToday ?? 0
-  let breakKind: 'short' | 'long' | null = restored?.breakKind ?? null
-  let pendingBreakKind: 'short' | 'long' | null = null
+  let breakKind: 'short' | 'long' | null = phase === 'awaiting_rest_confirmation' || phase === 'break' || phase === 'paused'
+    ? restored?.breakKind ?? null
+    : null
+  let pendingBreakKind: 'short' | 'long' | null = phase === 'awaiting_rest_confirmation' ? breakKind : null
   let targetAt: number | null = phase === 'work' || phase === 'break'
     ? initialNow + remainingSeconds * 1000
     : null
@@ -78,7 +80,7 @@ export function createPomodoro(settings: {
     confirmRest(now) {
       if (phase !== 'awaiting_rest_confirmation') return []
       phase = 'break'
-      breakKind = pendingBreakKind ?? 'short'
+      breakKind = pendingBreakKind ?? breakKind ?? 'short'
       pendingBreakKind = null
       remainingSeconds = (breakKind === 'long' ? settings.longBreakMinutes ?? settings.breakMinutes : settings.breakMinutes) * 60
       targetAt = now + remainingSeconds * 1000
@@ -110,11 +112,11 @@ export function createPomodoro(settings: {
       }
       phase = 'awaiting_rest_confirmation'
       targetAt = null
-      breakKind = null
       completedToday += 1
-      pendingBreakKind = settings.longBreakEvery !== undefined && settings.longBreakEvery > 0 && completedToday % settings.longBreakEvery === 0
+      breakKind = settings.longBreakEvery !== undefined && settings.longBreakEvery > 0 && completedToday % settings.longBreakEvery === 0
         ? 'long'
         : 'short'
+      pendingBreakKind = breakKind
       return [{ type: 'work_completed', ts: now }]
     },
     snapshot() {
