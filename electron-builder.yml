@@ -8,8 +8,9 @@ files:
   - assets/manifest.json
   - assets/video/generated/**
   - assets/video/manifest.json
+  - assets/app-icon/**
 mac:
-  icon: assets/generated/final/idle.png
+  icon: assets/app-icon/pipeach.icns
   category: public.app-category.productivity
   target:
     - target: dir
@@ -17,7 +18,7 @@ mac:
         - arm64
         - x64
 win:
-  icon: assets/generated/final/idle.png
+  icon: assets/app-icon/pipeach.ico
   target:
     - target: nsis
       arch:
