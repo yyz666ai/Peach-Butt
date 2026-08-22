@@ -9,6 +9,7 @@ import transform from '../../../../assets/video/generated/transform.webm'
 import dry from '../../../../assets/video/generated/dry.webm'
 import idleMotion from '../../../../assets/video/generated/idle.webm'
 import eyeStrainMotion from '../../../../assets/video/generated/eye-strain.webm'
+import activityMotion from '../../../../assets/video/generated/activity.webm'
 import idle from '../../../../assets/generated/final/idle.png'
 import idleMotionStill from '../../../../assets/generated/final/idle-motion.png'
 import eyeStrain from '../../../../assets/generated/final/eye-strain.png'
@@ -20,7 +21,10 @@ import { clipTimelines, nextPlaybackAction } from './pet-motion-timeline'
 
 const clips = {
   idle: { src: idleMotion, ...clipTimelines.idle },
+  activity: { src: activityMotion, ...clipTimelines.activity },
+  stretch: { src: activityMotion, ...clipTimelines.activity },
   'eye-strain': { src: eyeStrainMotion, ...clipTimelines['eye-strain'] },
+  'eye-rest': { src: eyeStrainMotion, ...clipTimelines['eye-strain'] },
   focus: { src: focus, ...clipTimelines.focus },
   greeting: { src: greeting, ...clipTimelines.greeting },
   wave: { src: greeting, ...clipTimelines.greeting },

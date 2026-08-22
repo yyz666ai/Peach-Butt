@@ -1,17 +1,19 @@
 {
   "reference": "用户提供的七段固定镜头积木动画",
   "pipeline": "rembg u2netp at 12 fps, normalized to a shared 480 x 500 transparent canvas, VP9 alpha WebM",
+  "canvas": { "width": 480, "height": 500, "fps": 12, "bottomSafeMargin": 8 },
   "clips": [
     { "id": "idle", "file": "generated/idle.webm", "role": "静止陪伴时的低频眨眼、手脚小动作", "start": 0, "end": 4, "playMode": "loop" },
-    { "id": "eye-strain", "file": "generated/eye-strain.webm", "role": "忽略护眼提醒后逐级变红干裂并停在警示姿态", "start": 0, "end": 5, "playMode": "once" },
-    { "id": "greeting", "file": "generated/greeting.webm", "role": "启动或悬停时完整播放一次的打招呼", "start": 0.1, "end": 9.92, "playMode": "once" },
-    { "id": "focus", "file": "generated/focus.webm", "role": "专注时持续、轻微地敲电脑", "start": 0.35, "end": 9.82, "playMode": "loop" },
-    { "id": "sleep", "file": "generated/sleep.webm", "role": "番茄休息和睡觉", "start": 0.2, "end": 4.25, "playMode": "loop" },
-    { "id": "toilet", "file": "generated/toilet.webm", "role": "上厕所提醒，播放一次", "start": 0.1, "end": 6.65, "playMode": "once" },
-    { "id": "transform", "file": "generated/transform.webm", "role": "从普通状态进入专注前的跳起、旋转与黑色小旋风；以前段 1.25 倍速播放", "start": 0.08, "end": 6.5, "playMode": "once" },
-    { "id": "water-prompt", "file": "generated/dry.webm", "role": "两轮番茄后的喝水示范动作", "start": 1.45, "end": 9.9, "playMode": "once" },
-    { "id": "dry", "file": "generated/dry.webm", "role": "喝水提醒未响应时的干裂，到喝水后的恢复", "start": 0.08, "end": 9.9, "playMode": "once" },
+    { "id": "activity", "file": "generated/activity.webm", "role": "每次休息队列中的全身活动示范", "start": 0, "end": 4, "playMode": "loop", "restKind": "stand" },
+    { "id": "eye-strain", "file": "generated/eye-strain.webm", "role": "护眼提醒与忽略后逐级变红干裂", "start": 0, "end": 5, "playMode": "once", "restKind": "eyes" },
+    { "id": "greeting", "file": "generated/greeting.webm", "role": "用户明确点击打招呼后完整播放一次", "start": 0.1, "end": 9.92, "playMode": "once" },
+    { "id": "focus", "file": "generated/focus.webm", "role": "专注时持续循环安静敲电脑段", "start": 0.35, "end": 3.67, "playMode": "loop", "bottomSafeMargin": 18 },
+    { "id": "sleep", "file": "generated/sleep.webm", "role": "第四个番茄后的长休息", "start": 0.2, "end": 4.25, "playMode": "loop", "restKind": "long-rest" },
+    { "id": "toilet", "file": "generated/toilet.webm", "role": "当前休息队列的上厕所提醒", "start": 0.1, "end": 6.65, "playMode": "once", "restKind": "toilet" },
+    { "id": "transform", "file": "generated/transform.webm", "role": "完整跳起、旋转与旋风尾部；1.55 倍速压缩前段等待", "start": 0.08, "end": 9.82, "playMode": "once" },
+    { "id": "water-prompt", "file": "generated/dry.webm", "role": "当前休息队列的喝水与恢复动作", "start": 1.45, "end": 9.8, "playMode": "once", "restKind": "water" },
+    { "id": "dry", "file": "generated/dry.webm", "role": "喝水提醒未响应时的干裂，到喝水后的恢复", "start": 0.08, "end": 9.8, "playMode": "once" },
     { "id": "pressure", "file": "generated/pressure.webm", "role": "按久坐压力定格到逐渐变红、膨胀的状态", "start": 0, "end": 5.3, "playMode": "scrub" },
-    { "id": "explosion", "file": "generated/explosion.webm", "role": "只保留桃子破裂的短促全屏爆炸，椅子颜色已剔除", "start": 0, "end": 0.72, "playMode": "once" }
+    { "id": "explosion", "file": "generated/explosion.webm", "role": "只保留桃子破裂瞬间，不保留椅子尾帧", "start": 0, "end": 0.5, "playMode": "once" }
   ]
 }

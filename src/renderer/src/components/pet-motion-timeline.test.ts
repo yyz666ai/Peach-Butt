@@ -23,7 +23,8 @@ describe('pet motion timelines', () => {
 
   it('includes transform and dry reminder clips as first-class motions', () => {
     expect(clipTimelines.transform.playMode).toBe('once')
-    expect(clipTimelines.transform.end).toBeGreaterThan(6)
+    expect(clipTimelines.transform.end).toBeGreaterThanOrEqual(9.7)
+    expect(clipTimelines.transform.rate).toBeGreaterThanOrEqual(1.5)
     expect(clipTimelines.dry.playMode).toBe('once')
     expect(clipTimelines.dry.end).toBeLessThan(2)
     expect(clipTimelines.hydrating.end).toBeGreaterThan(5)
@@ -34,5 +35,10 @@ describe('pet motion timelines', () => {
     expect(clipTimelines.idle.end).toBeGreaterThanOrEqual(3.9)
     expect(clipTimelines['eye-strain'].playMode).toBe('once')
     expect(clipTimelines['eye-strain'].end).toBeGreaterThanOrEqual(4.9)
+  })
+
+  it('loops the dedicated full-body activity reminder', () => {
+    expect(clipTimelines.activity).toMatchObject({ start: 0, end: 4, playMode: 'loop' })
+    expect(nextPlaybackAction(clipTimelines.activity, 4)).toBe('rewind')
   })
 })

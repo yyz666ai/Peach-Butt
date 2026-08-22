@@ -8,21 +8,23 @@ are committed assets; end users do not need the model or this Python runtime.
 from __future__ import annotations
 
 import argparse
+import math
 import subprocess
 import tempfile
 from pathlib import Path
 
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageFilter
 from rembg import new_session, remove
 
 
 CANVAS = (480, 500)
+BOTTOM_SAFE_MARGIN = 8
 MOTION_NAMES = ("greeting", "focus", "sleep", "toilet", "pressure", "transform", "dry")
-BRIGHTNESS = {"greeting": 1.15, "focus": 1.2, "sleep": 1.1, "toilet": 1.1, "pressure": 1.1, "transform": 1.1, "dry": 1.12}
+BRIGHTNESS = {"greeting": 1.16, "focus": 1.28, "sleep": 1.15, "toilet": 1.15, "pressure": 1.18, "transform": 1.16, "dry": 1.16}
 TRIM_RANGES = {
     # Keep the complete jump, spin and visible tornado. Playback is sped up in
     # the renderer so the transformation does not delay focus for too long.
-    "transform": (0.08, 6.50),
+    "transform": (0.08, 9.90),
     # Show the complete thirsty-to-recovered arc, including the final happy pose.
     "dry": (0.08, 9.90),
 }
@@ -36,7 +38,10 @@ def alpha_bbox(image: Image.Image) -> tuple[int, int, int, int] | None:
     return image.getchannel("A").point(lambda value: 255 if value > 12 else 0).getbbox()
 
 
-def normalize_frames(frames: list[Path], *, clean_explosion: bool = False) -> None:
+def normalize_frames(
+    frames: list[Path], *, clean_explosion: bool = False,
+    target_fraction: float = .93, bottom_margin: int = BOTTOM_SAFE_MARGIN,
+) -> None:
     images = [Image.open(frame).convert("RGBA") for frame in frames]
     if clean_explosion:
         for image in images:
@@ -60,11 +65,11 @@ def normalize_frames(frames: list[Path], *, clean_explosion: bool = False) -> No
     right = max(box[2] for box in boxes)
     bottom = max(box[3] for box in boxes)
     subject_width, subject_height = right - left, bottom - top
-    scale = min(CANVAS[0] * 0.93 / subject_width, CANVAS[1] * 0.93 / subject_height)
+    scale = min(CANVAS[0] * target_fraction / subject_width, CANVAS[1] * target_fraction / subject_height)
     output_width = max(1, round(subject_width * scale))
     output_height = max(1, round(subject_height * scale))
     x = (CANVAS[0] - output_width) // 2
-    y = CANVAS[1] - output_height - 8
+    y = CANVAS[1] - output_height - bottom_margin
     for frame, image in zip(frames, images, strict=True):
         cropped = image.crop((left, top, right, bottom)).resize(
             (output_width, output_height), Image.Resampling.LANCZOS
@@ -83,6 +88,30 @@ def encode(frames: Path, destination: Path, fps: int) -> None:
         "-pix_fmt", "yuva420p", "-b:v", "0", "-crf", "31",
         "-auto-alt-ref", "0", str(destination)
     )
+
+
+def fade_tail(frames: list[Path], count: int = 10) -> None:
+    selected = frames[-count:]
+    for index, frame in enumerate(selected):
+        with Image.open(frame) as opened:
+            image = opened.convert("RGBA")
+        opacity = (len(selected) - index) / (len(selected) + 1)
+        image.putalpha(image.getchannel("A").point(lambda value: round(value * opacity)))
+        image.save(frame, optimize=True)
+
+
+def anchor_bottom(frames: list[Path]) -> None:
+    target = CANVAS[1] - BOTTOM_SAFE_MARGIN
+    for frame in frames:
+        with Image.open(frame) as opened:
+            image = opened.convert("RGBA")
+        box = alpha_bbox(image)
+        if not box:
+            continue
+        delta = target - box[3]
+        output = Image.new("RGBA", CANVAS, (0, 0, 0, 0))
+        output.alpha_composite(image, (0, delta))
+        output.save(frame, optimize=True)
 
 
 def convert(source: Path, destination: Path, fps: int, width: int, session: object, trim: tuple[float, float] | None = None) -> None:
@@ -105,19 +134,96 @@ def convert(source: Path, destination: Path, fps: int, width: int, session: obje
                     post_process_mask=True,
                 )
                 result.save(keyed / frame.name, optimize=True)
-        normalize_frames(sorted(keyed.glob("*.png")))
+        selected = sorted(keyed.glob("*.png"))
+        polish_frames(selected, destination.stem)
+        focus_clip = destination.stem == "focus"
+        normalize_frames(
+            selected,
+            target_fraction=.84 if focus_clip else .93,
+            bottom_margin=18 if focus_clip else BOTTOM_SAFE_MARGIN,
+        )
+        if destination.stem == "pressure":
+            anchor_bottom(selected)
+        if destination.stem == "transform":
+            fade_tail(selected)
         encode(keyed, destination, fps)
+
+
+def unmatte_white_edges(image: Image.Image) -> Image.Image:
+    """Remove white-background colour spill without changing opaque pixels."""
+    pixels = image.load()
+    for y in range(image.height):
+        for x in range(image.width):
+            red, green, blue, alpha = pixels[x, y]
+            if alpha == 0 or alpha >= 248:
+                continue
+            coverage = alpha / 255
+            pixels[x, y] = (
+                max(0, min(255, round((red - 255 * (1 - coverage)) / coverage))),
+                max(0, min(255, round((green - 255 * (1 - coverage)) / coverage))),
+                max(0, min(255, round((blue - 255 * (1 - coverage)) / coverage))),
+                alpha,
+            )
+    return image
+
+
+def clear_floor_residue(image: Image.Image) -> None:
+    pixels = image.load()
+    for y in range(round(image.height * .76), image.height):
+        for x in range(image.width):
+            red, green, blue, alpha = pixels[x, y]
+            neutral = max(red, green, blue) - min(red, green, blue) < 22
+            if alpha < 165 and neutral and min(red, green, blue) > 105:
+                pixels[x, y] = (red, green, blue, 0)
+
+
+def clear_pressure_chair(image: Image.Image) -> None:
+    """Keep the swelling peach and its limbs, but remove the exposed chair."""
+    pixels = image.load()
+    core = Image.new("L", image.size, 0)
+    core_pixels = core.load()
+    core_points: list[tuple[int, int]] = []
+    for y in range(image.height):
+        for x in range(image.width):
+            red, green, blue, alpha = pixels[x, y]
+            warm = red > 185 and red - green > 18 and red - blue > 12
+            leafy = green > 78 and green - blue > 18 and green > red * .72
+            if alpha > 90 and (warm or leafy):
+                core_pixels[x, y] = 255
+                core_points.append((x, y))
+    if not core_points:
+        return
+    left = min(x for x, _ in core_points)
+    right = max(x for x, _ in core_points)
+    core_bottom = max(y for _, y in core_points)
+    keep = core.filter(ImageFilter.MaxFilter(31)).filter(ImageFilter.GaussianBlur(.8))
+    keep_pixels = keep.load()
+    for y in range(image.height):
+        for x in range(image.width):
+            red, green, blue, alpha = pixels[x, y]
+            warm = red > 185 and red - green > 18 and red - blue > 12
+            leafy = green > 78 and green - blue > 18 and green > red * .72
+            exposed_chair = x < left or x > right or (y > core_bottom - 3 and not (warm or leafy))
+            if alpha and (keep_pixels[x, y] < 18 or exposed_chair):
+                pixels[x, y] = (red, green, blue, 0)
 
 
 def polish_frames(frames: list[Path], name: str) -> None:
     for frame in frames:
         with Image.open(frame) as source:
             image = source.convert("RGBA")
-        alpha = image.getchannel("A")
+        alpha = image.getchannel("A").point(lambda value: 0 if value < 20 else value)
+        # A one-pixel inward matte removes the pale halo left by the source's
+        # white studio background. A tiny blur avoids a serrated silhouette.
+        alpha = alpha.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(.35))
         rgb = ImageEnhance.Brightness(image.convert("RGB")).enhance(BRIGHTNESS[name])
-        rgb = ImageEnhance.Color(rgb).enhance(1.1)
+        rgb = ImageEnhance.Color(rgb).enhance(1.12)
         polished = rgb.convert("RGBA")
-        polished.putalpha(alpha.point(lambda value: 0 if value < 22 else value))
+        polished.putalpha(alpha)
+        polished = unmatte_white_edges(polished)
+        clear_floor_residue(polished)
+        if name == "pressure":
+            clear_pressure_chair(polished)
         if name == "greeting":
             pixels = polished.load()
             # The source has a light floor/shadow painted inside both loop feet.
@@ -126,10 +232,41 @@ def polish_frames(frames: list[Path], name: str) -> None:
             for y in range(round(polished.height * .7), polished.height):
                 for x in range(polished.width):
                     red, green, blue, value = pixels[x, y]
-                    neutral = max(red, green, blue) - min(red, green, blue) < 24
-                    if value and neutral and min(red, green, blue) > 145:
+                    neutral = max(red, green, blue) - min(red, green, blue) < 50
+                    if value and neutral and min(red, green, blue) > 90:
                         pixels[x, y] = (red, green, blue, 0)
         polished.save(frame, optimize=True)
+
+
+def build_activity(source: Path, destination: Path, fps: int) -> None:
+    """Turn the approved full-body stretch still into a calm 4-second loop."""
+    with tempfile.TemporaryDirectory(prefix="pipeach-activity-") as temp:
+        frames = Path(temp) / "frames"
+        frames.mkdir()
+        with Image.open(source) as opened:
+            image = opened.convert("RGBA")
+        box = alpha_bbox(image)
+        if not box:
+            raise RuntimeError("Activity source has no visible subject")
+        subject = image.crop(box)
+        scale = min(CANVAS[0] * .88 / subject.width, CANVAS[1] * .91 / subject.height)
+        base_size = (round(subject.width * scale), round(subject.height * scale))
+        subject = subject.resize(base_size, Image.Resampling.LANCZOS)
+        frame_count = fps * 4
+        for index in range(frame_count):
+            phase = 2 * math.pi * index / frame_count
+            angle = 1.1 * math.sin(phase)
+            breath = 1 + .008 * math.sin(phase * 2)
+            moved = subject.resize(
+                (round(subject.width * breath), round(subject.height * breath)),
+                Image.Resampling.LANCZOS,
+            ).rotate(angle, Image.Resampling.BICUBIC, expand=True)
+            output = Image.new("RGBA", CANVAS, (0, 0, 0, 0))
+            x = (CANVAS[0] - moved.width) // 2
+            y = CANVAS[1] - moved.height - BOTTOM_SAFE_MARGIN
+            output.alpha_composite(moved, (x, y))
+            output.save(frames / f"{index + 1:05d}.png", optimize=True)
+        encode(frames, destination, fps)
 
 
 def normalize_existing(source: Path, destination: Path, fps: int, name: str) -> None:
@@ -159,7 +296,9 @@ def build_explosion(pressure: Path, destination: Path, fps: int) -> None:
         normalize_frames(selected, clean_explosion=True)
         # A 12-fps source contains only two useful burst frames. Hold each for
         # three ticks: the interruption remains short, but humans can perceive it.
-        held = [Image.open(frame).convert("RGBA") for frame in selected]
+        held = [Image.open(frame).convert("RGBA") for frame in selected[:2]]
+        for frame in selected:
+            frame.unlink()
         for index, image in enumerate(held):
             for repeat in range(3):
                 image.save(frames / f"{index * 3 + repeat + 1:05d}.png", optimize=True)
@@ -192,6 +331,7 @@ def main() -> None:
             assert session is not None
             convert(args.sources / f"{name}.mp4", destination, args.fps, args.width, session, TRIM_RANGES.get(name))
     build_explosion(args.destination / "pressure.webm", args.destination / "explosion.webm", args.fps)
+    build_activity(Path("assets/generated/final/stretch.png"), args.destination / "activity.webm", args.fps)
 
 
 if __name__ == "__main__":
