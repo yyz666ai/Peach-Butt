@@ -30,6 +30,33 @@ describe('health engine', () => {
     )
   })
 
+  it('does not add pressure when the runtime explicitly says focus is inactive', () => {
+    const engine = createHealthEngine({ initialNow: 0, pressurePerMinute: 100 })
+
+    const events = engine.tick({ now: 60_000, idleSeconds: 0, focusing: false })
+
+    expect(engine.snapshot()).toMatchObject({
+      pressure: 0,
+      activeSecondsToday: 60,
+      continuousActiveSeconds: 0,
+      mode: 'active'
+    })
+    expect(events).not.toContainEqual(expect.objectContaining({ type: 'explode' }))
+  })
+
+  it('keeps explicit focus pressurized until the runtime ends it even when the system is idle', () => {
+    const engine = createHealthEngine({ initialNow: 0, pressurePerMinute: 1 })
+
+    engine.tick({ now: 10 * 60_000, idleSeconds: 600, focusing: true })
+
+    expect(engine.snapshot()).toMatchObject({
+      pressure: 10,
+      continuousActiveSeconds: 600,
+      restCount: 0,
+      mode: 'active'
+    })
+  })
+
   it.each([1, 60, 179])('treats %i idle seconds as continued use', (idleSeconds) => {
     const engine = createHealthEngine({ initialNow: 0, pressurePerMinute: 1 })
 
@@ -110,25 +137,44 @@ describe('health engine', () => {
     )
   })
 
-  it('re-inflates gradually across healthy habits', () => {
+  it('stays deflated across healthy habits until explicit recovery', () => {
     const engine = createHealthEngine({ initialNow: 0, pressurePerMinute: 1 })
     engine.tick({ now: 100 * 60_000, idleSeconds: 0 })
 
     const events = engine.completeHabit('water', 101 * 60_000)
 
-    expect(engine.snapshot()).toMatchObject({ score: 8, recovery: 32, pressure: 0, mode: 'deflated' })
+    expect(engine.snapshot()).toMatchObject({ score: 8, recovery: 0, pressure: 0, mode: 'deflated' })
     engine.completeHabit('water', 102 * 60_000)
     engine.completeHabit('water', 103 * 60_000)
-    const finalEvents = engine.completeHabit('water', 104 * 60_000)
+    engine.completeHabit('water', 104 * 60_000)
     engine.completeHabit('water', 105 * 60_000)
-    expect(engine.snapshot()).toMatchObject({ score: 40, recovery: 100, mode: 'active' })
+    expect(engine.snapshot()).toMatchObject({ score: 40, recovery: 0, mode: 'deflated' })
     expect(events).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'habit_completed', kind: 'water' }),
-        expect.objectContaining({ type: 'habit_completed', kind: 'water' })
+        expect.objectContaining({ type: 'habit_completed', kind: 'water', recoveryDelta: 0 })
       ])
     )
-    expect(finalEvents).toContainEqual(expect.objectContaining({ type: 'state_changed', mode: 'active' }))
+
+    expect(engine.recover(106 * 60_000)).toContainEqual(
+      expect.objectContaining({ type: 'state_changed', mode: 'active' })
+    )
+    expect(engine.snapshot()).toMatchObject({ recovery: 100, mode: 'active' })
+  })
+
+  it('forces one explosion without manufacturing pressure and cannot double explode', () => {
+    const engine = createHealthEngine({ initialNow: 0 })
+    engine.completeHabit('stand', 1_000)
+
+    const events = engine.forceExplosion(2_000)
+
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'explode', ts: 2_000, penalty: 12, count: 1 }),
+      expect.objectContaining({ type: 'score_changed', delta: -12, reason: 'explode' }),
+      expect.objectContaining({ type: 'state_changed', mode: 'deflated' })
+    ]))
+    expect(events).not.toContainEqual(expect.objectContaining({ type: 'pressure_changed' }))
+    expect(engine.snapshot()).toMatchObject({ pressure: 0, mode: 'deflated', explosionsToday: 1 })
+    expect(engine.forceExplosion(3_000)).toEqual([])
   })
 
   it('cannot leave deflated mode through automatic or requested rest', () => {
@@ -187,7 +233,7 @@ describe('health engine', () => {
     )
   })
 
-  it('resets daily score and counters on the next local day', () => {
+  it('resets daily counters without bypassing a deflated recovery lock', () => {
     const start = new Date(2026, 7, 20, 9, 0, 0).getTime()
     const nextDay = new Date(2026, 7, 21, 9, 0, 0).getTime()
     const engine = createHealthEngine({ initialNow: start, pressurePerMinute: 100 })
@@ -198,11 +244,25 @@ describe('health engine', () => {
     expect(engine.snapshot()).toMatchObject({
       pressure: 0,
       score: 0,
-      recovery: 100,
+      recovery: 0,
       explosionsToday: 0,
       activeSecondsToday: 0,
       restCount: 0,
-      mode: 'active'
+      mode: 'deflated'
+    })
+  })
+
+  it('restores a deflated recovery lock after reopening on a new local day', () => {
+    const firstDay = new Date(2026, 7, 20, 23, 58).getTime()
+    const nextDay = new Date(2026, 7, 21, 9).getTime()
+    const first = createHealthEngine({ initialNow: firstDay, pressurePerMinute: 100 })
+    first.tick({ now: firstDay + 60_000, idleSeconds: 0 })
+
+    const reopened = createHealthEngine({ initialNow: nextDay, initialState: first.snapshot() })
+
+    expect(reopened.snapshot()).toMatchObject({
+      day: '2026-08-21', mode: 'deflated', recovery: 0,
+      score: 0, explosionsToday: 0, activeSecondsToday: 0
     })
   })
 

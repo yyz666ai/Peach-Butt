@@ -1,27 +1,13 @@
 import Database from 'better-sqlite3'
+import type { DailyStats, UsageSession, UsageState } from '../shared/contracts'
+
+export type { DailyStats, UsageSession, UsageState } from '../shared/contracts'
 
 export interface StoredEvent {
   id?: number
   type: string
   ts: number
   meta: Record<string, unknown>
-}
-
-export interface DailyStats {
-  date: string
-  scoreEnd: number
-  scoreMin: number
-  activeSeconds: number
-  focusSeconds: number
-  pomodoroCount: number
-  waterCount: number
-  standCount: number
-  toiletCount: number
-  eyeRestCount: number
-  restCount: number
-  explodeCount: number
-  ignoreCount: number
-  pressurePeak: number
 }
 
 export interface Storage {
@@ -34,6 +20,8 @@ export interface Storage {
   loadRuntimeState<T>(key: string, fallback: T): T
   upsertDailyStats(stats: DailyStats): void
   getDailyStats(startDate: string, endDate: string): DailyStats[]
+  appendUsageSession(session: Pick<UsageSession, 'state' | 'startedAt' | 'endedAt'>): void
+  getUsageSessions(startDate: string, endDate: string): UsageSession[]
   close(): void
 }
 
@@ -62,6 +50,15 @@ export function createStorage(filename: string): Storage {
       date TEXT PRIMARY KEY,
       data TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS usage_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      state TEXT NOT NULL,
+      started_at INTEGER NOT NULL,
+      ended_at INTEGER NOT NULL,
+      seconds REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS usage_sessions_date_idx ON usage_sessions(date, started_at);
   `)
 
   const insertEvent = db.prepare(
@@ -88,6 +85,15 @@ export function createStorage(filename: string): Storage {
   )
   const selectStats = db.prepare(
     'SELECT data FROM daily_stats WHERE date >= ? AND date <= ? ORDER BY date'
+  )
+  const insertUsage = db.prepare(
+    'INSERT INTO usage_sessions (date, state, started_at, ended_at, seconds) VALUES (?, ?, ?, ?, ?)'
+  )
+  const insertUsageParts = db.transaction((parts: UsageSession[]) => {
+    for (const part of parts) insertUsage.run(part.date, part.state, part.startedAt, part.endedAt, part.seconds)
+  })
+  const selectUsage = db.prepare(
+    'SELECT id, date, state, started_at, ended_at, seconds FROM usage_sessions WHERE date >= ? AND date <= ? ORDER BY started_at, id'
   )
 
   return {
@@ -127,8 +133,28 @@ export function createStorage(filename: string): Storage {
     },
     getDailyStats(startDate, endDate) {
       return (selectStats.all(startDate, endDate) as Array<{ data: string }>).map((row) =>
-        parseJson(row.data, emptyDailyStats(''))
+        normalizeDailyStats(parseJson(row.data, emptyDailyStats('')))
       )
+    },
+    appendUsageSession(session) {
+      insertUsageParts(splitUsageSession(session))
+    },
+    getUsageSessions(startDate, endDate) {
+      return (selectUsage.all(startDate, endDate) as Array<{
+        id: number
+        date: string
+        state: UsageState
+        started_at: number
+        ended_at: number
+        seconds: number
+      }>).map((row) => ({
+        id: row.id,
+        date: row.date,
+        state: row.state,
+        startedAt: row.started_at,
+        endedAt: row.ended_at,
+        seconds: row.seconds
+      }))
     },
     close() {
       db.close()
@@ -151,8 +177,59 @@ export function emptyDailyStats(date: string): DailyStats {
     restCount: 0,
     explodeCount: 0,
     ignoreCount: 0,
-    pressurePeak: 0
+    pressurePeak: 0,
+    stateSeconds: emptyUsageStateSeconds()
   }
+}
+
+export function emptyUsageStateSeconds(): Record<UsageState, number> {
+  return {
+    idle: 0,
+    focus: 0,
+    rest_due: 0,
+    short_break: 0,
+    long_break: 0,
+    deflated: 0,
+    recovering: 0
+  }
+}
+
+function normalizeDailyStats(stats: DailyStats): DailyStats {
+  const empty = emptyDailyStats(stats.date)
+  return {
+    ...empty,
+    ...stats,
+    stateSeconds: { ...emptyUsageStateSeconds(), ...stats.stateSeconds }
+  }
+}
+
+function splitUsageSession(
+  session: Pick<UsageSession, 'state' | 'startedAt' | 'endedAt'>
+): UsageSession[] {
+  if (!Number.isFinite(session.startedAt) || !Number.isFinite(session.endedAt) || session.endedAt <= session.startedAt) return []
+  const parts: UsageSession[] = []
+  let cursor = session.startedAt
+  while (cursor < session.endedAt) {
+    const cursorDate = new Date(cursor)
+    const nextMidnight = new Date(
+      cursorDate.getFullYear(), cursorDate.getMonth(), cursorDate.getDate() + 1
+    ).getTime()
+    const endedAt = Math.min(session.endedAt, nextMidnight)
+    parts.push({
+      date: localDayKey(cursor),
+      state: session.state,
+      startedAt: cursor,
+      endedAt,
+      seconds: (endedAt - cursor) / 1_000
+    })
+    cursor = endedAt
+  }
+  return parts
+}
+
+function localDayKey(ts: number): string {
+  const date = new Date(ts)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
 function parseJson<T>(value: string, fallback: T): T {

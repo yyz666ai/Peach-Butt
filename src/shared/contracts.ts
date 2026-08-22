@@ -1,5 +1,16 @@
 export type ReminderKind = 'water' | 'stand' | 'toilet' | 'eyes'
 
+export type UsageState = 'idle' | 'focus' | 'rest_due' | 'short_break' | 'long_break' | 'deflated' | 'recovering'
+
+export interface UsageSession {
+  id?: number
+  date: string
+  state: UsageState
+  startedAt: number
+  endedAt: number
+  seconds: number
+}
+
 export interface RestSessionSnapshot {
   startedAt: number
   longBreak: boolean
@@ -45,6 +56,7 @@ export interface DailyStats {
   explodeCount: number
   ignoreCount: number
   pressurePeak: number
+  stateSeconds?: Record<UsageState, number>
 }
 
 export interface AppSettings {
@@ -65,6 +77,7 @@ export interface AppSnapshot {
   pomodoro: PomodoroSnapshot
   reminder: { kind: ReminderKind; dueAt: number } | null
   restSession: RestSessionSnapshot | null
+  overlay: { id: number; kind: 'rest-reminder' | 'explosion'; messages: string[] } | null
   visual: string
   message: string
   settings: AppSettings

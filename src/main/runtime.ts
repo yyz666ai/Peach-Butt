@@ -2,14 +2,24 @@ import { Notification, powerMonitor } from 'electron'
 import { createHealthEngine, type HabitCompletion, type HealthEvent, type HealthSnapshot, type ReminderKind } from '../core/health-engine'
 import { createPomodoro, type PomodoroSnapshot } from '../core/pomodoro'
 import { createReminderScheduler } from '../core/reminders'
+import { createRestSession, type RestSession } from '../core/rest-session'
 import { selectPetVisual } from '../core/pet-visual-state'
-import type { AppAction, AppSettings, AppSnapshot } from '../shared/contracts'
-import { emptyDailyStats, type DailyStats, type Storage } from './storage'
+import type {
+  AppAction,
+  AppSettings,
+  AppSnapshot,
+  RestSessionSnapshot,
+  UsageState
+} from '../shared/contracts'
+import { emptyDailyStats, emptyUsageStateSeconds, type DailyStats, type Storage } from './storage'
 
 const DEFAULT_SETTINGS: AppSettings = {
   petSize: 140,
   workMinutes: 25,
   breakMinutes: 5,
+  continuousWorkLimitMinutes: 40,
+  longBreakMinutes: 15,
+  longBreakEvery: 4,
   pressurePerMinute: 1,
   reminders: {
     water: { enabled: true, intervalMinutes: 45 },
@@ -22,11 +32,33 @@ const DEFAULT_SETTINGS: AppSettings = {
 }
 
 const reminderCopy: Record<ReminderKind, string> = {
-  water: '该喝水啦，看看我怎么补充水分', stand: '这一轮结束啦，起来走走再休息',
-  toilet: '别憋着，该去上厕所啦', eyes: '看看远处，让眼睛休息一下'
+  water: '该喝水啦，看看我怎么补充水分',
+  stand: '这一轮结束啦，起来走走再休息',
+  toilet: '别憋着，该去上厕所啦',
+  eyes: '看看远处，让眼睛休息一下'
 }
 const reminderVisual: Record<ReminderKind, string> = {
   water: 'water-prompt', stand: 'stretch', toilet: 'toilet', eyes: 'eye-rest'
+}
+const restOverlayMessages = [
+  '起来伸展一下',
+  '喝点水补充水分',
+  '去趟洗手间吧',
+  '看看远处放松眼睛'
+]
+
+interface UsageCheckpoint {
+  state: UsageState
+  startedAt: number
+  checkpointAt: number
+}
+
+interface RuntimeSessionState {
+  restSession: RestSessionSnapshot | null
+  continuousWorkStartedAt: number | null
+  recoveryRestStartedAt: number | null
+  overlaySequence: number
+  usage: UsageCheckpoint | null
 }
 
 export interface Runtime {
@@ -38,16 +70,25 @@ export interface Runtime {
 }
 
 export function createRuntime(storage: Storage): Runtime {
-  const savedSettings = storage.getSetting('settings', DEFAULT_SETTINGS)
-  let settings: AppSettings = {
+  const savedSettings = storage.getSetting<Partial<AppSettings>>('settings', {})
+  let settings = sanitizeSettings({
     ...DEFAULT_SETTINGS,
     ...savedSettings,
-    petSize: savedSettings.petSize === 170 || savedSettings.petSize === undefined ? DEFAULT_SETTINGS.petSize : savedSettings.petSize,
+    petSize: savedSettings.petSize === 170 || savedSettings.petSize === undefined
+      ? DEFAULT_SETTINGS.petSize
+      : savedSettings.petSize,
     reminders: { ...DEFAULT_SETTINGS.reminders, ...savedSettings.reminders }
-  }
+  }, DEFAULT_SETTINGS)
   const now = Date.now()
   const restoredHealth = storage.loadRuntimeState<HealthSnapshot | null>('health', null)
   const restoredPomodoro = storage.loadRuntimeState<PomodoroSnapshot | null>('pomodoro', null)
+  const restoredSession = storage.loadRuntimeState<RuntimeSessionState>('session', {
+    restSession: null,
+    continuousWorkStartedAt: null,
+    recoveryRestStartedAt: null,
+    overlaySequence: 0,
+    usage: null
+  })
   const health = createHealthEngine({
     initialNow: now,
     pressurePerMinute: settings.pressurePerMinute,
@@ -58,6 +99,13 @@ export function createRuntime(storage: Storage): Runtime {
     initialNow: now,
     initialState: restoredPomodoro ?? undefined
   })
+  let restSession: RestSession | null = restoreRestSession(restoredSession.restSession)
+  let continuousWorkStartedAt = finiteOrNull(restoredSession.continuousWorkStartedAt)
+  let recoveryRestStartedAt = finiteOrNull(restoredSession.recoveryRestStartedAt)
+  let overlaySequence = Number.isSafeInteger(restoredSession.overlaySequence) && restoredSession.overlaySequence >= 0
+    ? restoredSession.overlaySequence
+    : 0
+  let overlay: AppSnapshot['overlay'] = null
   let lastTickAt = now
   const reminders = createReminderScheduler({ initialNow: now, settings: settings.reminders })
   let reminder: AppSnapshot['reminder'] = null
@@ -66,14 +114,46 @@ export function createRuntime(storage: Storage): Runtime {
     id: 'wave', until: now + 2500, message: '你好呀，今天也要好好照顾自己'
   }
   const listeners = new Set<(snapshot: AppSnapshot) => void>()
+
   const dateKey = (ts = Date.now()): string => {
     const d = new Date(ts)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
 
+  const currentUsageState = (): UsageState => {
+    if (health.snapshot().mode === 'deflated') return recoveryRestStartedAt === null ? 'deflated' : 'recovering'
+    const p = pomodoro.snapshot()
+    if (restSession || p.phase === 'break' || (p.phase === 'paused' && p.pausedPhase === 'break')) {
+      return p.breakKind === 'long' ? 'long_break' : 'short_break'
+    }
+    if (p.phase === 'awaiting_rest_confirmation') return 'rest_due'
+    if (p.phase === 'work') return 'focus'
+    return 'idle'
+  }
+
+  const restoredUsage = validUsageCheckpoint(restoredSession.usage)
+  if (continuousWorkStartedAt !== null && restoredUsage && now > restoredUsage.checkpointAt) {
+    continuousWorkStartedAt += now - restoredUsage.checkpointAt
+  }
+  if (restoredUsage && restoredUsage.checkpointAt > restoredUsage.startedAt) {
+    storage.appendUsageSession({
+      state: restoredUsage.state,
+      startedAt: restoredUsage.startedAt,
+      endedAt: restoredUsage.checkpointAt
+    })
+  }
+  let usage: UsageCheckpoint = { state: currentUsageState(), startedAt: now, checkpointAt: now }
+
   const persistRuntimeState = (): void => {
     storage.saveRuntimeState('health', health.snapshot())
     storage.saveRuntimeState('pomodoro', pomodoro.snapshot())
+    storage.saveRuntimeState('session', {
+      restSession: restSession?.snapshot() ?? null,
+      continuousWorkStartedAt,
+      recoveryRestStartedAt,
+      overlaySequence,
+      usage
+    } satisfies RuntimeSessionState)
   }
 
   const mutateStats = (events: HealthEvent[], ts: number, focusSecondsAdded = 0): void => {
@@ -109,6 +189,33 @@ export function createRuntime(storage: Storage): Runtime {
     if (events.length) storage.appendEvents(events.map((event) => ({ type: event.type, ts: event.ts, meta: event })))
   }
 
+  const addUsageSeconds = (state: UsageState, startedAt: number, endedAt: number): void => {
+    let cursor = startedAt
+    while (cursor < endedAt) {
+      const d = new Date(cursor)
+      const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime()
+      const partEnd = Math.min(endedAt, midnight)
+      const date = dateKey(cursor)
+      const current = storage.getDailyStats(date, date)[0] ?? emptyDailyStats(date)
+      current.stateSeconds ??= emptyUsageStateSeconds()
+      current.stateSeconds[state] += (partEnd - cursor) / 1000
+      storage.upsertDailyStats(current)
+      cursor = partEnd
+    }
+  }
+
+  const advanceUsage = (at: number): void => {
+    const checkpointAt = Math.max(usage.checkpointAt, at)
+    addUsageSeconds(usage.state, usage.checkpointAt, checkpointAt)
+    const nextState = currentUsageState()
+    if (nextState !== usage.state) {
+      storage.appendUsageSession({ state: usage.state, startedAt: usage.startedAt, endedAt: checkpointAt })
+      usage = { state: nextState, startedAt: checkpointAt, checkpointAt }
+      return
+    }
+    usage.checkpointAt = checkpointAt
+  }
+
   const trends = (): DailyStats[] => {
     const end = new Date()
     const start = new Date(end)
@@ -135,114 +242,197 @@ export function createRuntime(storage: Storage): Runtime {
     })
   }
 
+  const publishOverlay = (kind: NonNullable<AppSnapshot['overlay']>['kind'], messages: string[]): void => {
+    overlaySequence += 1
+    overlay = { id: overlaySequence, kind, messages: [...messages] }
+  }
+
   const currentVisual = (): { id: string; message: string } => {
-    if (visualOverride && visualOverride.until > lastTickAt) return visualOverride
-    visualOverride = null
+    const h = health.snapshot()
+    const p = pomodoro.snapshot()
+    if (visualOverride?.id === 'exploding' && visualOverride.until > lastTickAt) return visualOverride
+    if (h.mode === 'deflated') {
+      return recoveryRestStartedAt === null
+        ? { id: 'deflated', message: '我瘪掉了……点我并离开电脑休息 5 分钟' }
+        : { id: 'deflated', message: '正在恢复，离开电脑休息满 5 分钟吧' }
+    }
+    const session = restSession?.snapshot()
+    if (session?.current) return { id: reminderVisual[session.current], message: reminderCopy[session.current] }
+    if (session?.allCompleted && (p.phase === 'break' || (p.phase === 'paused' && p.pausedPhase === 'break'))) {
+      return session.longBreak
+        ? { id: 'sleep', message: '四项都完成啦，安心睡一会儿' }
+        : { id: 'rest', message: '四项都完成啦，安静休息一下' }
+    }
+    if (p.phase === 'awaiting_rest_confirmation') return { id: 'stretch', message: '番茄结束啦，点我开始休息' }
+    if (p.phase === 'break' && p.breakKind === 'long') return { id: 'sleep', message: '长休息中，好好放松吧' }
     if (reminder) {
-      if (reminder.kind === 'water' && lastTickAt - reminder.dueAt >= 15 * 60_000) {
-        return { id: 'dry', message: '我都渴得干裂啦，快喝口水吧' }
-      }
-      if (reminder.kind === 'eyes' && lastTickAt - reminder.dueAt >= 10 * 60_000) {
-        return { id: 'eye-strain', message: '眼睛又红又干啦，看看远处吧' }
-      }
+      if (reminder.kind === 'water' && lastTickAt - reminder.dueAt >= 15 * 60_000) return { id: 'dry', message: '我都渴得干裂啦，快喝口水吧' }
+      if (reminder.kind === 'eyes' && lastTickAt - reminder.dueAt >= 10 * 60_000) return { id: 'eye-strain', message: '眼睛又红又干啦，看看远处吧' }
       return { id: reminderVisual[reminder.kind], message: reminderCopy[reminder.kind] }
     }
-    const p = pomodoro.snapshot()
-    if (p.phase === 'awaiting_rest_confirmation') return { id: 'stretch', message: '番茄结束啦，点我开始休息' }
-    if (p.phase === 'break') return { id: 'sleep', message: '休息中，放松一下吧' }
-    const h = health.snapshot()
-    const id = selectPetVisual({
-      deflated: h.mode === 'deflated',
-      focusing: p.phase === 'work' || p.phase === 'paused',
-      pressure: h.pressure
+    const selected = selectPetVisual({
+      focusing: p.phase === 'work' || (p.phase === 'paused' && p.pausedPhase === 'work'),
+      pressure: h.pressure,
+      greeting: visualOverride?.id === 'greeting' && visualOverride.until > lastTickAt
     })
-    if (id === 'deflated') return { id, message: '我瘪掉了……完成健康行为帮我充气吧' }
-    if (id === 'pressure') return { id, message: h.pressure >= 80 ? '快要爆炸了！现在就起来活动' : '坐得太久，我越来越红啦' }
-    if (id === 'focus') return { id, message: '专注中，我也在认真工作' }
-    return { id, message: '点我互动，右键可以开始专注' }
+    if (selected === 'pressure') return { id: selected, message: h.pressure >= 80 ? '快要爆炸了！现在就起来活动' : '坐得太久，我越来越红啦' }
+    if (selected === 'focus') {
+      const message = visualOverride?.id === 'focus' && visualOverride.until > lastTickAt ? visualOverride.message : '专注中，我也在认真工作'
+      return { id: selected, message }
+    }
+    if (selected === 'greeting' && visualOverride) return visualOverride
+    if (visualOverride && visualOverride.until > lastTickAt) return visualOverride
+    visualOverride = null
+    return { id: 'idle', message: '点我互动，右键可以开始专注' }
   }
 
   const makeSnapshot = (): AppSnapshot => {
     const visual = currentVisual()
-    return { health: health.snapshot(), pomodoro: pomodoro.snapshot(), reminder, visual: visual.id, message: visual.message, settings, trends: trends(), monthStats: monthStats() }
+    return {
+      health: health.snapshot(),
+      pomodoro: pomodoro.snapshot(),
+      reminder,
+      restSession: restSession?.snapshot() ?? null,
+      overlay,
+      visual: visual.id,
+      message: visual.message,
+      settings,
+      trends: trends(),
+      monthStats: monthStats()
+    }
   }
+
   const publish = (): AppSnapshot => {
     const value = makeSnapshot()
     for (const listener of listeners) listener(value)
     return value
   }
+
+  const handleExplosion = (events: HealthEvent[], at: number): void => {
+    if (!events.some((event) => event.type === 'explode')) return
+    pomodoro.reset()
+    continuousWorkStartedAt = null
+    recoveryRestStartedAt = null
+    restSession = null
+    reminder = null
+    visualOverride = { id: 'exploding', until: at + 3000, message: '快去休息啦' }
+    publishOverlay('explosion', ['快去休息啦'])
+  }
+
   const doTick = (tickNow = Date.now(), idleSeconds = powerMonitor.getSystemIdleTime()): AppSnapshot => {
-    const wasFocusing = pomodoro.snapshot().phase === 'work'
+    const phaseBeforeTick = pomodoro.snapshot().phase
+    const wasFocusing = phaseBeforeTick === 'work' || phaseBeforeTick === 'awaiting_rest_confirmation'
     const elapsedSeconds = Math.max(0, (tickNow - lastTickAt) / 1000)
+    if (!wasFocusing && continuousWorkStartedAt !== null) {
+      continuousWorkStartedAt += elapsedSeconds * 1000
+    }
     lastTickAt = tickNow
-    const healthEvents = health.tick({ now: tickNow, idleSeconds, focusing: wasFocusing })
+    const healthEvents: HealthEvent[] = health.tick({ now: tickNow, idleSeconds, focusing: wasFocusing })
     for (const event of pomodoro.tick(tickNow)) {
       storage.appendEvent({ type: event.type, ts: event.ts, meta: event })
       if (event.type === 'work_completed') {
-        // A finished work block always asks for a real standing break before
-        // the break timer can begin. The one visible reminder stays actionable.
-        reminder = { kind: 'stand', dueAt: tickNow }
+        reminder = null
+        restSession = null
         visualOverride = null
-        if (Notification.isSupported()) new Notification({ title: '桃屁屁', body: '这一轮结束啦，起来走走再休息' }).show()
+        publishOverlay('rest-reminder', restOverlayMessages)
+        if (Notification.isSupported()) new Notification({ title: '桃屁屁', body: '这一轮结束啦，点我开始休息' }).show()
       }
       if (event.type === 'break_completed') {
-        mutateStats(health.completeHabit('pomodoro_break', tickNow), tickNow)
-        if (pomodoro.snapshot().completedToday % 2 === 0) {
-          reminder = { kind: 'water', dueAt: tickNow }
-          visualOverride = null
-          if (Notification.isSupported()) new Notification({ title: '桃屁屁', body: '完成两轮专注啦，跟我一起喝口水' }).show()
-        }
+        healthEvents.push(...health.completeHabit('pomodoro_break', tickNow))
+        restSession = null
       }
     }
-    const due = reminder ? [] : reminders.tick(tickNow, pomodoro.snapshot().phase === 'work')
-    if (due[0]) {
+    if (
+      continuousWorkStartedAt !== null &&
+      (phaseBeforeTick === 'work' || phaseBeforeTick === 'awaiting_rest_confirmation') &&
+      tickNow - continuousWorkStartedAt >= settings.continuousWorkLimitMinutes * 60_000
+    ) healthEvents.push(...health.forceExplosion(tickNow))
+    if (health.snapshot().mode === 'deflated' && recoveryRestStartedAt !== null && idleSeconds >= 300) {
+      const recoveryEvents = health.recover(tickNow)
+      if (recoveryEvents.length) {
+        healthEvents.push(...recoveryEvents)
+        recoveryRestStartedAt = null
+        visualOverride = { id: 'transform', until: tickNow + 5400, message: '休息够啦，恢复活力！' }
+      }
+    }
+    handleExplosion(healthEvents, tickNow)
+    const due = reminder || restSession ? [] : reminders.tick(tickNow, wasFocusing)
+    if (due[0] && health.snapshot().mode !== 'deflated') {
       reminder = { kind: due[0].kind, dueAt: tickNow }
       if (Notification.isSupported()) new Notification({ title: '桃屁屁提醒', body: reminderCopy[due[0].kind] }).show()
     }
-    if (healthEvents.some((event) => event.type === 'explode')) visualOverride = { id: 'exploding', until: tickNow + 3000, message: '嘭！久坐爆炸，今天被扣分了' }
     mutateStats(healthEvents, tickNow, wasFocusing ? elapsedSeconds : 0)
+    advanceUsage(tickNow)
     persistRuntimeState()
     return publish()
   }
+
   const timer = setInterval(() => doTick(), 1000)
+  persistRuntimeState()
 
   return {
     snapshot: makeSnapshot,
     tick: doTick,
     dispatch(action) {
       const actionNow = Date.now()
+      const phaseBeforeAction = pomodoro.snapshot().phase
+      if (phaseBeforeAction === 'paused' && continuousWorkStartedAt !== null && actionNow > lastTickAt) {
+        continuousWorkStartedAt += actionNow - lastTickAt
+      }
       lastTickAt = actionNow
       let events: HealthEvent[] = []
-      if (action.type === 'pomodoro:start') {
+      const locked = health.snapshot().mode === 'deflated'
+      if (action.type === 'pomodoro:start' && !locked) {
         pomodoro.start(actionNow)
-        visualOverride = { id: 'transform', until: actionNow + 5_400, message: '变身专注搭子，开始啦' }
+        restSession = null
+        continuousWorkStartedAt = actionNow
+        visualOverride = { id: 'transform', until: actionNow + 5400, message: '变身专注搭子，开始啦' }
       }
-      if (action.type === 'pomodoro:configure-and-start') {
+      if (action.type === 'pomodoro:configure-and-start' && !locked) {
         const previous = pomodoro.snapshot()
-        settings = { ...settings, workMinutes: action.workMinutes }
+        settings = sanitizeSettings({ ...settings, workMinutes: action.workMinutes }, settings)
         storage.setSetting('settings', settings)
         pomodoro = createPomodoro({
           ...settings,
           initialNow: actionNow,
           initialState: {
+            ...previous,
             phase: 'idle',
             remainingSeconds: settings.workMinutes * 60,
-            completedToday: previous.completedToday
+            breakKind: null,
+            pausedPhase: null
           }
         })
         pomodoro.start(actionNow)
-        visualOverride = { id: 'transform', until: actionNow + 5_400, message: '变身专注搭子，开始啦' }
+        restSession = null
+        continuousWorkStartedAt = actionNow
+        visualOverride = { id: 'transform', until: actionNow + 5400, message: '变身专注搭子，开始啦' }
       }
-      if (action.type === 'pomodoro:reset') pomodoro.reset()
+      if (action.type === 'pomodoro:reset') {
+        pomodoro.reset()
+        continuousWorkStartedAt = null
+        restSession = null
+      }
       if (action.type === 'pomodoro:cancel') {
         pomodoro.reset()
-        visualOverride = { id: 'transform', until: actionNow + 5_400, message: '专注结束，变回陪伴模式' }
+        continuousWorkStartedAt = null
+        restSession = null
+        visualOverride = { id: 'transform', until: actionNow + 5400, message: '专注结束，变回陪伴模式' }
       }
       if (action.type === 'pomodoro:toggle-pause') pomodoro.snapshot().phase === 'paused' ? pomodoro.resume(actionNow) : pomodoro.pause(actionNow)
       if (action.type === 'pet:click') {
         const phase = pomodoro.snapshot().phase
-        if (phase === 'work' || phase === 'paused') {
-          visualOverride = { id: 'focus', until: actionNow + 1_800, message: '保持专注' }
+        if (locked) {
+          if (recoveryRestStartedAt === null) recoveryRestStartedAt = actionNow
+          visualOverride = null
+        } else if (phase === 'work' || (phase === 'paused' && pomodoro.snapshot().pausedPhase === 'work')) {
+          visualOverride = { id: 'focus', until: actionNow + 1800, message: '保持专注' }
+        } else if (phase === 'awaiting_rest_confirmation') {
+          restSession = createRestSession({ startedAt: actionNow, longBreak: pomodoro.snapshot().breakKind === 'long' })
+          continuousWorkStartedAt = null
+          visualOverride = null
+          events.push(...health.startRest(actionNow))
+          pomodoro.confirmRest(actionNow)
         } else if (reminder) {
           const kind = reminder.kind
           const wasDry = kind === 'water' && actionNow - reminder.dueAt >= 15 * 60_000
@@ -250,42 +440,38 @@ export function createRuntime(storage: Storage): Runtime {
           reminders.complete(kind, actionNow)
           reminder = null
           visualOverride = wasDry
-            ? { id: 'hydrating', until: actionNow + 8_700, message: '喝到了！我正在慢慢恢复水润' }
+            ? { id: 'hydrating', until: actionNow + 8700, message: '喝到了！我正在慢慢恢复水润' }
             : { id: 'happy', until: actionNow + 1800, message: '做得好！健康分正在恢复' }
-          if (phase === 'awaiting_rest_confirmation' && kind === 'stand') {
-            events.push(...health.startRest(actionNow))
-            pomodoro.confirmRest(actionNow)
-          }
-        } else if (phase === 'awaiting_rest_confirmation') {
-          visualOverride = null
-          events.push(...health.startRest(actionNow))
-          pomodoro.confirmRest(actionNow)
         } else {
           events.push(...health.poke(actionNow))
           visualOverride = { id: 'happy', until: actionNow + 1200, message: '嘿嘿，被你发现啦' }
         }
       }
-      if (action.type === 'pet:greet') {
-        // Keep the runtime state alive for the entire authored greeting clip;
-        // ending this early used to cut the wave back to the idle still.
-        visualOverride = { id: 'greeting', until: actionNow + 10_150, message: '嗨！我会安静陪你，需要时再叫我' }
-      }
+      if (action.type === 'pet:greet') visualOverride = { id: 'greeting', until: actionNow + 10_150, message: '嗨！我会安静陪你，需要时再叫我' }
       if (action.type === 'pet:size') {
-        settings = { ...settings, petSize: Math.max(120, Math.min(320, Math.round(action.size))) }
+        settings = sanitizeSettings({ ...settings, petSize: action.size }, settings)
         storage.setSetting('settings', settings)
       }
       if (action.type === 'reminder:complete') {
-        const phase = pomodoro.snapshot().phase
         const wasDry = action.kind === 'water' && reminder?.kind === 'water' && actionNow - reminder.dueAt >= 15 * 60_000
         events.push(...health.completeHabit(action.kind, actionNow))
         reminders.complete(action.kind, actionNow)
         reminder = null
         visualOverride = wasDry
-          ? { id: 'hydrating', until: actionNow + 8_700, message: '喝到了！我正在慢慢恢复水润' }
+          ? { id: 'hydrating', until: actionNow + 8700, message: '喝到了！我正在慢慢恢复水润' }
           : { id: 'happy', until: actionNow + 1800, message: '做得好！继续保持' }
-        if (phase === 'awaiting_rest_confirmation' && action.kind === 'stand') {
-          events.push(...health.startRest(actionNow))
-          pomodoro.confirmRest(actionNow)
+      }
+      if (action.type === 'rest:complete' && restSession) {
+        const restCompletion = restSession.complete(action.kind, actionNow)
+        if (restCompletion) {
+          events.push(...health.completeHabit(action.kind, actionNow).map((event) =>
+            event.type === 'habit_completed'
+              ? { ...event, completedAt: restCompletion.completedAt, responseSeconds: restCompletion.responseSeconds }
+              : event
+          ))
+          reminders.complete(action.kind, actionNow)
+          reminder = null
+          visualOverride = null
         }
       }
       if (action.type === 'reminder:snooze') {
@@ -296,13 +482,13 @@ export function createRuntime(storage: Storage): Runtime {
       if (action.type === 'reminder:undo') {
         if (lastCompletedHabit && actionNow - lastCompletedHabit.at <= 20_000) {
           events.push(...health.undoHabit(lastCompletedHabit.completion, actionNow))
-          visualOverride = { id: 'idle', until: actionNow + 1_500, message: '已撤销刚刚的记录，没关系' }
+          visualOverride = { id: 'idle', until: actionNow + 1500, message: '已撤销刚刚的记录，没关系' }
           lastCompletedHabit = null
         }
       }
       if (action.type === 'settings:update') {
         const previous = pomodoro.snapshot()
-        settings = action.settings
+        settings = sanitizeSettings(action.settings, settings)
         storage.setSetting('settings', settings)
         reminders.updateSettings(settings.reminders, actionNow)
         pomodoro = createPomodoro({ ...settings, initialNow: actionNow, initialState: previous })
@@ -321,10 +507,70 @@ export function createRuntime(storage: Storage): Runtime {
         }
       }
       mutateStats(events, actionNow)
+      advanceUsage(actionNow)
       persistRuntimeState()
       return publish()
     },
-    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) },
-    close() { clearInterval(timer); storage.close() }
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    close() {
+      clearInterval(timer)
+      const closedAt = Math.max(lastTickAt, Date.now())
+      advanceUsage(closedAt)
+      if (closedAt > usage.startedAt) {
+        storage.appendUsageSession({ state: usage.state, startedAt: usage.startedAt, endedAt: closedAt })
+        usage = { state: usage.state, startedAt: closedAt, checkpointAt: closedAt }
+      }
+      persistRuntimeState()
+      storage.close()
+    }
+  }
+}
+
+function restoreRestSession(snapshot: RestSessionSnapshot | null): RestSession | null {
+  if (!snapshot || !Number.isFinite(snapshot.startedAt) || typeof snapshot.longBreak !== 'boolean') return null
+  return createRestSession({ startedAt: snapshot.startedAt, longBreak: snapshot.longBreak, initialState: snapshot })
+}
+
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function validUsageCheckpoint(value: UsageCheckpoint | null): UsageCheckpoint | null {
+  if (!value || !isUsageState(value.state)) return null
+  if (!Number.isFinite(value.startedAt) || !Number.isFinite(value.checkpointAt)) return null
+  return value
+}
+
+function isUsageState(value: unknown): value is UsageState {
+  return typeof value === 'string' && [
+    'idle', 'focus', 'rest_due', 'short_break', 'long_break', 'deflated', 'recovering'
+  ].includes(value)
+}
+
+function sanitizeSettings(candidate: Partial<AppSettings>, fallback: AppSettings): AppSettings {
+  const positive = (value: unknown, previous: number, min: number, max: number): number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max ? value : previous
+  const reminderSettings = { ...fallback.reminders }
+  for (const kind of ['water', 'stand', 'toilet', 'eyes'] as const) {
+    const incoming = candidate.reminders?.[kind]
+    reminderSettings[kind] = {
+      enabled: typeof incoming?.enabled === 'boolean' ? incoming.enabled : fallback.reminders[kind].enabled,
+      intervalMinutes: positive(incoming?.intervalMinutes, fallback.reminders[kind].intervalMinutes, 1, 24 * 60)
+    }
+  }
+  return {
+    petSize: Math.round(positive(candidate.petSize, fallback.petSize, 120, 320)),
+    workMinutes: positive(candidate.workMinutes, fallback.workMinutes, 1, 240),
+    breakMinutes: positive(candidate.breakMinutes, fallback.breakMinutes, 1, 120),
+    continuousWorkLimitMinutes: positive(candidate.continuousWorkLimitMinutes, fallback.continuousWorkLimitMinutes, 1, 24 * 60),
+    longBreakMinutes: positive(candidate.longBreakMinutes, fallback.longBreakMinutes, 1, 240),
+    longBreakEvery: Math.round(positive(candidate.longBreakEvery, fallback.longBreakEvery, 1, 24)),
+    pressurePerMinute: positive(candidate.pressurePerMinute, fallback.pressurePerMinute, 0.01, 100),
+    reminders: reminderSettings,
+    launchAtLogin: typeof candidate.launchAtLogin === 'boolean' ? candidate.launchAtLogin : fallback.launchAtLogin,
+    soundEnabled: typeof candidate.soundEnabled === 'boolean' ? candidate.soundEnabled : fallback.soundEnabled
   }
 }
