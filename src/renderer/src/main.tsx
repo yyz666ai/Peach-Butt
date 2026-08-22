@@ -28,8 +28,31 @@ function useSnapshot(): [AppSnapshot | null, (action: AppAction) => Promise<void
 
 const BUBBLE_VISIBLE_MS = 3_200
 
+const previewVisuals = {
+  idle: { visual: 'idle', pressure: 0, recovery: 100 },
+  focus: { visual: 'focus', pressure: 20, recovery: 100 },
+  activity: { visual: 'activity', pressure: 20, recovery: 100 },
+  'water-prompt': { visual: 'water-prompt', pressure: 35, recovery: 100 },
+  toilet: { visual: 'toilet', pressure: 35, recovery: 100 },
+  'eye-strain': { visual: 'eye-strain', pressure: 45, recovery: 100 },
+  sleep: { visual: 'sleep', pressure: 10, recovery: 100 },
+  pressure: { visual: 'pressure', pressure: 88, recovery: 100 },
+  explosion: { visual: 'preview-explosion', pressure: 100, recovery: 0 },
+  deflated: { visual: 'deflated', pressure: 0, recovery: 0 },
+  recovering: { visual: 'preview-recovering', pressure: 0, recovery: 56 },
+  transform: { visual: 'transform', pressure: 20, recovery: 100 },
+  greeting: { visual: 'greeting', pressure: 0, recovery: 100 }
+} as const
+
+function getVisualPreview(): (typeof previewVisuals)[keyof typeof previewVisuals] | null {
+  const requested = new URLSearchParams(location.search).get('petVisual')
+  if (!requested || !(requested in previewVisuals)) return null
+  return previewVisuals[requested as keyof typeof previewVisuals]
+}
+
 function PetView(): React.JSX.Element {
   const [snapshot, act] = useSnapshot()
+  const preview = getVisualPreview()
   const [bubbleVisible, setBubbleVisible] = useState(false)
   const [petHovered, setPetHovered] = useState(false)
   const bubbleTimer = useRef<number | null>(null)
@@ -44,13 +67,14 @@ function PetView(): React.JSX.Element {
     if (bubbleTimer.current !== null) window.clearTimeout(bubbleTimer.current)
   }, [])
   useEffect(() => {
+    if (preview) return
     if (!snapshot) return
     const key = `${snapshot.visual}:${snapshot.message}:${snapshot.reminder?.dueAt ?? ''}`
     if (key !== lastBubbleKey.current) {
       lastBubbleKey.current = key
       showBubble()
     }
-  }, [snapshot?.visual, snapshot?.message, snapshot?.reminder?.dueAt, snapshot?.pomodoro.phase])
+  }, [preview, snapshot?.visual, snapshot?.message, snapshot?.reminder?.dueAt, snapshot?.pomodoro.phase])
   if (!snapshot) return <div className="pet-loading">桃屁屁醒来中…</div>
 
   const pointerDown = (event: React.PointerEvent): void => {
@@ -67,13 +91,13 @@ function PetView(): React.JSX.Element {
   const pointerUp = (): void => {
     const moved = drag.current?.moved
     drag.current = null
-    if (!moved) void act({ type: 'pet:click' })
+    if (!preview && !moved) void act({ type: 'pet:click' })
   }
-  const enter = (): void => { setPetHovered(true); showBubble() }
+  const enter = (): void => { if (!preview) { setPetHovered(true); showBubble() } }
   const focusing = snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused'
   const bubbleCopy = getBubbleCopy(snapshot, focusing)
   const restChoices = snapshot.restSession?.pending ?? []
-  return <main className="pet-shell" onMouseEnter={enter} onMouseLeave={() => setPetHovered(false)} onContextMenu={(event) => { event.preventDefault(); window.pipeach.showPetMenu() }}>
+  return <main className={`pet-shell${preview ? ' visual-preview' : ''}`} onMouseEnter={enter} onMouseLeave={() => setPetHovered(false)} onContextMenu={(event) => { event.preventDefault(); if (!preview) window.pipeach.showPetMenu() }}>
     {restChoices.length > 0 && petHovered
       ? <section className="rest-checkins" aria-label="这次休息还没完成的事">
           {habitItems.filter((item) => restChoices.includes(item.kind)).map((item) => <button
@@ -82,9 +106,9 @@ function PetView(): React.JSX.Element {
             onClick={(event) => { event.stopPropagation(); void act({ type: 'rest:complete', kind: item.kind }) }}
           ><img src={item.asset} alt=""/><span>{item.label}</span></button>)}
         </section>
-      : bubbleVisible && <section className="hover-status" aria-live="polite"><strong>{bubbleCopy}</strong></section>}
+      : bubbleVisible && !preview && <section className="hover-status" aria-live="polite"><strong>{bubbleCopy}</strong></section>}
     <div className="pet-stage" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
-      <PetMotion visual={snapshot.visual} pressureValue={snapshot.health.pressure} recovery={snapshot.health.recovery}/>
+      <PetMotion visual={preview?.visual ?? snapshot.visual} pressureValue={preview?.pressure ?? snapshot.health.pressure} recovery={preview?.recovery ?? snapshot.health.recovery}/>
     </div>
   </main>
 }

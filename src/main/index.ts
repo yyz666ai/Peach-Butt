@@ -13,11 +13,17 @@ let tray: Tray | null = null
 let runtime: Runtime | null = null
 let dragOffset = { x: 0, y: 0 }
 const PET_WINDOW_HEIGHT_RATIO = 1.5
+// Visual QA is strictly opt-in. It only adds a renderer query parameter and
+// never changes the persisted runtime snapshot or normal interaction flow.
+const visualPreview = process.env.PIPEACH_VISUAL_STATE?.trim()
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
 
 function load(window: BrowserWindow, view: 'pet' | 'dashboard' | 'alert'): void {
   const query: Record<string, string> = { view }
+  if (view === 'pet') {
+    if (visualPreview) query.petVisual = visualPreview
+  }
   if (process.env.ELECTRON_RENDERER_URL) void window.loadURL(`${process.env.ELECTRON_RENDERER_URL}?${new URLSearchParams(query).toString()}`)
   else void window.loadFile(join(__dirname, '../renderer/index.html'), { query })
 }
