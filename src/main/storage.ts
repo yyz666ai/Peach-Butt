@@ -17,6 +17,7 @@ export interface Storage {
   setSetting(key: string, value: unknown): void
   getSetting<T>(key: string, fallback: T): T
   saveRuntimeState(key: string, value: unknown): void
+  hasRuntimeState(key: string): boolean
   loadRuntimeState<T>(key: string, fallback: T): T
   upsertDailyStats(stats: DailyStats): void
   getDailyStats(startDate: string, endDate: string): DailyStats[]
@@ -86,6 +87,7 @@ export function createStorage(filename: string): Storage {
   const selectStats = db.prepare(
     'SELECT data FROM daily_stats WHERE date >= ? AND date <= ? ORDER BY date'
   )
+  const selectStatsForDate = db.prepare('SELECT data FROM daily_stats WHERE date = ?')
   const insertUsage = db.prepare(
     'INSERT INTO usage_sessions (date, state, started_at, ended_at, seconds) VALUES (?, ?, ?, ?, ?)'
   )
@@ -108,11 +110,21 @@ export function createStorage(filename: string): Storage {
       } else {
         insertUsage.run(part.date, part.state, part.startedAt, part.endedAt, part.seconds)
       }
+      const statsRow = selectStatsForDate.get(part.date) as { data: string } | undefined
+      const stats = statsRow
+        ? normalizeDailyStats(parseJson(statsRow.data, emptyDailyStats(part.date)))
+        : emptyDailyStats(part.date)
+      stats.stateSeconds ??= emptyUsageStateSeconds()
+      stats.stateSeconds[part.state] += part.seconds
+      if (part.state === 'focus') stats.focusSeconds += part.seconds
+      upsertStats.run(part.date, JSON.stringify(stats))
     }
   })
   const selectUsage = db.prepare(
     'SELECT id, date, state, started_at, ended_at, seconds FROM usage_sessions WHERE date >= ? AND date <= ? ORDER BY started_at, id'
   )
+
+  let closed = false
 
   return {
     appendEvent(event) {
@@ -141,6 +153,9 @@ export function createStorage(filename: string): Storage {
     },
     saveRuntimeState(key, value) {
       upsertRuntime.run(key, JSON.stringify(value))
+    },
+    hasRuntimeState(key) {
+      return selectRuntime.get(key) !== undefined
     },
     loadRuntimeState<T>(key: string, fallback: T): T {
       const row = selectRuntime.get(key) as { value: string } | undefined
@@ -175,6 +190,8 @@ export function createStorage(filename: string): Storage {
       }))
     },
     close() {
+      if (closed) return
+      closed = true
       db.close()
     }
   }

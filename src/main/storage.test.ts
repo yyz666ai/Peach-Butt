@@ -52,6 +52,8 @@ describe('storage', () => {
       intervalMinutes: 90
     })
     expect(storage.loadRuntimeState('health', null)).toEqual({ pressure: 42, score: 85 })
+    expect(storage.hasRuntimeState('health')).toBe(true)
+    expect(storage.hasRuntimeState('missing')).toBe(false)
     expect(storage.getSetting('missing', 'fallback')).toBe('fallback')
   })
 
@@ -103,6 +105,16 @@ describe('storage', () => {
         startedAt: new Date(2026, 7, 21, 0, 0, 0).getTime(), endedAt, seconds: 30
       })
     ])
+    expect(storage.getDailyStats('2026-08-20', '2026-08-21')).toEqual([
+      expect.objectContaining({
+        date: '2026-08-20', focusSeconds: 30,
+        stateSeconds: expect.objectContaining({ focus: 30 })
+      }),
+      expect.objectContaining({
+        date: '2026-08-21', focusSeconds: 30,
+        stateSeconds: expect.objectContaining({ focus: 30 })
+      })
+    ])
   })
 
   it('merges contiguous usage increments for the same local date and state', () => {
@@ -138,5 +150,13 @@ describe('storage', () => {
       idle: 0, focus: 0, rest_due: 0, short_break: 0,
       long_break: 0, deflated: 0, recovering: 0
     })
+  })
+
+  it('closes idempotently', () => {
+    storage = createStorage(':memory:')
+
+    storage.close()
+
+    expect(() => storage?.close()).not.toThrow()
   })
 })

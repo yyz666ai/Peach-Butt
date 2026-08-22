@@ -11,7 +11,7 @@ import type {
   RestSessionSnapshot,
   UsageState
 } from '../shared/contracts'
-import { emptyDailyStats, emptyUsageStateSeconds, type DailyStats, type Storage } from './storage'
+import { emptyDailyStats, type DailyStats, type Storage } from './storage'
 
 const DEFAULT_SETTINGS: AppSettings = {
   petSize: 140,
@@ -61,6 +61,12 @@ interface RuntimeSessionState {
   usage: UsageCheckpoint | null
 }
 
+interface PersistedRuntimeState {
+  health: HealthSnapshot
+  pomodoro: PomodoroSnapshot
+  session: RuntimeSessionState
+}
+
 export interface Runtime {
   snapshot(): AppSnapshot
   dispatch(action: AppAction): AppSnapshot
@@ -70,25 +76,28 @@ export interface Runtime {
 }
 
 export function createRuntime(storage: Storage): Runtime {
-  const savedSettings = storage.getSetting<Partial<AppSettings>>('settings', {})
+  const savedSettingsValue = storage.getSetting<unknown>('settings', undefined)
+  const savedSettings = isRecord(savedSettingsValue) ? savedSettingsValue : {}
   let settings = sanitizeSettings({
-    ...DEFAULT_SETTINGS,
     ...savedSettings,
     petSize: savedSettings.petSize === 170 || savedSettings.petSize === undefined
       ? DEFAULT_SETTINGS.petSize
       : savedSettings.petSize,
-    reminders: { ...DEFAULT_SETTINGS.reminders, ...savedSettings.reminders }
   }, DEFAULT_SETTINGS)
   const now = Date.now()
-  const restoredHealth = storage.loadRuntimeState<HealthSnapshot | null>('health', null)
-  const restoredPomodoro = storage.loadRuntimeState<PomodoroSnapshot | null>('pomodoro', null)
-  const restoredSession = storage.loadRuntimeState<RuntimeSessionState>('session', {
-    restSession: null,
-    continuousWorkStartedAt: null,
-    recoveryRestStartedAt: null,
-    overlaySequence: 0,
-    usage: null
-  })
+  const hasAtomicState = storage.hasRuntimeState('runtime')
+  const atomicValue = storage.loadRuntimeState<unknown>('runtime', undefined)
+  const atomic = isRecord(atomicValue) ? atomicValue : null
+  const useLegacyState = !hasAtomicState
+  const restoredHealth = validateHealthSnapshot(useLegacyState
+    ? storage.loadRuntimeState<unknown>('health', undefined)
+    : atomic?.health)
+  const restoredPomodoro = validatePomodoroSnapshot(useLegacyState
+    ? storage.loadRuntimeState<unknown>('pomodoro', undefined)
+    : atomic?.pomodoro, now)
+  const restoredSession = validateRuntimeSession(useLegacyState
+    ? storage.loadRuntimeState<unknown>('session', undefined)
+    : atomic?.session)
   const health = createHealthEngine({
     initialNow: now,
     pressurePerMinute: settings.pressurePerMinute,
@@ -106,6 +115,16 @@ export function createRuntime(storage: Storage): Runtime {
     ? restoredSession.overlaySequence
     : 0
   let overlay: AppSnapshot['overlay'] = null
+  if (health.snapshot().mode === 'deflated') {
+    pomodoro.reset()
+    restSession = null
+    continuousWorkStartedAt = null
+  } else {
+    const restoredPhase = pomodoro.snapshot()
+    const canRestoreSession = restoredPhase.phase === 'break' ||
+      (restoredPhase.phase === 'paused' && restoredPhase.pausedPhase === 'break')
+    if (!canRestoreSession) restSession = null
+  }
   let lastTickAt = now
   const reminders = createReminderScheduler({ initialNow: now, settings: settings.reminders })
   let reminder: AppSnapshot['reminder'] = null
@@ -138,18 +157,20 @@ export function createRuntime(storage: Storage): Runtime {
   let usage: UsageCheckpoint = { state: currentUsageState(), startedAt: now, checkpointAt: now }
 
   const persistRuntimeState = (): void => {
-    storage.saveRuntimeState('health', health.snapshot())
-    storage.saveRuntimeState('pomodoro', pomodoro.snapshot())
-    storage.saveRuntimeState('session', {
-      restSession: restSession?.snapshot() ?? null,
-      continuousWorkStartedAt,
-      recoveryRestStartedAt,
-      overlaySequence,
-      usage
-    } satisfies RuntimeSessionState)
+    storage.saveRuntimeState('runtime', {
+      health: health.snapshot(),
+      pomodoro: pomodoro.snapshot(),
+      session: {
+        restSession: restSession?.snapshot() ?? null,
+        continuousWorkStartedAt,
+        recoveryRestStartedAt,
+        overlaySequence,
+        usage
+      }
+    } satisfies PersistedRuntimeState)
   }
 
-  const mutateStats = (events: HealthEvent[], ts: number, focusSecondsAdded = 0): void => {
+  const mutateStats = (events: HealthEvent[], ts: number): void => {
     const date = dateKey(ts)
     const current = storage.getDailyStats(date, date)[0] ?? emptyDailyStats(date)
     const h = health.snapshot()
@@ -161,7 +182,6 @@ export function createRuntime(storage: Storage): Runtime {
     const eventPressurePeak = events.reduce((peak, event) =>
       event.type === 'pressure_changed' ? Math.max(peak, event.pressure) : peak, 0)
     current.pressurePeak = Math.max(current.pressurePeak, h.pressure, eventPressurePeak)
-    current.focusSeconds += focusSecondsAdded
     for (const event of events) {
       if (event.type === 'habit_completed') {
         if (event.kind === 'water') current.waterCount += 1
@@ -182,24 +202,8 @@ export function createRuntime(storage: Storage): Runtime {
     if (events.length) storage.appendEvents(events.map((event) => ({ type: event.type, ts: event.ts, meta: event })))
   }
 
-  const addUsageSeconds = (state: UsageState, startedAt: number, endedAt: number): void => {
-    let cursor = startedAt
-    while (cursor < endedAt) {
-      const d = new Date(cursor)
-      const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime()
-      const partEnd = Math.min(endedAt, midnight)
-      const date = dateKey(cursor)
-      const current = storage.getDailyStats(date, date)[0] ?? emptyDailyStats(date)
-      current.stateSeconds ??= emptyUsageStateSeconds()
-      current.stateSeconds[state] += (partEnd - cursor) / 1000
-      storage.upsertDailyStats(current)
-      cursor = partEnd
-    }
-  }
-
   const advanceUsage = (at: number): void => {
     const checkpointAt = Math.max(usage.checkpointAt, at)
-    addUsageSeconds(usage.state, usage.checkpointAt, checkpointAt)
     if (checkpointAt > usage.checkpointAt) {
       storage.appendUsageSession({ state: usage.state, startedAt: usage.checkpointAt, endedAt: checkpointAt })
     }
@@ -315,15 +319,16 @@ export function createRuntime(storage: Storage): Runtime {
   }
 
   const doTick = (tickNow = Date.now(), idleSeconds = powerMonitor.getSystemIdleTime()): AppSnapshot => {
+    const effectiveNow = Math.max(lastTickAt, tickNow)
     const phaseBeforeTick = pomodoro.snapshot().phase
     const wasFocusing = phaseBeforeTick === 'work' || phaseBeforeTick === 'awaiting_rest_confirmation'
-    const elapsedSeconds = Math.max(0, (tickNow - lastTickAt) / 1000)
+    const elapsedSeconds = (effectiveNow - lastTickAt) / 1000
     if (!wasFocusing && continuousWorkStartedAt !== null) {
       continuousWorkStartedAt += elapsedSeconds * 1000
     }
-    lastTickAt = tickNow
-    const healthEvents: HealthEvent[] = health.tick({ now: tickNow, idleSeconds, focusing: wasFocusing })
-    for (const event of pomodoro.tick(tickNow)) {
+    lastTickAt = effectiveNow
+    const healthEvents: HealthEvent[] = health.tick({ now: effectiveNow, idleSeconds, focusing: wasFocusing })
+    for (const event of pomodoro.tick(effectiveNow)) {
       storage.appendEvent({ type: event.type, ts: event.ts, meta: event })
       if (event.type === 'work_completed') {
         reminder = null
@@ -333,43 +338,44 @@ export function createRuntime(storage: Storage): Runtime {
         if (Notification.isSupported()) new Notification({ title: '桃屁屁', body: '这一轮结束啦，点我开始休息' }).show()
       }
       if (event.type === 'break_completed') {
-        healthEvents.push(...health.completeHabit('pomodoro_break', tickNow))
+        healthEvents.push(...health.completeHabit('pomodoro_break', effectiveNow))
         restSession = null
       }
     }
     if (
       continuousWorkStartedAt !== null &&
       (phaseBeforeTick === 'work' || phaseBeforeTick === 'awaiting_rest_confirmation') &&
-      tickNow - continuousWorkStartedAt >= settings.continuousWorkLimitMinutes * 60_000
-    ) healthEvents.push(...health.forceExplosion(tickNow))
+      effectiveNow - continuousWorkStartedAt >= settings.continuousWorkLimitMinutes * 60_000
+    ) healthEvents.push(...health.forceExplosion(effectiveNow))
     if (health.snapshot().mode === 'deflated' && recoveryRestStartedAt !== null && idleSeconds >= 300) {
-      const recoveryEvents = health.recover(tickNow)
+      const recoveryEvents = health.recover(effectiveNow)
       if (recoveryEvents.length) {
         healthEvents.push(...recoveryEvents)
         recoveryRestStartedAt = null
-        visualOverride = { id: 'transform', until: tickNow + 5400, message: '休息够啦，恢复活力！' }
+        visualOverride = { id: 'transform', until: effectiveNow + 5400, message: '休息够啦，恢复活力！' }
       }
     }
-    handleExplosion(healthEvents, tickNow)
-    const due = reminder || restSession ? [] : reminders.tick(tickNow, wasFocusing)
+    handleExplosion(healthEvents, effectiveNow)
+    const due = reminder || restSession ? [] : reminders.tick(effectiveNow, wasFocusing)
     if (due[0] && health.snapshot().mode !== 'deflated') {
-      reminder = { kind: due[0].kind, dueAt: tickNow }
+      reminder = { kind: due[0].kind, dueAt: effectiveNow }
       if (Notification.isSupported()) new Notification({ title: '桃屁屁提醒', body: reminderCopy[due[0].kind] }).show()
     }
-    mutateStats(healthEvents, tickNow, wasFocusing ? elapsedSeconds : 0)
-    advanceUsage(tickNow)
+    mutateStats(healthEvents, effectiveNow)
+    advanceUsage(effectiveNow)
     persistRuntimeState()
     return publish()
   }
 
   const timer = setInterval(() => doTick(), 1000)
+  let closed = false
   persistRuntimeState()
 
   return {
     snapshot: makeSnapshot,
     tick: doTick,
     dispatch(action) {
-      const actionNow = Date.now()
+      const actionNow = Math.max(lastTickAt, Date.now())
       const phaseBeforeAction = pomodoro.snapshot().phase
       if (
         phaseBeforeAction !== 'work' &&
@@ -463,11 +469,7 @@ export function createRuntime(storage: Storage): Runtime {
       if (action.type === 'rest:complete' && restSession) {
         const restCompletion = restSession.complete(action.kind, actionNow)
         if (restCompletion) {
-          events.push(...health.completeHabit(action.kind, actionNow).map((event) =>
-            event.type === 'habit_completed'
-              ? { ...event, completedAt: restCompletion.completedAt, responseSeconds: restCompletion.responseSeconds }
-              : event
-          ))
+          events.push(...health.completeHabit(action.kind, actionNow, restCompletion))
           reminders.complete(action.kind, actionNow)
           reminder = null
           visualOverride = null
@@ -487,7 +489,14 @@ export function createRuntime(storage: Storage): Runtime {
       }
       if (action.type === 'settings:update') {
         const previous = pomodoro.snapshot()
+        const wasFocusing = phaseBeforeAction === 'work' || phaseBeforeAction === 'awaiting_rest_confirmation'
+        events.push(...health.tick({
+          now: actionNow,
+          idleSeconds: powerMonitor.getSystemIdleTime(),
+          focusing: wasFocusing
+        }))
         settings = sanitizeSettings(action.settings, settings)
+        health.setPressurePerMinute(settings.pressurePerMinute)
         storage.setSetting('settings', settings)
         reminders.updateSettings(settings.reminders, actionNow)
         pomodoro = createPomodoro({ ...settings, initialNow: actionNow, initialState: previous })
@@ -515,6 +524,8 @@ export function createRuntime(storage: Storage): Runtime {
       return () => listeners.delete(listener)
     },
     close() {
+      if (closed) return
+      closed = true
       clearInterval(timer)
       const closedAt = Math.max(lastTickAt, Date.now())
       advanceUsage(closedAt)
@@ -525,7 +536,7 @@ export function createRuntime(storage: Storage): Runtime {
 }
 
 function restoreRestSession(snapshot: RestSessionSnapshot | null): RestSession | null {
-  if (!snapshot || !Number.isFinite(snapshot.startedAt) || typeof snapshot.longBreak !== 'boolean') return null
+  if (!snapshot) return null
   return createRestSession({ startedAt: snapshot.startedAt, longBreak: snapshot.longBreak, initialState: snapshot })
 }
 
@@ -533,10 +544,11 @@ function finiteOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-function validUsageCheckpoint(value: UsageCheckpoint | null): UsageCheckpoint | null {
-  if (!value || !isUsageState(value.state)) return null
-  if (!Number.isFinite(value.startedAt) || !Number.isFinite(value.checkpointAt)) return null
-  return value
+function validUsageCheckpoint(value: unknown): UsageCheckpoint | null {
+  if (!isRecord(value) || !isUsageState(value.state)) return null
+  if (!isFiniteNumber(value.startedAt) || !isFiniteNumber(value.checkpointAt)) return null
+  if (value.checkpointAt < value.startedAt) return null
+  return { state: value.state, startedAt: value.startedAt, checkpointAt: value.checkpointAt }
 }
 
 function isUsageState(value: unknown): value is UsageState {
@@ -545,27 +557,144 @@ function isUsageState(value: unknown): value is UsageState {
   ].includes(value)
 }
 
-function sanitizeSettings(candidate: Partial<AppSettings>, fallback: AppSettings): AppSettings {
+function sanitizeSettings(candidate: unknown, fallback: AppSettings): AppSettings {
+  const source = isRecord(candidate) ? candidate : {}
   const positive = (value: unknown, previous: number, min: number, max: number): number =>
     typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max ? value : previous
   const reminderSettings = { ...fallback.reminders }
+  const reminders = isRecord(source.reminders) ? source.reminders : {}
   for (const kind of ['water', 'stand', 'toilet', 'eyes'] as const) {
-    const incoming = candidate.reminders?.[kind]
+    const incoming = isRecord(reminders[kind]) ? reminders[kind] : {}
     reminderSettings[kind] = {
-      enabled: typeof incoming?.enabled === 'boolean' ? incoming.enabled : fallback.reminders[kind].enabled,
-      intervalMinutes: positive(incoming?.intervalMinutes, fallback.reminders[kind].intervalMinutes, 1, 24 * 60)
+      enabled: typeof incoming.enabled === 'boolean' ? incoming.enabled : fallback.reminders[kind].enabled,
+      intervalMinutes: positive(incoming.intervalMinutes, fallback.reminders[kind].intervalMinutes, 1, 24 * 60)
     }
   }
   return {
-    petSize: Math.round(positive(candidate.petSize, fallback.petSize, 120, 320)),
-    workMinutes: positive(candidate.workMinutes, fallback.workMinutes, 1, 240),
-    breakMinutes: positive(candidate.breakMinutes, fallback.breakMinutes, 1, 120),
-    continuousWorkLimitMinutes: positive(candidate.continuousWorkLimitMinutes, fallback.continuousWorkLimitMinutes, 1, 24 * 60),
-    longBreakMinutes: positive(candidate.longBreakMinutes, fallback.longBreakMinutes, 1, 240),
-    longBreakEvery: Math.round(positive(candidate.longBreakEvery, fallback.longBreakEvery, 1, 24)),
-    pressurePerMinute: positive(candidate.pressurePerMinute, fallback.pressurePerMinute, 0.01, 100),
+    petSize: Math.round(positive(source.petSize, fallback.petSize, 120, 320)),
+    workMinutes: positive(source.workMinutes, fallback.workMinutes, 1, 240),
+    breakMinutes: positive(source.breakMinutes, fallback.breakMinutes, 1, 120),
+    continuousWorkLimitMinutes: positive(source.continuousWorkLimitMinutes, fallback.continuousWorkLimitMinutes, 1, 24 * 60),
+    longBreakMinutes: positive(source.longBreakMinutes, fallback.longBreakMinutes, 1, 240),
+    longBreakEvery: Math.round(positive(source.longBreakEvery, fallback.longBreakEvery, 1, 24)),
+    pressurePerMinute: positive(source.pressurePerMinute, fallback.pressurePerMinute, 0.01, 100),
     reminders: reminderSettings,
-    launchAtLogin: typeof candidate.launchAtLogin === 'boolean' ? candidate.launchAtLogin : fallback.launchAtLogin,
-    soundEnabled: typeof candidate.soundEnabled === 'boolean' ? candidate.soundEnabled : fallback.soundEnabled
+    launchAtLogin: typeof source.launchAtLogin === 'boolean' ? source.launchAtLogin : fallback.launchAtLogin,
+    soundEnabled: typeof source.soundEnabled === 'boolean' ? source.soundEnabled : fallback.soundEnabled
   }
+}
+
+function validateHealthSnapshot(value: unknown): HealthSnapshot | undefined {
+  if (!isRecord(value) || typeof value.day !== 'string') return undefined
+  if (!['active', 'resting', 'deflated'].includes(String(value.mode))) return undefined
+  const numericKeys = [
+    'pressure', 'score', 'recovery', 'activeSecondsToday', 'continuousActiveSeconds',
+    'restCount', 'explosionsToday'
+  ] as const
+  if (numericKeys.some((key) => !isNonNegativeNumber(value[key]))) return undefined
+  if ((value.pressure as number) > 100 || (value.recovery as number) > 100) return undefined
+  const rewardsValue = isRecord(value.habitRewards) ? value.habitRewards : {}
+  const habitRewards = {
+    water: nonNegativeOrZero(rewardsValue.water),
+    stand: nonNegativeOrZero(rewardsValue.stand),
+    toilet: nonNegativeOrZero(rewardsValue.toilet),
+    eyes: nonNegativeOrZero(rewardsValue.eyes),
+    pomodoro_break: nonNegativeOrZero(rewardsValue.pomodoro_break)
+  }
+  return {
+    day: value.day,
+    pressure: value.pressure as number,
+    score: value.score as number,
+    recovery: value.recovery as number,
+    activeSecondsToday: value.activeSecondsToday as number,
+    continuousActiveSeconds: value.continuousActiveSeconds as number,
+    restCount: value.restCount as number,
+    explosionsToday: value.explosionsToday as number,
+    mode: value.mode as HealthSnapshot['mode'],
+    habitRewards
+  }
+}
+
+function validatePomodoroSnapshot(value: unknown, now: number): PomodoroSnapshot | undefined {
+  if (!isRecord(value)) return undefined
+  if (!['idle', 'work', 'paused', 'awaiting_rest_confirmation', 'break'].includes(String(value.phase))) return undefined
+  if (!isNonNegativeNumber(value.remainingSeconds) || !isNonNegativeNumber(value.completedToday)) return undefined
+  const breakKind = value.breakKind === 'short' || value.breakKind === 'long' ? value.breakKind : null
+  const pausedPhase = value.pausedPhase === 'work' || value.pausedPhase === 'break'
+    ? value.pausedPhase
+    : value.phase === 'paused'
+      ? breakKind === null ? 'work' : 'break'
+      : null
+  return {
+    phase: value.phase as PomodoroSnapshot['phase'],
+    remainingSeconds: value.remainingSeconds,
+    completedToday: value.completedToday,
+    breakKind,
+    day: typeof value.day === 'string' ? value.day : pomodoroDayKey(now),
+    pausedPhase
+  }
+}
+
+function validateRuntimeSession(value: unknown): RuntimeSessionState {
+  if (!isRecord(value)) return emptyRuntimeSession()
+  return {
+    restSession: validateRestSessionSnapshot(value.restSession),
+    continuousWorkStartedAt: finiteOrNull(value.continuousWorkStartedAt),
+    recoveryRestStartedAt: finiteOrNull(value.recoveryRestStartedAt),
+    overlaySequence: Number.isSafeInteger(value.overlaySequence) && (value.overlaySequence as number) >= 0
+      ? value.overlaySequence as number
+      : 0,
+    usage: validUsageCheckpoint(value.usage)
+  }
+}
+
+function validateRestSessionSnapshot(value: unknown): RestSessionSnapshot | null {
+  if (!isRecord(value) || !isFiniteNumber(value.startedAt) || typeof value.longBreak !== 'boolean') return null
+  if (!Array.isArray(value.pending) || !value.pending.every(isReminderKind)) return null
+  if (!Array.isArray(value.completed) || !value.completed.every(isReminderKind)) return null
+  if (value.current !== null && !isReminderKind(value.current)) return null
+  if (typeof value.allCompleted !== 'boolean') return null
+  return {
+    startedAt: value.startedAt,
+    longBreak: value.longBreak,
+    pending: [...value.pending],
+    completed: [...value.completed],
+    current: value.current,
+    allCompleted: value.allCompleted
+  }
+}
+
+function emptyRuntimeSession(): RuntimeSessionState {
+  return {
+    restSession: null,
+    continuousWorkStartedAt: null,
+    recoveryRestStartedAt: null,
+    overlaySequence: 0,
+    usage: null
+  }
+}
+
+function isReminderKind(value: unknown): value is ReminderKind {
+  return typeof value === 'string' && ['water', 'stand', 'toilet', 'eyes'].includes(value)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function isNonNegativeNumber(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= 0
+}
+
+function nonNegativeOrZero(value: unknown): number {
+  return isNonNegativeNumber(value) ? value : 0
+}
+
+function pomodoroDayKey(ts: number): string {
+  const date = new Date(ts)
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
 }

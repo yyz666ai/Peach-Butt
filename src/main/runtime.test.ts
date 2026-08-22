@@ -11,7 +11,7 @@ vi.mock('electron', () => ({
 
 import { createRuntime, type Runtime } from './runtime'
 
-function stateSeconds(): DailyStats['stateSeconds'] {
+function stateSeconds(): NonNullable<DailyStats['stateSeconds']> {
   return {
     idle: 0, focus: 0, rest_due: 0, short_break: 0,
     long_break: 0, deflated: 0, recovering: 0
@@ -19,17 +19,21 @@ function stateSeconds(): DailyStats['stateSeconds'] {
 }
 
 function memoryStorage(): Storage & {
+  settings: Map<string, unknown>
   daily: Map<string, DailyStats>
   runtime: Map<string, unknown>
   events: StoredEvent[]
   usage: UsageSession[]
+  closeCount(): number
 } {
   const settings = new Map<string, unknown>()
   const runtime = new Map<string, unknown>()
   const daily = new Map<string, DailyStats>()
   const events: StoredEvent[] = []
   const usage: UsageSession[] = []
+  let closed = 0
   return {
+    settings,
     daily,
     runtime,
     events,
@@ -38,9 +42,10 @@ function memoryStorage(): Storage & {
     appendEvents: (items) => { events.push(...items) },
     getEventsForDate: () => events,
     setSetting: (key, value) => { settings.set(key, structuredClone(value)) },
-    getSetting: (key, fallback) => structuredClone((settings.get(key) ?? fallback) as typeof fallback),
+    getSetting: (key, fallback) => structuredClone((settings.has(key) ? settings.get(key) : fallback) as typeof fallback),
     saveRuntimeState: (key, value) => { runtime.set(key, structuredClone(value)) },
-    loadRuntimeState: (key, fallback) => structuredClone((runtime.get(key) ?? fallback) as typeof fallback),
+    hasRuntimeState: (key) => runtime.has(key),
+    loadRuntimeState: (key, fallback) => structuredClone((runtime.has(key) ? runtime.get(key) : fallback) as typeof fallback),
     upsertDailyStats: (stats) => { daily.set(stats.date, structuredClone(stats)) },
     getDailyStats: (start, end) => [...daily.values()].filter((item) => item.date >= start && item.date <= end),
     appendUsageSession: (session) => {
@@ -49,18 +54,36 @@ function memoryStorage(): Storage & {
         const d = new Date(cursor)
         const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime()
         const endedAt = Math.min(session.endedAt, midnight)
-        usage.push({
-          date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+        const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        const seconds = (endedAt - cursor) / 1000
+        const previous = usage.at(-1)
+        if (previous?.date === date && previous.state === session.state && previous.endedAt === cursor) {
+          previous.endedAt = endedAt
+          previous.seconds = (endedAt - previous.startedAt) / 1000
+        } else usage.push({
+          date,
           state: session.state,
           startedAt: cursor,
           endedAt,
-          seconds: (endedAt - cursor) / 1000
+          seconds
         })
+        const stats = structuredClone(daily.get(date) ?? {
+          date, scoreEnd: 0, scoreMin: 0, activeSeconds: 0, focusSeconds: 0,
+          pomodoroCount: 0, waterCount: 0, standCount: 0, toiletCount: 0,
+          eyeRestCount: 0, restCount: 0, explodeCount: 0, ignoreCount: 0,
+          pressurePeak: 0, stateSeconds: stateSeconds()
+        })
+        const totals = stats.stateSeconds ?? stateSeconds()
+        stats.stateSeconds = totals
+        totals[session.state] += seconds
+        if (session.state === 'focus') stats.focusSeconds += seconds
+        daily.set(date, stats)
         cursor = endedAt
       }
     },
     getUsageSessions: (start, end) => usage.filter((item) => item.date >= start && item.date <= end),
-    close: () => {}
+    close: () => { closed += 1 },
+    closeCount: () => closed
   }
 }
 
@@ -110,7 +133,139 @@ describe('runtime data integrity', () => {
     runtimes.push(second)
 
     expect(second.snapshot().health).toMatchObject({ pressure: 10, score: 8 })
-    expect(storage.runtime.get('health')).toMatchObject({ pressure: 10, score: 8 })
+    expect(storage.runtime.get('runtime')).toMatchObject({
+      health: { pressure: 10, score: 8 },
+      pomodoro: expect.any(Object),
+      session: expect.any(Object)
+    })
+  })
+
+  it('prefers a validated atomic runtime snapshot over legacy keys', () => {
+    const storage = memoryStorage()
+    storage.runtime.set('health', {
+      day: '2026-08-20', pressure: 88, score: 0, recovery: 100,
+      activeSecondsToday: 0, continuousActiveSeconds: 0, restCount: 0,
+      explosionsToday: 0, mode: 'active', habitRewards: {}
+    })
+    storage.runtime.set('runtime', {
+      health: {
+        day: '2026-08-20', pressure: 7, score: 3, recovery: 100,
+        activeSecondsToday: 0, continuousActiveSeconds: 0, restCount: 0,
+        explosionsToday: 0, mode: 'active', habitRewards: {}
+      },
+      pomodoro: {
+        phase: 'idle', remainingSeconds: 1500, completedToday: 0,
+        breakKind: null, day: '2026-8-20', pausedPhase: null
+      },
+      session: {
+        restSession: null, continuousWorkStartedAt: null,
+        recoveryRestStartedAt: null, overlaySequence: 2, usage: null
+      }
+    })
+
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+
+    expect(runtime.snapshot().health).toMatchObject({ pressure: 7, score: 3 })
+    expect(storage.runtime.get('runtime')).toMatchObject({ session: { overlaySequence: 2 } })
+  })
+
+  it('repairs impossible atomic runtime combinations before restoring', () => {
+    const storage = memoryStorage()
+    storage.runtime.set('runtime', {
+      health: {
+        day: '2026-08-20', pressure: 0, score: 0, recovery: 0,
+        activeSecondsToday: 0, continuousActiveSeconds: 0, restCount: 0,
+        explosionsToday: 1, mode: 'deflated', habitRewards: {}
+      },
+      pomodoro: {
+        phase: 'break', remainingSeconds: 300, completedToday: 1,
+        breakKind: 'short', day: '2026-8-20', pausedPhase: null
+      },
+      session: {
+        restSession: {
+          startedAt: start, longBreak: false,
+          pending: ['stand', 'water', 'toilet', 'eyes'], completed: [],
+          current: 'stand', allCompleted: false
+        },
+        continuousWorkStartedAt: start,
+        recoveryRestStartedAt: null,
+        overlaySequence: 1,
+        usage: null
+      }
+    })
+
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+
+    expect(runtime.snapshot()).toMatchObject({
+      health: { mode: 'deflated' },
+      pomodoro: { phase: 'idle' },
+      restSession: null
+    })
+  })
+
+  it('drops a restored rest session outside break or paused-break phases', () => {
+    const storage = memoryStorage()
+    storage.runtime.set('runtime', {
+      health: {
+        day: '2026-08-20', pressure: 0, score: 0, recovery: 100,
+        activeSecondsToday: 0, continuousActiveSeconds: 0, restCount: 0,
+        explosionsToday: 0, mode: 'active', habitRewards: {}
+      },
+      pomodoro: {
+        phase: 'idle', remainingSeconds: 1500, completedToday: 1,
+        breakKind: null, day: '2026-8-20', pausedPhase: null
+      },
+      session: {
+        restSession: {
+          startedAt: start, longBreak: false,
+          pending: ['stand', 'water', 'toilet', 'eyes'], completed: [],
+          current: 'stand', allCompleted: false
+        },
+        continuousWorkStartedAt: null, recoveryRestStartedAt: null,
+        overlaySequence: 0, usage: null
+      }
+    })
+
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+
+    expect(runtime.snapshot().restSession).toBeNull()
+  })
+
+  it.each([
+    ['top-level null', null],
+    ['malformed children', { health: { mode: 'broken' }, pomodoro: null, session: 'bad' }]
+  ])('safely defaults malformed atomic runtime state: %s', (_label, value) => {
+    const storage = memoryStorage()
+    storage.settings.set('settings', null)
+    storage.runtime.set('runtime', value)
+
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+
+    expect(runtime.snapshot()).toMatchObject({
+      health: { pressure: 0, mode: 'active' },
+      pomodoro: { phase: 'idle', remainingSeconds: 25 * 60 },
+      restSession: null,
+      settings: { workMinutes: 25, pressurePerMinute: 1 }
+    })
+  })
+
+  it('does not fall back to legacy keys when the atomic runtime row is present but malformed', () => {
+    const storage = memoryStorage()
+    storage.runtime.set('health', {
+      day: '2026-08-20', pressure: 88, score: 0, recovery: 100,
+      activeSecondsToday: 0, continuousActiveSeconds: 0, restCount: 0,
+      explosionsToday: 0, mode: 'active', habitRewards: {}
+    })
+    storage.runtime.set('runtime', undefined)
+
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+
+    expect(runtime.snapshot().health.pressure).toBe(0)
   })
 
   it('records focus seconds from elapsed focused time', () => {
@@ -544,7 +699,7 @@ describe('runtime data integrity', () => {
         '该去上个厕所啦！', '让眼睛休息一下吧！'
       ]
     })
-    expect(storage.runtime.get('session')).toMatchObject({ overlaySequence: 1 })
+    expect(storage.runtime.get('runtime')).toMatchObject({ session: { overlaySequence: 1 } })
   })
 
   it('locks focus after explosion and recovers only after a clicked five-minute system rest', () => {
@@ -630,6 +785,52 @@ describe('runtime data integrity', () => {
     })
   })
 
+  it('applies pressurePerMinute changes without losing current health state', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'pomodoro:start' })
+    vi.setSystemTime(start + 60_000)
+
+    runtime.dispatch({
+      type: 'settings:update',
+      settings: { ...runtime.snapshot().settings, pressurePerMinute: 2 }
+    })
+    runtime.tick(start + 120_000, 0)
+
+    expect(runtime.snapshot()).toMatchObject({
+      settings: { pressurePerMinute: 2 },
+      health: { pressure: 3 }
+    })
+  })
+
+  it('uses a monotonic runtime clock for health, pomodoro and usage', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 5 })
+
+    runtime.tick(start + 10_000, 0)
+    const beforeRollback = runtime.snapshot().pomodoro.remainingSeconds
+    runtime.tick(start - 50_000, 0)
+    expect(runtime.snapshot().pomodoro.remainingSeconds).toBe(beforeRollback)
+    runtime.tick(start + 20_000, 0)
+
+    expect(runtime.snapshot()).toMatchObject({
+      health: { activeSecondsToday: 20, continuousActiveSeconds: 20 },
+      pomodoro: { remainingSeconds: 280 }
+    })
+  })
+
+  it('closes runtime and storage only once', () => {
+    const storage = memoryStorage()
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+
+    runtime.close()
+    runtime.close()
+
+    expect(storage.closeCount()).toBe(1)
+  })
+
   it('records idle and focus usage durations in daily statistics', () => {
     const storage = memoryStorage()
     const runtime = createRuntime(storage)
@@ -666,6 +867,29 @@ describe('runtime data integrity', () => {
     expect(storage.daily.get('2026-08-21')?.stateSeconds?.idle).toBe(30)
   })
 
+  it('splits focused usage and daily focus totals across local midnight', () => {
+    const late = new Date(2026, 7, 20, 23, 59, 30).getTime()
+    const afterMidnight = new Date(2026, 7, 21, 0, 0, 30).getTime()
+    vi.setSystemTime(late)
+    const storage = memoryStorage()
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'pomodoro:start' })
+
+    runtime.tick(afterMidnight, 0)
+
+    expect(storage.getUsageSessions('2026-08-20', '2026-08-21').map(({ date, state, seconds }) => ({ date, state, seconds }))).toEqual([
+      { date: '2026-08-20', state: 'focus', seconds: 30 },
+      { date: '2026-08-21', state: 'focus', seconds: 30 }
+    ])
+    for (const date of ['2026-08-20', '2026-08-21']) {
+      expect(storage.daily.get(date)).toMatchObject({
+        focusSeconds: 30,
+        stateSeconds: expect.objectContaining({ focus: 30 })
+      })
+    }
+  })
+
   it('closes a crashed usage interval at its last checkpoint without counting downtime', () => {
     const storage = memoryStorage()
     const first = createRuntime(storage)
@@ -678,8 +902,10 @@ describe('runtime data integrity', () => {
 
     expect(storage.usage.map((session) => session.seconds)).toEqual([30])
     expect(storage.daily.get('2026-08-20')?.stateSeconds?.idle).toBe(30)
-    expect(storage.runtime.get('session')).toMatchObject({
-      usage: { state: 'idle', startedAt: start + 5 * 60_000, checkpointAt: start + 5 * 60_000 }
+    expect(storage.runtime.get('runtime')).toMatchObject({
+      session: {
+        usage: { state: 'idle', startedAt: start + 5 * 60_000, checkpointAt: start + 5 * 60_000 }
+      }
     })
   })
 })

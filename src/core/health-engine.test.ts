@@ -67,6 +67,40 @@ describe('health engine', () => {
     expect(engine.forceExplosion(180_000)).toContainEqual(expect.objectContaining({ type: 'explode' }))
   })
 
+  it('keeps its tick clock monotonic when wall time moves backwards', () => {
+    const engine = createHealthEngine({ initialNow: 100_000, pressurePerMinute: 60 })
+
+    engine.tick({ now: 110_000, idleSeconds: 0, focusing: true })
+    engine.tick({ now: 50_000, idleSeconds: 0, focusing: true })
+    engine.tick({ now: 120_000, idleSeconds: 0, focusing: true })
+
+    expect(engine.snapshot()).toMatchObject({
+      pressure: 20,
+      activeSecondsToday: 20,
+      continuousActiveSeconds: 20
+    })
+  })
+
+  it('applies an updated pressure rate from the next tick', () => {
+    const engine = createHealthEngine({ initialNow: 0, pressurePerMinute: 1 })
+    engine.tick({ now: 60_000, idleSeconds: 0, focusing: true })
+
+    engine.setPressurePerMinute(2)
+    engine.tick({ now: 120_000, idleSeconds: 0, focusing: true })
+
+    expect(engine.snapshot().pressure).toBe(3)
+  })
+
+  it('records optional rest completion timing on the typed habit event', () => {
+    const engine = createHealthEngine({ initialNow: 0 })
+
+    const events = engine.completeHabit('water', 6_000, { completedAt: 6_000, responseSeconds: 5 })
+
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'habit_completed', kind: 'water', completedAt: 6_000, responseSeconds: 5
+    }))
+  })
+
   it.each([1, 60, 179])('treats %i idle seconds as continued use', (idleSeconds) => {
     const engine = createHealthEngine({ initialNow: 0, pressurePerMinute: 1 })
 

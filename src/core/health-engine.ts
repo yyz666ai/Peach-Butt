@@ -5,7 +5,7 @@ export type HealthEvent =
   | { type: 'explode'; ts: number; penalty: number; count: number }
   | { type: 'score_changed'; ts: number; delta: number; score: number; reason: string }
   | { type: 'state_changed'; ts: number; mode: HealthSnapshot['mode'] }
-  | { type: 'habit_completed'; ts: number; kind: HabitKind; pressureRelief: number; scoreDelta: number; recoveryDelta: number; rewarded: boolean }
+  | { type: 'habit_completed'; ts: number; kind: HabitKind; pressureRelief: number; scoreDelta: number; recoveryDelta: number; rewarded: boolean; completedAt?: number; responseSeconds?: number }
   | { type: 'habit_undone'; ts: number; kind: HabitKind; pressureRestored: number; scoreDelta: number; recoveryDelta: number }
   | { type: 'poke_relief'; ts: number; pressureRelief: number }
   | { type: 'reminder_ignored'; ts: number; kind: ReminderKind; pressureAdded: number }
@@ -20,6 +20,11 @@ export interface HabitCompletion {
   scoreDelta: number
   recoveryDelta: number
   rewarded: boolean
+}
+
+export interface HabitCompletionTiming {
+  completedAt: number
+  responseSeconds: number
 }
 
 const HABIT_REWARD: Record<HabitKind, number> = {
@@ -63,10 +68,11 @@ export interface HealthEngineOptions {
 
 export interface HealthEngine {
   tick(input: { now: number; idleSeconds: number; focusing?: boolean }): HealthEvent[]
+  setPressurePerMinute(rate: number): void
   forceExplosion(now: number): HealthEvent[]
   recover(now: number): HealthEvent[]
   startRest(now: number): HealthEvent[]
-  completeHabit(kind: HabitKind, now: number): HealthEvent[]
+  completeHabit(kind: HabitKind, now: number, timing?: HabitCompletionTiming): HealthEvent[]
   undoHabit(completion: HabitCompletion, now: number): HealthEvent[]
   poke(now: number): HealthEvent[]
   ignoreReminder(kind: ReminderKind, now: number): HealthEvent[]
@@ -74,7 +80,7 @@ export interface HealthEngine {
 }
 
 export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
-  const pressurePerMinute = options.pressurePerMinute ?? 1
+  let pressurePerMinute = options.pressurePerMinute ?? 1
   let lastTickAt = options.initialNow
   let currentDay = localDayKey(options.initialNow)
   const restoredState = options.initialState?.day === currentDay ? options.initialState : undefined
@@ -116,7 +122,8 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
   }
 
   return {
-    tick({ now, idleSeconds, focusing }) {
+    tick({ now: requestedNow, idleSeconds, focusing }) {
+      const now = Math.max(lastTickAt, requestedNow)
       const nextDay = localDayKey(now)
       if (nextDay !== currentDay) {
         const keepDeflatedLock = state.mode === 'deflated'
@@ -178,17 +185,21 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
         ? [...resumeEvents, { type: 'pressure_changed', ts: now, delta, pressure: state.pressure }]
         : resumeEvents
     },
+    setPressurePerMinute(rate) {
+      if (Number.isFinite(rate) && rate > 0) pressurePerMinute = rate
+    },
     forceExplosion(now) {
       return explode(now)
     },
     recover(now) {
       if (state.mode !== 'deflated') return []
-      lastTickAt = now
+      const effectiveNow = Math.max(lastTickAt, now)
+      lastTickAt = effectiveNow
       restCompleted = false
       state.mode = 'active'
       state.recovery = 100
       state.continuousActiveSeconds = 0
-      return [{ type: 'state_changed', ts: now, mode: 'active' }]
+      return [{ type: 'state_changed', ts: effectiveNow, mode: 'active' }]
     },
     startRest(now) {
       if (state.mode === 'deflated') return []
@@ -196,7 +207,7 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
       restCompleted = false
       return [{ type: 'rest_started', ts: now }]
     },
-    completeHabit(kind, now) {
+    completeHabit(kind, now, timing) {
       const pressureRelief = Math.min(20, state.pressure)
       state.pressure -= pressureRelief
       const rewarded = state.habitRewards[kind] < HABIT_DAILY_LIMIT[kind]
@@ -208,7 +219,7 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
       state.score += scoreDelta
       state.recovery = Math.min(100, state.recovery + recoveryDelta)
       const events: HealthEvent[] = [
-        { type: 'habit_completed', ts: now, kind, pressureRelief, scoreDelta, recoveryDelta, rewarded }
+        { type: 'habit_completed', ts: now, kind, pressureRelief, scoreDelta, recoveryDelta, rewarded, ...timing }
       ]
       if (scoreDelta > 0) {
         events.push({
