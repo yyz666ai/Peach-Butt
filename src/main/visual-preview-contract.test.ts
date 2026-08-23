@@ -14,4 +14,11 @@ describe('visual acceptance preview contract', () => {
     expect(main).toContain('petVisual')
     expect(renderer).toContain("get('petVisual')")
   })
+
+  it('uses an ephemeral store and routes explosion preview through the alert window', () => {
+    expect(main).toContain("visualPreview ? ':memory:'")
+    expect(main).toContain("visualPreview === 'explosion'")
+    expect(main).toContain('alertPreview')
+    expect(renderer).toContain("get('alertPreview')")
+  })
 })
