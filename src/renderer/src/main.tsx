@@ -45,7 +45,7 @@ const previewVisuals: Record<string, VisualPreview> = {
   sleep: { visual: 'sleep', pressure: 10, recovery: 100 },
   pressure: { visual: 'pressure', pressure: 88, recovery: 100 },
   deflated: { visual: 'deflated', pressure: 0, recovery: 0 },
-  recovering: { visual: 'deflated', pressure: 0, recovery: 40, recoveryRemainingSeconds: 180 },
+  recovering: { visual: 'deflated', pressure: 0, recovery: 0, recoveryRemainingSeconds: 180 },
   transform: { visual: 'transform', pressure: 20, recovery: 100 },
   greeting: { visual: 'greeting', pressure: 0, recovery: 100 }
 }

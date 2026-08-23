@@ -43,7 +43,7 @@ describe('visual acceptance preview contract', () => {
   })
 
   it('represents recovering as a deflated pet with a recovery countdown, never a drinking clip', () => {
-    expect(renderer).toContain("recovering: { visual: 'deflated', pressure: 0, recovery: 40, recoveryRemainingSeconds: 180 }")
+    expect(renderer).toContain("recovering: { visual: 'deflated', pressure: 0, recovery: 0, recoveryRemainingSeconds: 180 }")
     expect(renderer).toContain('preview?.recoveryRemainingSeconds')
     expect(motion).not.toContain("'preview-recovering'")
   })
