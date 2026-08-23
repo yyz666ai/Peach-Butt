@@ -21,4 +21,12 @@ describe('visual acceptance preview contract', () => {
     expect(main).toContain('alertPreview')
     expect(renderer).toContain("get('alertPreview')")
   })
+
+  it('opens a four-message rest reminder overlay for the rest-due visual preview', () => {
+    expect(main).toContain("visualPreview === 'rest-due'")
+    expect(main).toContain("'rest-reminder'")
+    expect(main).toContain('restDuePreviewMessages')
+    expect(renderer).toContain("previewAlert === 'rest-due'")
+    expect(renderer).toContain('defaultRestMessages')
+  })
 })

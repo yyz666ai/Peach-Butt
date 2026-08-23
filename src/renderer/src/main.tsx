@@ -272,9 +272,10 @@ function AlertView(): React.JSX.Element {
   const video = useRef<HTMLVideoElement>(null)
   const [messageIndex, setMessageIndex] = useState(0)
   const overlay = snapshot?.overlay
-  const previewExplosion = new URLSearchParams(location.search).get('alertPreview') === 'explosion'
-  const explosion = previewExplosion || overlay?.kind === 'explosion'
-  const messages = explosion ? ['快去休息啦！'] : (overlay?.messages.length ? overlay.messages : defaultRestMessages)
+  const previewAlert = new URLSearchParams(location.search).get('alertPreview')
+  const previewRestDue = previewAlert === 'rest-due'
+  const explosion = previewAlert === 'explosion' || overlay?.kind === 'explosion'
+  const messages = explosion ? ['快去休息啦！'] : previewRestDue ? defaultRestMessages : (overlay?.messages.length ? overlay.messages : defaultRestMessages)
   useEffect(() => {
     if (messages.length < 2) return
     const timer = window.setInterval(() => setMessageIndex((index) => (index + 1) % messages.length), 2_050)
