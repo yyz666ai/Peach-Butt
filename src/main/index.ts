@@ -12,10 +12,12 @@ let lastOverlayId: number | null = null
 let tray: Tray | null = null
 let runtime: Runtime | null = null
 let dragOffset = { x: 0, y: 0 }
+let petHiddenForOverlay = false
 const PET_WINDOW_HEIGHT_RATIO = 1.5
 // Visual QA is strictly opt-in. It uses an ephemeral store and renderer query
 // parameters, leaving the user's persisted runtime and normal flow untouched.
 const visualPreview = process.env.PIPEACH_VISUAL_STATE?.trim()
+const usesEphemeralPreviewStore = Boolean(visualPreview || process.env.PIPEACH_PREVIEW_EXPLOSION === '1')
 const previewAlert = visualPreview === 'explosion' || visualPreview === 'rest-due'
   ? visualPreview
   : process.env.PIPEACH_PREVIEW_EXPLOSION === '1' ? 'explosion' : null
@@ -66,14 +68,26 @@ function resizePet(size: number): void {
   petWindow.setBounds({ x, y, width, height }, true)
 }
 
+function restorePetAfterOverlay(): void {
+  if (!petHiddenForOverlay) return
+  petHiddenForOverlay = false
+  if (petWindow && !petWindow.isDestroyed()) petWindow.showInactive()
+}
+
 function showOverlay(snapshot: AppSnapshot): void {
   const overlay = snapshot.overlay
   if (!overlay || overlay.id === lastOverlayId) return
   lastOverlayId = overlay.id
-  alertWindow?.close()
+  const previousAlert = alertWindow
+  alertWindow = null
+  previousAlert?.close()
   const bounds = petWindow
     ? screen.getDisplayMatching(petWindow.getBounds()).bounds
     : screen.getPrimaryDisplay().bounds
+  if (petWindow?.isVisible()) {
+    petHiddenForOverlay = true
+    petWindow?.hide()
+  }
   const window = new BrowserWindow({
     ...bounds, transparent: true, frame: false, alwaysOnTop: true,
     focusable: false, skipTaskbar: true, hasShadow: false, show: false,
@@ -85,7 +99,10 @@ function showOverlay(snapshot: AppSnapshot): void {
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   load(window, 'alert')
   window.webContents.once('did-finish-load', () => window.showInactive())
-  window.on('closed', () => { if (alertWindow === window) alertWindow = null })
+  window.on('closed', () => { if (alertWindow === window) {
+    alertWindow = null
+    restorePetAfterOverlay()
+  } })
   const duration = overlay.kind === 'explosion' ? 5_200 : Math.max(4_200, overlay.messages.length * 2_150)
   setTimeout(() => { if (!window.isDestroyed()) window.close() }, process.env.PIPEACH_PREVIEW_EXPLOSION === '1' ? 10_000 : duration)
 }
@@ -147,7 +164,7 @@ function showPetMenu(): void {
 
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return
-  runtime = createRuntime(createStorage(visualPreview ? ':memory:' : join(app.getPath('userData'), 'pipeach.sqlite')))
+  runtime = createRuntime(createStorage(usesEphemeralPreviewStore ? ':memory:' : join(app.getPath('userData'), 'pipeach.sqlite')))
   petWindow = createPetWindow()
   createTray()
   if (process.env.PIPEACH_OPEN_DASHBOARD === '1') openDashboard()

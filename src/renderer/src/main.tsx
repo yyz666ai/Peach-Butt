@@ -28,7 +28,14 @@ function useSnapshot(): [AppSnapshot | null, (action: AppAction) => Promise<void
 
 const BUBBLE_VISIBLE_MS = 3_200
 
-const previewVisuals = {
+interface VisualPreview {
+  visual: string
+  pressure: number
+  recovery: number
+  recoveryRemainingSeconds?: number
+}
+
+const previewVisuals: Record<string, VisualPreview> = {
   idle: { visual: 'idle', pressure: 0, recovery: 100 },
   focus: { visual: 'focus', pressure: 20, recovery: 100 },
   activity: { visual: 'activity', pressure: 20, recovery: 100 },
@@ -38,15 +45,15 @@ const previewVisuals = {
   sleep: { visual: 'sleep', pressure: 10, recovery: 100 },
   pressure: { visual: 'pressure', pressure: 88, recovery: 100 },
   deflated: { visual: 'deflated', pressure: 0, recovery: 0 },
-  recovering: { visual: 'preview-recovering', pressure: 0, recovery: 56 },
+  recovering: { visual: 'deflated', pressure: 0, recovery: 40, recoveryRemainingSeconds: 180 },
   transform: { visual: 'transform', pressure: 20, recovery: 100 },
   greeting: { visual: 'greeting', pressure: 0, recovery: 100 }
-} as const
+}
 
-function getVisualPreview(): (typeof previewVisuals)[keyof typeof previewVisuals] | null {
+function getVisualPreview(): VisualPreview | null {
   const requested = new URLSearchParams(location.search).get('petVisual')
   if (!requested || !(requested in previewVisuals)) return null
-  return previewVisuals[requested as keyof typeof previewVisuals]
+  return previewVisuals[requested]
 }
 
 function PetView(): React.JSX.Element {
@@ -105,7 +112,9 @@ function PetView(): React.JSX.Element {
             onClick={(event) => { event.stopPropagation(); void act({ type: 'rest:complete', kind: item.kind }) }}
           ><img src={item.asset} alt=""/><span>{item.label}</span></button>)}
         </section>
-      : bubbleVisible && !preview && <section className="hover-status" aria-live="polite"><strong>{bubbleCopy}</strong></section>}
+      : preview?.recoveryRemainingSeconds !== undefined
+        ? <section className="hover-status" aria-live="polite"><strong>恢复 {formatTime(preview.recoveryRemainingSeconds)}</strong></section>
+        : bubbleVisible && !preview && <section className="hover-status" aria-live="polite"><strong>{bubbleCopy}</strong></section>}
     <div className="pet-stage" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
       <PetMotion visual={preview?.visual ?? snapshot.visual} pressureValue={preview?.pressure ?? snapshot.health.pressure} recovery={preview?.recovery ?? snapshot.health.recovery}/>
     </div>

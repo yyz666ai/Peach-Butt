@@ -32,7 +32,6 @@ const clips = {
   sleep: { src: sleep, ...clipTimelines.sleep },
   toilet: { src: toilet, ...clipTimelines.toilet },
   transform: { src: transform, ...clipTimelines.transform },
-  'preview-recovering': { src: dry, ...clipTimelines.hydrating },
   dry: { src: dry, ...clipTimelines.dry },
   hydrating: { src: dry, ...clipTimelines.hydrating },
   'water-prompt': { src: dry, ...clipTimelines['water-prompt'] }

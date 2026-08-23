@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 const main = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
 const renderer = readFileSync(new URL('../renderer/src/main.tsx', import.meta.url), 'utf8')
+const motion = readFileSync(new URL('../renderer/src/components/PetMotion.tsx', import.meta.url), 'utf8')
 
 describe('visual acceptance preview contract', () => {
   it('only opts into a pet visual override through an explicit environment variable', () => {
@@ -16,10 +17,21 @@ describe('visual acceptance preview contract', () => {
   })
 
   it('uses an ephemeral store and routes explosion preview through the alert window', () => {
-    expect(main).toContain("visualPreview ? ':memory:'")
+    expect(main).toContain("usesEphemeralPreviewStore ? ':memory:'")
     expect(main).toContain("visualPreview === 'explosion'")
     expect(main).toContain('alertPreview')
     expect(renderer).toContain("get('alertPreview')")
+  })
+
+  it('keeps the legacy explosion switch in the same ephemeral preview store', () => {
+    expect(main).toContain("const usesEphemeralPreviewStore = Boolean(visualPreview || process.env.PIPEACH_PREVIEW_EXPLOSION === '1')")
+    expect(main).toContain("createStorage(usesEphemeralPreviewStore ? ':memory:'")
+  })
+
+  it('hides the pet behind an alert and restores it after the alert closes', () => {
+    expect(main).toContain('petWindow?.hide()')
+    expect(main).toContain('restorePetAfterOverlay')
+    expect(main).toContain("window.on('closed', () => { if (alertWindow === window) {")
   })
 
   it('opens a four-message rest reminder overlay for the rest-due visual preview', () => {
@@ -28,5 +40,11 @@ describe('visual acceptance preview contract', () => {
     expect(main).toContain('restDuePreviewMessages')
     expect(renderer).toContain("previewAlert === 'rest-due'")
     expect(renderer).toContain('defaultRestMessages')
+  })
+
+  it('represents recovering as a deflated pet with a recovery countdown, never a drinking clip', () => {
+    expect(renderer).toContain("recovering: { visual: 'deflated', pressure: 0, recovery: 40, recoveryRemainingSeconds: 180 }")
+    expect(renderer).toContain('preview?.recoveryRemainingSeconds')
+    expect(motion).not.toContain("'preview-recovering'")
   })
 })
