@@ -17,7 +17,7 @@
 | 睡觉 | `states/pet-sleep-160x240@2x.png` | 长休状态稳定，循环首尾已交叉淡化。 |
 | 压力 | `states/pet-pressure-160x240@2x.png` | 变红膨胀，无底部椅座横线。 |
 | 瘪气 | `states/pet-deflated-160x240@2x.png` | 爆炸后形态明确且不误显示正常站姿。 |
-| 恢复 | `states/pet-recovering-160x240@2x.png` | 喝水恢复动作与瘪气锁定语义一致。 |
+| 恢复 | `states/pet-recovering-160x240@2x.png` | 保持瘪气锁定并显示真实恢复倒计时，不误播喝水恢复动作。 |
 | 变身 | `states/pet-transform-160x240@2x.png` | 旋风完整进入画布，过渡不改变媒体槽尺寸。 |
 | 打招呼 | `states/pet-greeting-160x240@2x.png` | 手脚完整、透明边缘干净；仅明确点击触发。 |
 
@@ -27,8 +27,8 @@
 
 | 状态 | 截图 | 检查结果 |
 | --- | --- | --- |
-| 休息到点 | `states/rest-due-fullscreen@2x.png` | 桃屁屁与动态大字明显，提示不依赖宠物底部倒计时。 |
-| 爆炸 | `states/explosion-fullscreen@2x.png` | 爆裂短片充满主要视觉区，包含“快去休息啦”与 5 分钟恢复说明。 |
+| 休息到点 | `states/rest-due-fullscreen@2x.png` | 桃屁屁与动态大字明显，提示不依赖宠物底部倒计时；全屏层期间小窗隐藏。 |
+| 爆炸 | `states/explosion-fullscreen@2x.png` | 爆裂短片充满主要视觉区，包含“快去休息啦”与 5 分钟恢复说明；没有第二只待机桃。 |
 
 ## 响应式统计页
 
