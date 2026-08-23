@@ -20,6 +20,13 @@ export interface RestSessionSnapshot {
   allCompleted: boolean
 }
 
+export interface RecoverySessionSnapshot {
+  startedAt: number
+  requiredSeconds: number
+  elapsedSeconds: number
+  remainingSeconds: number
+}
+
 export interface HealthSnapshot {
   day: string
   pressure: number
@@ -76,6 +83,7 @@ export interface AppSnapshot {
   health: HealthSnapshot
   pomodoro: PomodoroSnapshot
   reminder: { kind: ReminderKind; dueAt: number } | null
+  recoverySession?: RecoverySessionSnapshot | null
   restSession: RestSessionSnapshot | null
   overlay: { id: number; kind: 'rest-reminder' | 'explosion'; messages: string[] } | null
   visual: string

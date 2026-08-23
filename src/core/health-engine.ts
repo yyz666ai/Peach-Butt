@@ -168,12 +168,12 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
         return []
       }
       if (state.mode === 'deflated') {
-        state.activeSecondsToday += elapsedSeconds
+        if (idleSeconds < 180) state.activeSecondsToday += elapsedSeconds
         if (focusing !== false) state.continuousActiveSeconds += elapsedSeconds
         return resumeEvents
       }
       const shouldAccumulatePressure = focusing !== false
-      state.activeSecondsToday += elapsedSeconds
+      if (idleSeconds < 180) state.activeSecondsToday += elapsedSeconds
       if (!shouldAccumulatePressure) return resumeEvents
       const delta = (elapsedSeconds / 60) * pressurePerMinute
       state.pressure = Math.min(100, state.pressure + delta)

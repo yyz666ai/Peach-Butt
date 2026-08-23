@@ -12,6 +12,15 @@ export interface PlatformStatus {
 }
 
 export function getPlatformStatus(snapshot: AppSnapshot): PlatformStatus {
+  if (snapshot.health.mode === 'deflated' && snapshot.recoverySession) {
+    return countdownStatus(
+      '恢复',
+      snapshot.recoverySession.remainingSeconds,
+      snapshot.recoverySession.requiredSeconds,
+      false
+    )
+  }
+
   if (snapshot.health.mode === 'deflated' || snapshot.visual === 'exploding') {
     return {
       menuBarTitle: ' 快去休息',

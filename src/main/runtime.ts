@@ -4,6 +4,7 @@ import { createPomodoro, type PomodoroSnapshot } from '../core/pomodoro'
 import { createReminderScheduler } from '../core/reminders'
 import { createRestSession, type RestSession } from '../core/rest-session'
 import { selectPetVisual } from '../core/pet-visual-state'
+import { RECOVERY_REST_REQUIRED_SECONDS, REST_CLIP_DURATION_MS, WATER_PROMPT_DURATION_MS } from '../core/motion-timing'
 import type {
   AppAction,
   AppSettings,
@@ -42,12 +43,6 @@ const reminderVisual: Record<ReminderKind, string> = {
 }
 const restVisual: Record<ReminderKind, string> = {
   water: 'water-prompt', stand: 'activity', toilet: 'toilet', eyes: 'eye-strain'
-}
-const restVisualDurationMs: Record<ReminderKind, number> = {
-  stand: 4_000,
-  water: 8_000,
-  toilet: 6_500,
-  eyes: 5_000
 }
 const TRANSFORM_OVERRIDE_MS = 6_500
 const restOverlayMessages = [
@@ -160,6 +155,7 @@ export function createRuntime(storage: Storage): Runtime {
     }
   }
   let lastTickAt = now
+  let lastSystemIdleSeconds = 0
   const reminders = createReminderScheduler({ initialNow: now, settings: settings.reminders })
   let reminder: AppSnapshot['reminder'] = null
   let lastCompletedHabit: { completion: HabitCompletion; at: number } | null = null
@@ -315,12 +311,24 @@ export function createRuntime(storage: Storage): Runtime {
     return { id: 'idle', message: '点我互动，右键可以开始专注' }
   }
 
+  const recoveryElapsedSeconds = (): number => {
+    if (recoveryRestStartedAt === null) return 0
+    const elapsedWallSeconds = Math.max(0, Math.floor((lastTickAt - recoveryRestStartedAt) / 1000))
+    return Math.min(RECOVERY_REST_REQUIRED_SECONDS, elapsedWallSeconds, lastSystemIdleSeconds)
+  }
+
   const makeSnapshot = (): AppSnapshot => {
     const visual = currentVisual()
     return {
       health: health.snapshot(),
       pomodoro: pomodoro.snapshot(),
       reminder,
+      recoverySession: recoveryRestStartedAt === null ? null : {
+        startedAt: recoveryRestStartedAt,
+        requiredSeconds: RECOVERY_REST_REQUIRED_SECONDS,
+        elapsedSeconds: recoveryElapsedSeconds(),
+        remainingSeconds: Math.max(0, RECOVERY_REST_REQUIRED_SECONDS - recoveryElapsedSeconds())
+      },
       restSession: restSession?.snapshot() ?? null,
       overlay,
       visual: visual.id,
@@ -358,6 +366,7 @@ export function createRuntime(storage: Storage): Runtime {
       continuousWorkStartedAt += elapsedSeconds * 1000
     }
     lastTickAt = effectiveNow
+    lastSystemIdleSeconds = Math.max(0, Math.floor(idleSeconds))
     const healthEvents: HealthEvent[] = health.tick({ now: effectiveNow, idleSeconds, focusing: wasFocusing })
     for (const event of pomodoro.tick(effectiveNow)) {
       storage.appendEvent({ type: event.type, ts: event.ts, meta: event })
@@ -379,7 +388,7 @@ export function createRuntime(storage: Storage): Runtime {
     if (
       rotation?.current &&
       restRotationAt !== null &&
-      effectiveNow - restRotationAt >= restVisualDurationMs[rotation.current]
+      effectiveNow - restRotationAt >= REST_CLIP_DURATION_MS[rotation.current]
     ) {
       restSession?.next()
       restRotationAt = effectiveNow
@@ -389,7 +398,12 @@ export function createRuntime(storage: Storage): Runtime {
       (phaseBeforeTick === 'work' || phaseBeforeTick === 'awaiting_rest_confirmation') &&
       effectiveNow - continuousWorkStartedAt >= settings.continuousWorkLimitMinutes * 60_000
     ) healthEvents.push(...health.forceExplosion(effectiveNow))
-    if (health.snapshot().mode === 'deflated' && recoveryRestStartedAt !== null && idleSeconds >= 300) {
+    if (
+      health.snapshot().mode === 'deflated' &&
+      recoveryRestStartedAt !== null &&
+      effectiveNow - recoveryRestStartedAt >= RECOVERY_REST_REQUIRED_SECONDS * 1000 &&
+      lastSystemIdleSeconds >= RECOVERY_REST_REQUIRED_SECONDS
+    ) {
       const recoveryEvents = health.recover(effectiveNow)
       if (recoveryEvents.length) {
         healthEvents.push(...recoveryEvents)
@@ -418,6 +432,7 @@ export function createRuntime(storage: Storage): Runtime {
     tick: doTick,
     dispatch(action) {
       const actionNow = Math.max(lastTickAt, Date.now())
+      lastSystemIdleSeconds = 0
       const phaseBeforeAction = pomodoro.snapshot().phase
       if (
         phaseBeforeAction !== 'work' &&
@@ -492,7 +507,7 @@ export function createRuntime(storage: Storage): Runtime {
           reminders.complete(kind, actionNow)
           reminder = null
           visualOverride = wasDry
-            ? { id: 'hydrating', until: actionNow + 8700, message: '喝到了！我正在慢慢恢复水润' }
+            ? { id: 'hydrating', until: actionNow + WATER_PROMPT_DURATION_MS, message: '喝到了！我正在慢慢恢复水润' }
             : { id: 'happy', until: actionNow + 1800, message: '做得好！健康分正在恢复' }
         } else {
           events.push(...health.poke(actionNow))
@@ -510,7 +525,7 @@ export function createRuntime(storage: Storage): Runtime {
         reminders.complete(action.kind, actionNow)
         reminder = null
         visualOverride = wasDry
-          ? { id: 'hydrating', until: actionNow + 8700, message: '喝到了！我正在慢慢恢复水润' }
+          ? { id: 'hydrating', until: actionNow + WATER_PROMPT_DURATION_MS, message: '喝到了！我正在慢慢恢复水润' }
           : { id: 'happy', until: actionNow + 1800, message: '做得好！继续保持' }
       }
       if (action.type === 'rest:complete' && restSession) {

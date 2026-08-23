@@ -537,6 +537,10 @@ describe('runtime data integrity', () => {
     runtime.dispatch({ type: 'reminder:complete', kind: 'water' })
 
     expect(runtime.snapshot()).toMatchObject({ reminder: null, visual: 'hydrating' })
+    runtime.tick(start + 60 * 60_000 + 8_349, 0)
+    expect(runtime.snapshot().visual).toBe('hydrating')
+    runtime.tick(start + 60 * 60_000 + 8_350, 0)
+    expect(runtime.snapshot().visual).not.toBe('hydrating')
   })
 
   it('keeps greeting state alive for the complete authored wave', () => {
@@ -602,21 +606,21 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot()).toMatchObject({
       visual: 'water-prompt', message: '该喝水啦，看看我怎么补充水分', restSession: { current: 'water' }
     })
-    runtime.tick(start + 71_999, 0)
+    runtime.tick(start + 72_349, 0)
     expect(runtime.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
-    runtime.tick(start + 72_000, 0)
+    runtime.tick(start + 72_350, 0)
     expect(runtime.snapshot()).toMatchObject({
       visual: 'toilet', message: '别憋着，该去上厕所啦', restSession: { current: 'toilet' }
     })
-    runtime.tick(start + 78_499, 0)
+    runtime.tick(start + 78_149, 0)
     expect(runtime.snapshot()).toMatchObject({ visual: 'toilet', restSession: { current: 'toilet' } })
-    runtime.tick(start + 78_500, 0)
+    runtime.tick(start + 78_150, 0)
     expect(runtime.snapshot()).toMatchObject({
       visual: 'eye-strain', message: '看看远处，让眼睛休息一下', restSession: { current: 'eyes' }
     })
-    runtime.tick(start + 83_499, 0)
+    runtime.tick(start + 83_149, 0)
     expect(runtime.snapshot()).toMatchObject({ visual: 'eye-strain', restSession: { current: 'eyes' } })
-    runtime.tick(start + 83_500, 0)
+    runtime.tick(start + 83_150, 0)
     expect(runtime.snapshot()).toMatchObject({
       visual: 'activity',
       restSession: { current: 'stand' },
@@ -639,9 +643,9 @@ describe('runtime data integrity', () => {
       visual: 'water-prompt',
       restSession: { pending: ['water', 'toilet', 'eyes'], current: 'water' }
     })
-    runtime.tick(start + 68_999, 0)
+    runtime.tick(start + 69_349, 0)
     expect(runtime.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
-    runtime.tick(start + 69_000, 0)
+    runtime.tick(start + 69_350, 0)
     expect(runtime.snapshot()).toMatchObject({ visual: 'toilet', restSession: { current: 'toilet' } })
   })
 
@@ -701,9 +705,9 @@ describe('runtime data integrity', () => {
     runtimes.push(restored)
     expect(restored.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
 
-    restored.tick(start + 77_999, 0)
+    restored.tick(start + 78_349, 0)
     expect(restored.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
-    restored.tick(start + 78_000, 0)
+    restored.tick(start + 78_350, 0)
     expect(restored.snapshot()).toMatchObject({ visual: 'toilet', restSession: { current: 'toilet' } })
   })
 
@@ -963,7 +967,7 @@ describe('runtime data integrity', () => {
     expect(storage.runtime.get('runtime')).toMatchObject({ session: { overlaySequence: 1 } })
   })
 
-  it('locks focus after explosion and recovers only after a clicked five-minute system rest', () => {
+  it('locks focus after explosion and exposes a five-minute system-rest countdown', () => {
     const runtime = createRuntime(memoryStorage())
     runtimes.push(runtime)
     runtime.dispatch({
@@ -982,11 +986,17 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot()).toMatchObject({
       health: { mode: 'deflated' },
       visual: 'deflated',
-      message: '正在恢复，离开电脑休息满 5 分钟吧'
+      message: '正在恢复，离开电脑休息满 5 分钟吧',
+      recoverySession: { requiredSeconds: 300, elapsedSeconds: 0, remainingSeconds: 300 }
     })
     runtime.tick(start + 182_000, 299)
-    expect(runtime.snapshot().health.mode).toBe('deflated')
+    expect(runtime.snapshot()).toMatchObject({
+      health: { mode: 'deflated' },
+      recoverySession: { elapsedSeconds: 1, remainingSeconds: 299 }
+    })
     runtime.tick(start + 183_000, 300)
+    expect(runtime.snapshot().health.mode).toBe('deflated')
+    runtime.tick(start + 481_000, 300)
     expect(runtime.snapshot()).toMatchObject({ health: { mode: 'active', recovery: 100 }, visual: 'transform' })
   })
 
@@ -1105,6 +1115,20 @@ describe('runtime data integrity', () => {
     expect(storage.getUsageSessions('2026-08-20', '2026-08-20').map(({ state, seconds }) => ({ state, seconds }))).toEqual([
       { state: 'idle', seconds: 30 },
       { state: 'focus', seconds: 60 }
+    ])
+  })
+
+  it('keeps focus usage sessions while excluding an idle screen interval from active screen time', () => {
+    const storage = memoryStorage()
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'pomodoro:start' })
+
+    runtime.tick(start + 5 * 60_000, 300)
+
+    expect(runtime.snapshot().health.activeSecondsToday).toBe(0)
+    expect(storage.getUsageSessions('2026-08-20', '2026-08-20')).toEqual([
+      expect.objectContaining({ state: 'focus', seconds: 300 })
     ])
   })
 

@@ -131,6 +131,23 @@ describe('getPlatformStatus', () => {
     })
   })
 
+  it('shows the explicit five-minute recovery countdown on both platforms', () => {
+    const recovering = getPlatformStatus(snapshot({
+      health: {
+        day: '2026-8-22', pressure: 0, score: 0, recovery: 0,
+        activeSecondsToday: 0, continuousActiveSeconds: 0, restCount: 0,
+        explosionsToday: 1, mode: 'deflated'
+      },
+      recoverySession: { startedAt: 0, requiredSeconds: 300, elapsedSeconds: 120, remainingSeconds: 180 }
+    } as unknown as Partial<AppSnapshot>))
+
+    expect(recovering).toEqual({
+      menuBarTitle: ' 恢复 03:00',
+      trayTooltip: '桃屁屁 · 恢复 03:00',
+      taskbar: { value: 0.4, mode: 'normal' }
+    })
+  })
+
   it('clears titles and taskbar progress while idle', () => {
     expect(getPlatformStatus(snapshot())).toEqual({
       menuBarTitle: '',

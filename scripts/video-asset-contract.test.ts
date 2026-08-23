@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+import { WATER_PROMPT_DURATION_MS } from '../src/core/motion-timing'
 
 interface VideoClip {
   id: string
@@ -51,12 +52,17 @@ describe('video asset contract', () => {
     expect(byId('hydrating')).toMatchObject({ file: 'generated/dry.webm', start: 1.45, end: 9.8, playMode: 'once' })
   })
 
+  it('uses the shared 8.35-second water prompt contract for the authored clip', () => {
+    const water = byId('water-prompt')
+    expect(Math.round((water.end - water.start) * 1_000)).toBe(WATER_PROMPT_DURATION_MS)
+  })
+
   it('starts toilet only after the full pet enters the fixed camera', () => {
     expect(byId('toilet').start).toBeGreaterThanOrEqual(0.8)
   })
 
-  it('gives the seated focus clip extra breathing room below the chair', () => {
-    expect(byId('focus').bottomSafeMargin).toBeGreaterThanOrEqual(18)
+  it('anchors the restored short feet to the shared pet baseline', () => {
+    expect(byId('focus').bottomSafeMargin).toBe(8)
   })
 
   it('uses normalized VP9 alpha videos at 480 by 500 and 12 fps', () => {

@@ -51,6 +51,7 @@ describe('health engine', () => {
 
     expect(engine.snapshot()).toMatchObject({
       pressure: 10,
+      activeSecondsToday: 0,
       continuousActiveSeconds: 600,
       restCount: 0,
       mode: 'active'
@@ -219,6 +220,22 @@ describe('health engine', () => {
     expect(events).not.toContainEqual(expect.objectContaining({ type: 'pressure_changed' }))
     expect(engine.snapshot()).toMatchObject({ pressure: 0, mode: 'deflated', explosionsToday: 1 })
     expect(engine.forceExplosion(3_000)).toEqual([])
+  })
+
+  it.each([
+    [0, 15],
+    [1, 30],
+    [2, 50]
+  ])('uses a %i-prior-explosion penalty tier of %i points', (priorExplosions, expectedPenalty) => {
+    const seed = createHealthEngine({ initialNow: 0 }).snapshot()
+    const engine = createHealthEngine({
+      initialNow: 0,
+      initialState: { ...seed, score: 100, explosionsToday: priorExplosions }
+    })
+
+    expect(engine.forceExplosion(1_000)).toContainEqual(
+      expect.objectContaining({ type: 'explode', penalty: expectedPenalty, count: priorExplosions + 1 })
+    )
   })
 
   it('cannot leave deflated mode through automatic or requested rest', () => {
