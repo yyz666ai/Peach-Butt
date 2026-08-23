@@ -7,7 +7,7 @@
     { "id": "activity", "file": "generated/activity.webm", "role": "每次休息队列中的全身活动示范", "start": 0, "end": 4, "playMode": "loop", "restKind": "stand" },
     { "id": "eye-strain", "file": "generated/eye-strain.webm", "role": "护眼提醒与忽略后逐级变红干裂", "start": 0, "end": 5, "playMode": "once", "restKind": "eyes" },
     { "id": "greeting", "file": "generated/greeting.webm", "role": "用户明确点击打招呼后完整播放一次", "start": 0.1, "end": 9.92, "playMode": "once" },
-    { "id": "focus", "file": "generated/focus.webm", "role": "专注时持续循环安静敲电脑段", "start": 0.35, "end": 3.67, "playMode": "loop", "bottomSafeMargin": 20 },
+    { "id": "focus", "file": "generated/focus.webm", "role": "专注时持续循环安静敲电脑段", "start": 0.35, "end": 3.67, "playMode": "loop", "bottomSafeMargin": 8 },
     { "id": "sleep", "file": "generated/sleep.webm", "role": "第四个番茄后的长休息，尾部交叉淡化回起点", "start": 0.05, "end": 4.9, "playMode": "loop", "restKind": "long-rest" },
     { "id": "toilet", "file": "generated/toilet.webm", "role": "当前休息队列的上厕所提醒", "start": 0.85, "end": 6.65, "playMode": "once", "restKind": "toilet" },
     { "id": "transform", "file": "generated/transform.webm", "role": "完整跳起、旋转与旋风尾部；1.55 倍速压缩前段等待", "start": 0.08, "end": 9.82, "playMode": "once" },

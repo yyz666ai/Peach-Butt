@@ -160,10 +160,75 @@ def clear_focus_canvas_residue(frames: list[Path]) -> None:
                 body_curve = min(left_curve, right_curve)
                 outside_body_curve = y > 425 and warm and body_curve > 1
                 pale_foot_fill = y > 440 and max(red, green, blue) - min(red, green, blue) < 60 and min(red, green, blue) > 70
-                if alpha and (thin_horizontal or exposed_side or isolated_seat_bar or outside_body_curve or pale_foot_fill):
+                old_base_residue = y > 455
+                if alpha and (thin_horizontal or exposed_side or isolated_seat_bar or outside_body_curve or pale_foot_fill or old_base_residue):
                     pixels[x, y] = (0, 0, 0, 0)
                 elif alpha and y > 425 and warm and body_curve > .94:
                     pixels[x, y] = (red, green, blue, round(alpha * (1 - body_curve) / .06))
+        image.save(frame, optimize=True)
+
+
+def restore_focus_legs(frames: list[Path], greeting_video: Path) -> None:
+    """Reuse the user's greeting-video foot loops behind the seated focus body."""
+    if not greeting_video.exists():
+        raise RuntimeError(f"Focus leg reference is missing: {greeting_video}")
+    with tempfile.TemporaryDirectory(prefix="pipeach-focus-legs-") as temp:
+        reference_path = Path(temp) / "greeting.png"
+        run(
+            "ffmpeg", "-loglevel", "error", "-y", "-ss", "2.5",
+            "-c:v", "libvpx-vp9", "-i", str(greeting_video),
+            "-frames:v", "1", str(reference_path),
+        )
+        with Image.open(reference_path) as opened:
+            reference = opened.convert("RGBA")
+        legs = Image.new("RGBA", CANVAS, (0, 0, 0, 0))
+        source_pixels, leg_pixels = reference.load(), legs.load()
+        for y in range(410, CANVAS[1]):
+            for x in range(CANVAS[0]):
+                red, green, blue, alpha = source_pixels[x, y]
+                in_foot_zone = 130 <= x <= 235 or 265 <= x <= 370
+                dark_outline = red < 135 and green < 110 and blue < 110
+                if in_foot_zone and dark_outline and alpha > 18:
+                    leg_pixels[x, y] = (red, green, blue, alpha)
+        for frame in frames:
+            with Image.open(frame) as opened:
+                body = opened.convert("RGBA")
+            combined = legs.copy()
+            combined.alpha_composite(body)
+            combined.save(frame, optimize=True)
+
+
+def clear_pressure_canvas_rails(frames: list[Path]) -> None:
+    """Delete long bottom chair/seat runs without clipping the swollen body."""
+    for frame in frames:
+        with Image.open(frame) as opened:
+            image = opened.convert("RGBA")
+        pixels = image.load()
+        removals: set[tuple[int, int]] = set()
+        for y in range(round(image.height * .88), image.height):
+            run_start: int | None = None
+            for x in range(image.width + 1):
+                is_residue = False
+                if x < image.width:
+                    red, green, blue, alpha = pixels[x, y]
+                    warm = alpha > 18 and red > 150 and red - green > 14 and red - blue > 10
+                    is_residue = alpha > 18 and not warm
+                if is_residue and run_start is None:
+                    run_start = x
+                if not is_residue and run_start is not None:
+                    if x - run_start > 45:
+                        for clear_y in range(max(0, y - 3), min(image.height, y + 4)):
+                            for clear_x in range(max(0, run_start - 2), min(image.width, x + 2)):
+                                removals.add((clear_x, clear_y))
+                    run_start = None
+        for x, y in removals:
+            pixels[x, y] = (0, 0, 0, 0)
+        for y in range(round(image.height * .88), image.height):
+            for x in range(image.width):
+                red, green, blue, alpha = pixels[x, y]
+                warm = alpha > 18 and red > 150 and red - green > 14 and red - blue > 10
+                if alpha and not warm:
+                    pixels[x, y] = (0, 0, 0, 0)
         image.save(frame, optimize=True)
 
 
@@ -214,8 +279,10 @@ def convert(source: Path, destination: Path, fps: int, width: int, session: obje
         )
         if destination.stem == "focus":
             clear_focus_canvas_residue(selected)
+            restore_focus_legs(selected, destination.parent / "greeting.webm")
         if destination.stem == "pressure":
             anchor_bottom(selected)
+            clear_pressure_canvas_rails(selected)
         if destination.stem == "transform":
             fade_tail(selected)
         if destination.stem == "sleep":

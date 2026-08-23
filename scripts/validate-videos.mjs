@@ -58,7 +58,35 @@ const inspectFrame = (png, clip, sampleLabel) => {
         if (png.data[(y * png.width + x) * 4 + 3] > 18) residue += 1
       }
     }
-    if (residue > Math.max(18, visible * 0.001)) throw new Error(`${clip.id} ${sampleLabel} 底部仍有椅座/椅脚/横线残留: ${residue}px`)
+    if (clip.id === 'pressure' && residue > Math.max(18, visible * 0.001)) throw new Error(`${clip.id} ${sampleLabel} 底部仍有椅座/椅脚/横线残留: ${residue}px`)
+
+    let longestBottomRail = 0
+    for (let y = Math.round(png.height * 0.88); y < png.height; y += 1) {
+      let run = 0
+      for (let x = 0; x < png.width; x += 1) {
+        const offset = (y * png.width + x) * 4
+        const [red, green, blue, alpha] = png.data.subarray(offset, offset + 4)
+        const warmBody = alpha > 18 && red > 150 && red - green > 14 && red - blue > 10
+        if (alpha > 18 && !warmBody) {
+          run += 1
+          longestBottomRail = Math.max(longestBottomRail, run)
+        } else run = 0
+      }
+    }
+    if (longestBottomRail > 45) throw new Error(`${clip.id} ${sampleLabel} 底部存在横向连通轨道: ${longestBottomRail}px`)
+    if (clip.id === 'focus') {
+      let leftFoot = 0
+      let rightFoot = 0
+      for (let y = 440; y < png.height; y += 1) {
+        for (let x = 0; x < png.width; x += 1) {
+          const alpha = png.data[(y * png.width + x) * 4 + 3]
+          if (alpha <= 18) continue
+          if (x >= 130 && x <= 235) leftFoot += 1
+          if (x >= 265 && x <= 370) rightFoot += 1
+        }
+      }
+      if (leftFoot < 80 || rightFoot < 80) throw new Error(`focus ${sampleLabel} 左右短腿不完整: ${leftFoot}/${rightFoot}px`)
+    }
   }
 
   if (clip.id === 'explosion') {
