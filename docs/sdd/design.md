@@ -146,7 +146,7 @@
 
 ## 8. 图像资产与生成提示词
 
-参考图：`/Users/yangzhou/.codex/generated_images/01a01d5f-e8c8-7dd0-ba6a-e23840644704/exec-fa04e291-294c-46bf-bc47-a82186114145.png`
+视觉参考由项目维护者保管，不随公开仓库发布。
 
 统一提示词前缀：
 

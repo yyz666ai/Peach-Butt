@@ -8,6 +8,8 @@
 
 <p align="center">
   <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-desktop-47848F?logo=electron" alt="Electron"></a>
+  <a href="https://github.com/yyz666ai/Peach-Butt/actions/workflows/ci.yml"><img src="https://github.com/yyz666ai/Peach-Butt/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-F47B61" alt="MIT License"></a>
   <a href="#privacy--local-data"><img src="https://img.shields.io/badge/data-local%20only-F47B61" alt="Local data only"></a>
   <a href="#development--checks"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-8EC5FC" alt="macOS and Windows"></a>
 </p>
@@ -23,7 +25,7 @@
 桃屁屁是一个常驻桌面的健康陪伴宠物：它陪你专注、提醒喝水和休息，并把真实的休息反馈沉淀为个人效率记录。重点不是“盯着你”，而是用一个有状态、有反馈的角色，把健康节奏放进每天的工作流。
 
 <p align="center">
-  <img src="docs/qa/states/dashboard-1050x760@2x.png" alt="桃桃小屋统计页截图" width="760">
+  <img src="docs/images/dashboard.png" alt="桃桃小屋统计页截图" width="760">
 </p>
 
 ### 特性
@@ -33,8 +35,8 @@
 - 使用固定镜头透明动效：待机、打招呼、变身、安静敲键盘、活动、喝水、如厕、护眼、睡觉、压力、爆炸和恢复。
 - 每轮休息依次提示活动、喝水、如厕、护眼；完成后会从本轮队列移除。
 - 连续专注过长时，桃屁屁会逐渐变红、膨胀；未休息会爆炸并进入瘪气锁定，连续离开电脑休息满 5 分钟后恢复。
-- 健康分每日从 0 开始。行为有不同权重和每日计分上限，支持短时撤销误点；爆炸阶梯扣分为 15 / 30 / 50，分数不会低于 0。
-- 桃桃小屋提供最近趋势、月历、行为统计和状态时长。所有数据保存在本机 SQLite。
+- 健康分每日从 0 开始。行为有不同权重和每日计分上限；爆炸阶梯扣分为 15 / 30 / 50，分数不会低于 0。
+- 桃桃小屋提供近 7 天趋势、行为统计和状态时长；完整历史在本机持续保存。所有数据保存在本机 SQLite。
 
 ### 交互流程
 
@@ -54,15 +56,15 @@
 
 | 桃桃小屋 | 桌宠状态 |
 | --- | --- |
-| ![统计页](docs/qa/states/dashboard-1050x760@2x.png) | ![桌宠状态总览](docs/qa/states/pet-state-contact-sheet.png) |
+| ![统计页](docs/images/dashboard.png) | ![桌宠状态总览](docs/images/pet-states.png) |
 
-更多状态和不同窗口尺寸的截图位于 [`docs/qa/states`](docs/qa/states)，视觉对照记录见 [`docs/qa/design-qa.md`](docs/qa/design-qa.md)。
+产品设计与实现说明见 [`docs/sdd`](docs/sdd)，视频处理方法见 [`docs/video-asset-workflow.md`](docs/video-asset-workflow.md)。
 
 ### 隐私与本地数据
 
 - 不需要账号，也不把提醒、行为或统计上传到服务器。
 - 健康分、提醒反馈、专注/休息状态和统计存储在应用本机的 SQLite 数据库。
-- 原始视频与处理后的透明素材随项目管理；最终应用使用生成好的 WebM，日常使用不需要 Python、`rembg` 或模型下载。
+- 应用直接使用仓库内的透明 WebM；含创作平台元数据的原始母带不进入公开仓库，日常使用不需要 Python、`rembg` 或模型下载。
 
 ### 使用
 
@@ -118,14 +120,14 @@ npm run build
 src/main/          Electron 主进程、系统状态、SQLite 运行时
 src/renderer/      桌宠与桃桃小屋界面
 src/core/          番茄、健康分、提醒、恢复与平台状态规则
-assets/video/      原始视频、透明 WebM 与动作清单
+assets/video/      透明 WebM、动作清单与母带放置说明
 assets/dashboard/  统计页的独立 3D 图片素材
 docs/              产品设计、任务和视觉/视频验收记录
 ```
 
 ### 视频素材流水线
 
-新增动作前，请先完整查看原始视频，确认固定镜头、主体比例、循环段和需要去掉的尾帧；不要直接把整段视频循环播放。
+新增动作前，请把你拥有发布权的原始视频放入本地 `assets/video/source/`，完整查看并确认固定镜头、主体比例、循环段和需要去掉的尾帧；不要直接把整段视频循环播放。公开仓库不包含项目原始母带。
 
 ```bash
 # 首次制作环境：详见下方文档
@@ -160,7 +162,7 @@ npm run videos:check
 
 ### 许可证
 
-当前仓库尚未提供开源许可证文件。在新增明确许可证前，除适用法律另有规定外，项目内容保留所有权利；请先取得维护者许可再分发或复用。
+代码以 [MIT License](LICENSE) 开源。角色 IP、品牌名称和原创美术素材的商用或再发行请先联系维护者取得授权，避免让代码许可证与角色授权混淆。
 
 ---
 
@@ -171,7 +173,7 @@ npm run videos:check
 Peach Butt is a desktop pet companion for personal productivity. It turns focus sessions, healthy breaks, and local habits into a gentle, visible workflow—without sending personal activity data to a server.
 
 <p align="center">
-  <img src="docs/qa/states/pet-state-contact-sheet.png" alt="Peach Butt desktop-pet states" width="680">
+  <img src="docs/images/pet-states.png" alt="Peach Butt desktop-pet states" width="680">
 </p>
 
 ### Highlights
@@ -181,7 +183,7 @@ Peach Butt is a desktop pet companion for personal productivity. It turns focus 
 - Authored transparent video motion for greeting, transformation, focused work, breaks, pressure, explosion, and recovery.
 - A per-break health queue: move, hydrate, use the restroom, and rest your eyes.
 - Escalating pressure leads to a full-screen explosion; a deflated lock requires five minutes of real system-idle recovery before focus can resume.
-- Local daily score, weighted habits, capped repeat rewards, undo for a recent mistaken check-in, and local trend dashboards.
+- Local daily score, weighted habits, capped repeat rewards, and a seven-day trend dashboard with complete history stored locally.
 
 ### Flow
 
@@ -197,13 +199,13 @@ During focus, clicking the pet reinforces focus instead of ending it. Context me
 
 | Dashboard | Pet states |
 | --- | --- |
-| ![Dashboard](docs/qa/states/dashboard-1050x760@2x.png) | ![Pet state sheet](docs/qa/states/pet-state-contact-sheet.png) |
+| ![Dashboard](docs/images/dashboard.png) | ![Pet state sheet](docs/images/pet-states.png) |
 
-See [`docs/qa/states`](docs/qa/states) for state captures and [`docs/qa/design-qa.md`](docs/qa/design-qa.md) for visual QA notes.
+See [`docs/sdd`](docs/sdd) for the product and implementation design, and [`docs/video-asset-workflow.md`](docs/video-asset-workflow.md) for the reusable motion pipeline.
 
 ### Privacy & local data
 
-No account is required. Health scores, reminders, responses, focus/break state, and statistics stay in a local SQLite database. The app ships generated WebM assets, so end users do not need Python, `rembg`, or model downloads.
+No account is required. Health scores, reminders, responses, focus/break state, and statistics stay in a local SQLite database. The app ships generated WebM assets; source masters containing creation-platform metadata are not published, so end users do not need Python, `rembg`, or model downloads.
 
 ### Run and build
 
@@ -241,7 +243,7 @@ npm run build
 
 ### Video asset pipeline
 
-Source MP4 files live in `assets/video/source`; normalized transparent VP9 Alpha WebM files live in `assets/video/generated`. The pipeline reviews clips, extracts frames, removes backgrounds, normalizes a shared canvas and bottom anchor, trims loop seams, updates the manifest, and validates output.
+Place source MP4 files you are licensed to use in the local `assets/video/source` directory. These masters are intentionally excluded from the public repository; normalized transparent VP9 Alpha WebM files live in `assets/video/generated`. The pipeline reviews clips, extracts frames, removes backgrounds, normalizes a shared canvas and bottom anchor, trims loop seams, updates the manifest, and validates output.
 
 ```bash
 npm run videos:build
@@ -260,8 +262,8 @@ Read the reusable [video-asset workflow](docs/video-asset-workflow.md) before ad
 
 ### Contributing
 
-Issues, reproducible bug reports, motion-asset suggestions, and focused pull requests are welcome. Keep character proportions and bottom anchors consistent, add tests for state-machine changes, and run the checks above before opening a contribution. Do not commit local databases, build output, private data, or unlicensed assets.
+Issues, reproducible bug reports, motion-asset suggestions, and focused pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before contributing. Do not commit local databases, build output, private data, or unlicensed assets.
 
 ### License
 
-No open-source license file is currently provided. Unless a license is added, all rights are reserved; ask the maintainers before redistributing or reusing project material.
+The source code is available under the [MIT License](LICENSE). The Peach Butt character, brand name, and original art assets follow the separate terms in [ASSET_LICENSE.md](ASSET_LICENSE.md).

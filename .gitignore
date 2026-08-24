@@ -4,6 +4,15 @@ out/
 release/
 .DS_Store
 .env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+.venv-video/
+.idea/
+.vscode/
 .superpowers/
 .worktrees/
 coverage/
@@ -11,3 +20,5 @@ __pycache__/
 *.pyc
 *.tsbuildinfo
 assets/frames/
+assets/video/source/*.mp4
+assets/video/source/*.mov
