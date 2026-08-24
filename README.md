@@ -58,7 +58,7 @@
 | --- | --- |
 | ![统计页](docs/images/dashboard.png) | ![桌宠状态总览](docs/images/pet-states.png) |
 
-产品设计与实现说明见 [`docs/sdd`](docs/sdd)，视频处理方法见 [`docs/video-asset-workflow.md`](docs/video-asset-workflow.md)。
+当前桌宠状态、动作切换和界面交互详见[《桃屁屁当前交互与动作切换说明》](docs/product-interaction-logic.md)。产品设计与实现说明见 [`docs/sdd`](docs/sdd)，视频处理方法见 [`docs/video-asset-workflow.md`](docs/video-asset-workflow.md)。
 
 ### 隐私与本地数据
 
@@ -201,7 +201,7 @@ During focus, clicking the pet reinforces focus instead of ending it. Context me
 | --- | --- |
 | ![Dashboard](docs/images/dashboard.png) | ![Pet state sheet](docs/images/pet-states.png) |
 
-See [`docs/sdd`](docs/sdd) for the product and implementation design, and [`docs/video-asset-workflow.md`](docs/video-asset-workflow.md) for the reusable motion pipeline.
+Read the [current interaction and motion logic](docs/product-interaction-logic.md) for the implemented state machine. See [`docs/sdd`](docs/sdd) for product and implementation design, and [`docs/video-asset-workflow.md`](docs/video-asset-workflow.md) for the reusable motion pipeline.
 
 ### Privacy & local data
 
