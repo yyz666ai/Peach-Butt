@@ -5,4 +5,3 @@ The MIT License in this repository applies to source code and documentation. It 
 Those brand and artwork assets are provided for viewing, evaluation, local development, testing, and non-commercial forks of this project. Commercial use, resale, standalone redistribution, model training, or use as another product's identity requires prior written permission from the project owner.
 
 Third-party trademarks remain the property of their respective owners. Contributors must only submit assets they have the right to publish under these terms.
-

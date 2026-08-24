@@ -22,4 +22,3 @@ npm run build
 5. Do not commit databases, private activity data, build output, secrets, or assets you do not have permission to publish.
 
 For video work, follow [`docs/video-asset-workflow.md`](docs/video-asset-workflow.md). For security issues, follow [`SECURITY.md`](SECURITY.md).
-
