@@ -1,70 +1,108 @@
-# 桃屁屁
+<p align="center">
+  <img src="assets/app-icon/pipeach-logo.png" width="128" alt="Peach Butt / 桃屁屁 logo">
+</p>
 
-桃屁屁是一款面向程序员的本地健康陪伴桌宠。它常驻桌面并置顶显示，用番茄钟、生活提醒、健康分和“久坐气球爆炸”帮助用户建立更健康的工作节奏。
+<h1 align="center">Peach Butt / 桃屁屁</h1>
 
-## 当前 MVP
+<p align="center">个人效率管理的宠物陪伴 · A desktop pet companion for personal productivity</p>
 
-- macOS / Windows 通用的透明置顶桌宠，可拖动、点击互动。
-- 可调节专注、短休息、长休息和长休周期；专注结束后必须点击桃屁屁才开始休息。
-- 每次休息都会依次提醒喝水、活动一下、上厕所、护眼；悬停桃屁屁可打卡，完成项立即退出本次轮播。
-- 连续专注达到设置上限（默认 40 分钟）会累积爆炸压力；未休息时桃屁屁逐渐变红、膨胀，达到上限会全屏爆炸并扣分。
-- 爆炸后桃屁屁进入瘪气锁定状态，必须完成至少 5 分钟有效休息才能恢复并重新开始专注。
-- 健康能量每天从 0 分开始，不同健康行为按不同权重加分；每日行为计分有防刷上限，总累计不设最高分。
-- 本地记录每种状态的持续时长、番茄、休息、爆炸、健康行为和反馈响应时间；桃桃小屋展示最近 7 天趋势。
-- 数据仅存放在本机 SQLite 数据库，不上传服务器。
+<p align="center">
+  <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-desktop-47848F?logo=electron" alt="Electron"></a>
+  <a href="#privacy--local-data"><img src="https://img.shields.io/badge/data-local%20only-F47B61" alt="Local data only"></a>
+  <a href="#development--checks"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-8EC5FC" alt="macOS and Windows"></a>
+</p>
 
-## 视频动作与交互
+<p align="center"><a href="#中文">中文</a> · <a href="#english">English</a></p>
 
-用户提供的固定镜头动画已整理为待机、挥手、变身、专注敲电脑、活动、喝水、护眼、厕所、睡觉、压力、爆炸和恢复动作。原始 MP4 位于 `assets/video/source`，应用使用的透明 VP9 WebM 位于 `assets/video/generated`。
+---
 
-- 待机只做低幅度眨眼、手脚和表情动作；完整打招呼只在右键选择“打招呼”后播放一次。
-- 开始或取消专注会先播放完整旋风变身；专注期间持续循环安静敲电脑，点击宠物只提示保持专注。
-- 每次休息按未完成项完整播放活动、喝水、厕所和护眼动作；第 4 个番茄的四项全部完成后才进入睡觉长休。
-- 爆炸只播放爆开瞬间，结束后进入瘪气状态；倒计时不常驻宠物底部。
-- macOS 从菜单栏查看倒计时；Windows 从任务栏进度和托盘查看；专注时悬停宠物也会用气泡说出剩余时间。
-- 默认宠物保持小尺寸；系统右键菜单保持固定可读大小。
+<a id="中文"></a>
 
-新增动作视频时，请按 [视频资产工作流](docs/video-asset-workflow.md) 完成抽帧、`rembg` 去背、尺寸/锚点归一、裁尾帧、VP9 Alpha 编码和验收。完整产品规则见 [Proposal / PRD](docs/sdd/proposal.md)、[Design](docs/sdd/design.md) 和 [任务清单](docs/sdd/tasks.md)。
+## 中文
 
-实机视觉证据见 [状态视觉 QA](docs/qa/state-visual-qa.md) 与 [Product Design 对照验收](docs/qa/design-qa.md)。
+桃屁屁是一个常驻桌面的健康陪伴宠物：它陪你专注、提醒喝水和休息，并把真实的休息反馈沉淀为个人效率记录。重点不是“盯着你”，而是用一个有状态、有反馈的角色，把健康节奏放进每天的工作流。
 
-## 桃桃小屋图像素材
+<p align="center">
+  <img src="docs/qa/states/dashboard-1050x760@2x.png" alt="桃桃小屋统计页截图" width="760">
+</p>
 
-统计页的 3D 漫射风房间、健康道具、拉伸人物和桃子节点均为独立生成图片，位于 `assets/dashboard`。当前界面聚焦最近 7 天能量、专注、活跃和四项健康行为；更长周期数据继续保存在本地数据库中，暂不在前台展示。角色或 3D 道具不使用 HTML/CSS/SVG 仿造。
+### 特性
 
-## 在 Mac 上运行
+- 透明、置顶、可拖动的桌宠；点击、悬停与右键菜单提供交互。
+- 番茄专注、短休息与长休息节奏；Mac 菜单栏与 Windows 任务栏/托盘提供倒计时和进度。
+- 使用固定镜头透明动效：待机、打招呼、变身、安静敲键盘、活动、喝水、如厕、护眼、睡觉、压力、爆炸和恢复。
+- 每轮休息依次提示活动、喝水、如厕、护眼；完成后会从本轮队列移除。
+- 连续专注过长时，桃屁屁会逐渐变红、膨胀；未休息会爆炸并进入瘪气锁定，连续离开电脑休息满 5 分钟后恢复。
+- 健康分每日从 0 开始。行为有不同权重和每日计分上限，支持短时撤销误点；爆炸阶梯扣分为 15 / 30 / 50，分数不会低于 0。
+- 桃桃小屋提供最近趋势、月历、行为统计和状态时长。所有数据保存在本机 SQLite。
+
+### 交互流程
+
+```text
+开始专注 → 变身 → 安静敲键盘
+    ↓ 番茄结束 / 连续专注过长
+点击宠物确认休息 → 活动 → 喝水 → 如厕 → 护眼 → 返回待机
+
+忽略休息 → 变红膨胀 → 爆炸 → 瘪气锁定
+    ↓ 点击开始恢复后，连续系统空闲 5 分钟
+恢复变身 → 待机 / 可再次专注
+```
+
+专注期间点击宠物只会提示“保持专注”，不会退出专注。右键菜单用于开始、暂停或取消专注，以及记录健康行为；桌宠气泡只放一句提示，不把操作面板堆在角色身上。
+
+### 截图与视觉验收
+
+| 桃桃小屋 | 桌宠状态 |
+| --- | --- |
+| ![统计页](docs/qa/states/dashboard-1050x760@2x.png) | ![桌宠状态总览](docs/qa/states/pet-state-contact-sheet.png) |
+
+更多状态和不同窗口尺寸的截图位于 [`docs/qa/states`](docs/qa/states)，视觉对照记录见 [`docs/qa/design-qa.md`](docs/qa/design-qa.md)。
+
+### 隐私与本地数据
+
+- 不需要账号，也不把提醒、行为或统计上传到服务器。
+- 健康分、提醒反馈、专注/休息状态和统计存储在应用本机的 SQLite 数据库。
+- 原始视频与处理后的透明素材随项目管理；最终应用使用生成好的 WebM，日常使用不需要 Python、`rembg` 或模型下载。
+
+### 使用
+
+目前仓库不提供经验证的公开下载链接。请从源码构建，或由维护者提供已签名的发布包。
+
+#### macOS
 
 ```bash
 npm install
 npm run dev
 ```
 
-构建可直接运行的应用（需要可访问 Electron 下载源）：
+构建本地应用目录：
 
 ```bash
 npm run dist:mac
 ```
 
-产物位于 `release/mac-arm64/桃屁屁.app` 或 `release/mac/桃屁屁.app`。本机验收构建使用 Apple Silicon arm64；Intel Mac 需另行构建 x64 产物。开发签名版本未公证时，可在 Finder 中右键应用并选择“打开”。
+构建产物写入 `release/`。未签名或未公证的开发构建，首次打开时可能需要在 Finder 中右键选择“打开”。Apple Silicon 与 Intel Mac 应分别在对应架构环境中构建和验证。
 
-## 在 Windows 上运行
+#### Windows
 
-在 Windows 10/11 的 PowerShell 中安装 Node.js 20 或更高版本，然后进入项目目录：
+在 Windows 10/11 上安装 Node.js 的当前 LTS 版本后运行：
 
 ```powershell
 npm install
 npm run dev
-```
-
-生成安装程序：
-
-```powershell
 npm run dist:win
 ```
 
-NSIS 安装包会输出到 `release`。Windows 安装包应当在 Windows 机器或 Windows CI 上构建；macOS 无法可靠完成 Windows 原生依赖打包。未签名测试版可能触发 SmartScreen，正式发布前应配置代码签名证书。
+NSIS 安装包写入 `release/`。建议在 Windows 机器或 Windows CI 上构建 Windows 包，以便正确处理原生依赖；未签名的测试包可能触发 SmartScreen。
 
-## 检查
+### 开发
+
+```bash
+npm install
+npm run dev
+```
+
+常用校验：
 
 ```bash
 npm run assets:check
@@ -74,4 +112,156 @@ npm test
 npm run build
 ```
 
-角色资产位于 `assets/generated/final`。角色均使用参考图生成；界面没有通过 HTML/CSS 绘制桃屁屁本体。视频生成环境仅供素材制作，应用使用已经生成的 WebM，最终用户无需安装 `rembg`。
+项目主要目录：
+
+```text
+src/main/          Electron 主进程、系统状态、SQLite 运行时
+src/renderer/      桌宠与桃桃小屋界面
+src/core/          番茄、健康分、提醒、恢复与平台状态规则
+assets/video/      原始视频、透明 WebM 与动作清单
+assets/dashboard/  统计页的独立 3D 图片素材
+docs/              产品设计、任务和视觉/视频验收记录
+```
+
+### 视频素材流水线
+
+新增动作前，请先完整查看原始视频，确认固定镜头、主体比例、循环段和需要去掉的尾帧；不要直接把整段视频循环播放。
+
+```bash
+# 首次制作环境：详见下方文档
+python3 -m venv .venv-video
+.venv-video/bin/python -m pip install -r scripts/requirements-video.txt
+
+# 生成透明 VP9 Alpha WebM 并验证
+npm run videos:build
+npm run videos:check
+```
+
+完整流程包括抽帧、主体分割、透明边缘修复、统一 480 × 500 画布和底部锚点、裁剪循环尾帧、更新 `assets/video/manifest.json` 以及深色/棋盘背景验收。详见 [`docs/video-asset-workflow.md`](docs/video-asset-workflow.md)。
+
+### 路线图
+
+- [x] 透明桌宠、番茄、休息队列、健康分和本地统计
+- [x] 视频驱动的角色状态、全屏爆炸与恢复锁定
+- [x] macOS 菜单栏与 Windows 任务栏状态适配
+- [ ] 真实 Windows 安装包的跨版本实机验收
+- [ ] 签名与公证的公开发布流程
+- [ ] 更多可选提醒动作与无障碍偏好设置
+- [ ] 可选的本地对话能力（默认保持离线）
+
+### 贡献
+
+欢迎提交问题、复现步骤、动效素材建议和代码改进。提交前请：
+
+1. 保持角色素材与参考图的比例、短腿和底部锚点一致。
+2. 为状态机或计分逻辑补充测试。
+3. 运行上面的校验命令；涉及视频时还需运行 `npm run videos:check`。
+4. 不提交用户数据库、构建产物、原始隐私数据或未授权素材。
+
+### 许可证
+
+当前仓库尚未提供开源许可证文件。在新增明确许可证前，除适用法律另有规定外，项目内容保留所有权利；请先取得维护者许可再分发或复用。
+
+---
+
+<a id="english"></a>
+
+## English
+
+Peach Butt is a desktop pet companion for personal productivity. It turns focus sessions, healthy breaks, and local habits into a gentle, visible workflow—without sending personal activity data to a server.
+
+<p align="center">
+  <img src="docs/qa/states/pet-state-contact-sheet.png" alt="Peach Butt desktop-pet states" width="680">
+</p>
+
+### Highlights
+
+- Transparent, always-on-top, draggable desktop pet for macOS and Windows.
+- Pomodoro focus, short/long breaks, menu-bar/taskbar countdowns, and hover feedback.
+- Authored transparent video motion for greeting, transformation, focused work, breaks, pressure, explosion, and recovery.
+- A per-break health queue: move, hydrate, use the restroom, and rest your eyes.
+- Escalating pressure leads to a full-screen explosion; a deflated lock requires five minutes of real system-idle recovery before focus can resume.
+- Local daily score, weighted habits, capped repeat rewards, undo for a recent mistaken check-in, and local trend dashboards.
+
+### Flow
+
+```text
+Start focus → transform → quiet keyboard work
+Pomodoro ends → click the pet → health-break queue → idle
+Ignore breaks → pressure → explosion → five-minute idle recovery → idle
+```
+
+During focus, clicking the pet reinforces focus instead of ending it. Context menus hold controls; the pet bubble stays short and unobtrusive.
+
+### Screenshots
+
+| Dashboard | Pet states |
+| --- | --- |
+| ![Dashboard](docs/qa/states/dashboard-1050x760@2x.png) | ![Pet state sheet](docs/qa/states/pet-state-contact-sheet.png) |
+
+See [`docs/qa/states`](docs/qa/states) for state captures and [`docs/qa/design-qa.md`](docs/qa/design-qa.md) for visual QA notes.
+
+### Privacy & local data
+
+No account is required. Health scores, reminders, responses, focus/break state, and statistics stay in a local SQLite database. The app ships generated WebM assets, so end users do not need Python, `rembg`, or model downloads.
+
+### Run and build
+
+This repository does not claim a verified public release download. Build from source, or use a signed release supplied by a maintainer.
+
+```bash
+npm install
+npm run dev
+```
+
+Build a macOS app directory:
+
+```bash
+npm run dist:mac
+```
+
+Build a Windows NSIS installer on Windows or Windows CI:
+
+```powershell
+npm install
+npm run dist:win
+```
+
+Build output is written to `release/`. Development builds may be unsigned; platform signing, notarization, and SmartScreen handling are required for public distribution.
+
+### Development & checks
+
+```bash
+npm run assets:check
+npm run videos:check
+npm run typecheck
+npm test
+npm run build
+```
+
+### Video asset pipeline
+
+Source MP4 files live in `assets/video/source`; normalized transparent VP9 Alpha WebM files live in `assets/video/generated`. The pipeline reviews clips, extracts frames, removes backgrounds, normalizes a shared canvas and bottom anchor, trims loop seams, updates the manifest, and validates output.
+
+```bash
+npm run videos:build
+npm run videos:check
+```
+
+Read the reusable [video-asset workflow](docs/video-asset-workflow.md) before adding or replacing a motion clip.
+
+### Roadmap
+
+- [x] Desktop pet, focus/break flow, local statistics, transparent motion, and recovery lock
+- [ ] Windows hardware validation across supported versions
+- [ ] Signed and notarized public distribution
+- [ ] More optional health reminders and accessibility preferences
+- [ ] Optional local conversation mode, kept offline by default
+
+### Contributing
+
+Issues, reproducible bug reports, motion-asset suggestions, and focused pull requests are welcome. Keep character proportions and bottom anchors consistent, add tests for state-machine changes, and run the checks above before opening a contribution. Do not commit local databases, build output, private data, or unlicensed assets.
+
+### License
+
+No open-source license file is currently provided. Unless a license is added, all rights are reserved; ask the maintainers before redistributing or reusing project material.
