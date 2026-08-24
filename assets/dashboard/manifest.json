@@ -3,14 +3,9 @@
   "style": "3D 漫射哑光材质、轻质感、高级简约、粉橙草绿",
   "assets": [
     { "id": "room-background", "file": "room-background.png", "transparent": false, "role": "桃桃小屋空间底板" },
-    { "id": "energy-arc", "file": "energy-arc.png", "transparent": true, "role": "能量弧" },
     { "id": "water", "file": "water.png", "transparent": true, "role": "喝水快捷入口" },
-    { "id": "stand", "file": "stand.png", "transparent": true, "role": "起身快捷入口" },
     { "id": "eye-mask", "file": "eye-mask.png", "transparent": true, "role": "护眼快捷入口" },
     { "id": "toilet", "file": "toilet.png", "transparent": true, "role": "厕所快捷入口" },
-    { "id": "calendar", "file": "calendar.png", "transparent": true, "role": "休息记录" },
-    { "id": "timer", "file": "timer.png", "transparent": true, "role": "动态番茄钟外壳" },
-    { "id": "story-note", "file": "story-note.png", "transparent": true, "role": "每日提示便签" },
     { "id": "motivation-note", "file": "motivation-note.png", "transparent": true, "role": "左上角鼓励便签" },
     { "id": "milestone", "file": "milestone.png", "transparent": true, "role": "七天能量图节点" }
   ]

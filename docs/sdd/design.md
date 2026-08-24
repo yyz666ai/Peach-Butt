@@ -155,14 +155,9 @@
 | 路径 | 追加提示词 / 用途 |
 | --- | --- |
 | `assets/dashboard/room-background.png` | 空的温暖工作室，左侧书和绿植、右侧窗户，中间留出大面积干净排版区；不含角色和 UI |
-| `assets/dashboard/energy-arc.png` | 珊瑚桃色与叶绿组成的半圆能量弧，顶部一片叶子，中间完全留空 |
 | `assets/dashboard/water.png` | 半透明蓝色水瓶，白色水滴标记 |
-| `assets/dashboard/stand.png` | 小型木质圆台与嫩绿芽，表达起身活动 |
 | `assets/dashboard/eye-mask.png` | 叶绿色柔软护眼/睡眠眼罩 |
 | `assets/dashboard/toilet.png` | 奶油白迷你马桶，桃粉和叶绿点缀 |
-| `assets/dashboard/calendar.png` | 奶油白日历，珊瑚色装订和低细节绿色勾选，不出现可识别文字 |
-| `assets/dashboard/timer.png` | 粉桃色圆角番茄钟外壳，深色空白屏幕和叶绿空白按钮，数字由程序叠加 |
-| `assets/dashboard/story-note.png` | 奶油白悬挂便签板，桃色夹子，纸面完全留白，用作今日的话入口 |
 | `assets/dashboard/motivation-note.png` | 小型奶油白鼓励便签，桃色图钉，纸面留白 |
 | `assets/dashboard/milestone.png` | 小桃子形路线节点，顶部嫩叶，中间留出数字区域 |
 
