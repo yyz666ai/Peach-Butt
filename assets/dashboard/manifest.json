@@ -1,0 +1,12 @@
+{
+  "reference": "Project art direction; private reference not included in the public repository",
+  "style": "3D 漫射哑光材质、轻质感、高级简约、粉橙草绿",
+  "assets": [
+    { "id": "room-background", "file": "room-background.png", "transparent": false, "role": "桃桃小屋空间底板" },
+    { "id": "water", "file": "water.png", "transparent": true, "role": "喝水快捷入口" },
+    { "id": "eye-mask", "file": "eye-mask.png", "transparent": true, "role": "护眼快捷入口" },
+    { "id": "toilet", "file": "toilet.png", "transparent": true, "role": "厕所快捷入口" },
+    { "id": "motivation-note", "file": "motivation-note.png", "transparent": true, "role": "左上角鼓励便签" },
+    { "id": "milestone", "file": "milestone.png", "transparent": true, "role": "七天能量图节点" }
+  ]
+}

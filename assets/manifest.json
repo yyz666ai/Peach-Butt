@@ -1,0 +1,24 @@
+{
+  "character": "桃屁屁",
+  "reference": "桃屁屁_绿色方案3_草地绿.png",
+  "rules": {
+    "bodyProportions": "match-reference",
+    "legLength": "match-reference",
+    "background": "transparent"
+  },
+  "assets": [
+    { "id": "idle", "file": "generated/final/idle.png", "use": "默认待机" },
+    { "id": "happy", "file": "generated/final/happy.png", "use": "点击反馈与健康行为奖励" },
+    { "id": "wave", "file": "generated/final/wave.png", "use": "初始化与鼠标经过问候" },
+    { "id": "drink", "file": "generated/final/drink.png", "use": "喝水提醒" },
+    { "id": "stretch", "file": "generated/final/stretch.png", "use": "起身活动提醒" },
+    { "id": "toilet", "file": "generated/final/toilet.png", "use": "上厕所提醒" },
+    { "id": "sleep", "file": "generated/final/sleep.png", "use": "休息状态" },
+    { "id": "eye-rest", "file": "generated/final/eye-rest.png", "use": "休息眼睛提醒" },
+    { "id": "swell-1", "file": "generated/final/swell-1.png", "use": "久坐压力一级" },
+    { "id": "swell-2", "file": "generated/final/swell-2.png", "use": "久坐压力二级" },
+    { "id": "swell-3", "file": "generated/final/swell-3.png", "use": "即将爆炸警告" },
+    { "id": "explode", "file": "generated/final/explode.png", "use": "久坐爆炸惩罚" },
+    { "id": "deflated", "file": "generated/final/deflated.png", "use": "爆炸后的瘪气状态" }
+  ]
+}
