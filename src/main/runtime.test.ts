@@ -175,6 +175,70 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot().visual).not.toBe('bored')
   })
 
+  it('gets shy after three rapid clicks in idle and resets after a pause', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+
+    runtime.dispatch({ type: 'pet:click' })
+    expect(runtime.snapshot().visual).toBe('happy')
+    vi.setSystemTime(start + 2_000)
+    runtime.dispatch({ type: 'pet:click' })
+    vi.setSystemTime(start + 4_000)
+    runtime.dispatch({ type: 'pet:click' })
+
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'shy',
+      message: '别、别一直戳啦…'
+    })
+
+    vi.setSystemTime(start + 20_000)
+    runtime.tick(start + 20_000, 0)
+    runtime.dispatch({ type: 'pet:click' })
+
+    expect(runtime.snapshot().visual).toBe('happy')
+  })
+
+  it('celebrates the 7-day companionship milestone with the dance clip on first launch', () => {
+    const storage = memoryStorage()
+    const day = (offset: number): string => {
+      const d = new Date(start)
+      d.setDate(d.getDate() - offset)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    }
+    for (const offset of [1, 2, 3, 4, 5, 6]) {
+      storage.daily.set(day(offset), {
+        date: day(offset), scoreEnd: 40, scoreMin: 10, activeSeconds: 600,
+        focusSeconds: 300, pomodoroCount: 1, waterCount: 1, standCount: 0,
+        toiletCount: 0, eyeRestCount: 0, restCount: 1, explodeCount: 0,
+        ignoreCount: 0, pressurePeak: 20, stateSeconds: stateSeconds()
+      })
+    }
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'dance',
+      message: '我们互相陪伴 7 天啦！以后也要一起哦'
+    })
+  })
+
+  it('keeps the ordinary greeting on a non-milestone day', () => {
+    const storage = memoryStorage()
+    const d = new Date(start)
+    d.setDate(d.getDate() - 1)
+    const yesterday = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    storage.daily.set(yesterday, {
+      date: yesterday, scoreEnd: 40, scoreMin: 10, activeSeconds: 600,
+      focusSeconds: 300, pomodoroCount: 1, waterCount: 1, standCount: 0,
+      toiletCount: 0, eyeRestCount: 0, restCount: 1, explodeCount: 0,
+      ignoreCount: 0, pressurePeak: 20, stateSeconds: stateSeconds()
+    })
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+
+    expect(runtime.snapshot().visual).toBe('greeting')
+  })
+
   it('returns every day of the current month with missing dates zero-filled', () => {
     const storage = memoryStorage()
     storage.daily.set('2026-08-02', {

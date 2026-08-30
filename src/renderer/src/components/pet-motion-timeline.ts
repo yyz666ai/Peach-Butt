@@ -26,7 +26,10 @@ export const clipTimelines = {
   hydrating: { start: 1.45, end: 9.8, playMode: 'once' },
   explosion: { start: 0, end: 0.5, playMode: 'once' },
   bored: { start: 0, end: 5, playMode: 'once' },
-  pet: { start: 0, end: 5, playMode: 'once' }
+  pet: { start: 0, end: 5, playMode: 'once' },
+  shy: { start: 0, end: 5, playMode: 'once' },
+  dance: { start: 0, end: 5, playMode: 'once' },
+  deflated: { start: 0, end: 5, playMode: 'loop' }
 } as const satisfies Record<string, ClipTimeline>
 
 export function nextPlaybackAction(timeline: ClipTimeline, currentTime: number): 'continue' | 'pause' | 'rewind' {

@@ -328,7 +328,7 @@ function getBubbleCopy(snapshot: AppSnapshot, focusing: boolean): string {
   if (snapshot.pomodoro.phase === 'awaiting_rest_confirmation') return '点我开始休息'
   // 提醒、压力、瘪气、问候和短暂反馈直接采用主进程文案（含昵称称呼）
   if (snapshot.reminder) return snapshot.message
-  if (['pressure', 'deflated', 'greeting', 'wave', 'happy', 'rest', 'transform', 'hydrating', 'pet', 'bored'].includes(snapshot.visual)) {
+  if (['pressure', 'deflated', 'greeting', 'wave', 'happy', 'rest', 'transform', 'hydrating', 'pet', 'bored', 'shy', 'dance'].includes(snapshot.visual)) {
     return snapshot.message
   }
   return '我会安静陪你'

@@ -56,6 +56,9 @@ const TRANSFORM_OVERRIDE_MS = 6_500
 const GREETING_OVERRIDE_MS = 10_150
 const PET_PAT_OVERRIDE_MS = 5_100
 const BORED_OVERRIDE_MS = 5_100
+const SHY_OVERRIDE_MS = 5_100
+const DANCE_OVERRIDE_MS = 5_100
+const SHY_COMBO_WINDOW_MS = 10_000
 const BORED_AFTER_IDLE_MS = 10 * 60_000
 const AMBIENCE_MIN_DELAY_MS = 60_000
 const AMBIENCE_DELAY_SPREAD_MS = 60_000
@@ -180,6 +183,9 @@ export function createRuntime(storage: Storage): Runtime {
   let lastGreetedDay = restoredSession.lastGreetedDay
   // 最近一次用户交互（点击/操作），用于「冷落求关注」判断；重启后重新计时
   let lastInteractionAt = now
+  // 待机连击点击计数：10 秒内连点 3 次以上升级为害羞
+  let clickCombo = 0
+  let lastClickAt = 0
   const listeners = new Set<(snapshot: AppSnapshot) => void>()
 
   const dateKey = (ts = Date.now()): string => {
@@ -215,10 +221,27 @@ export function createRuntime(storage: Storage): Runtime {
 
   let usage: UsageCheckpoint = { state: currentUsageState(), startedAt: now, checkpointAt: now }
 
-  // 每日首次见面问候：当天第一次启动播一次打招呼（瘪气锁定时不打扰）
+  // 陪伴里程碑：有任意活动记录的天数 = 互相陪伴天数；今天还没记录时隐式 +1（启动即陪伴）
+  const companionDays = (): number => {
+    const rows = storage.getDailyStats('2000-01-01', dateKey(now))
+    const active = rows.filter((row) =>
+      row.scoreEnd > 0 || row.activeSeconds > 0 || row.focusSeconds > 0 ||
+      row.pomodoroCount > 0 || row.restCount > 0 || row.explodeCount > 0 || row.ignoreCount > 0 ||
+      row.waterCount > 0 || row.standCount > 0 || row.toiletCount > 0 || row.eyeRestCount > 0)
+    const todayCounted = active.some((row) => row.date === dateKey(now))
+    return active.length + (todayCounted ? 0 : 1)
+  }
+  const isMilestoneDay = (days: number): boolean =>
+    days === 7 || days === 30 || (days >= 100 && days % 100 === 0)
+
+  // 每日首次见面问候：当天第一次启动播一次打招呼（瘪气锁定时不打扰）；
+  // 恰好是陪伴里程碑日（7/30/100…天）时改播庆祝舞蹈
   if (health.snapshot().mode !== 'deflated' && lastGreetedDay !== dateKey(now)) {
     lastGreetedDay = dateKey(now)
-    visualOverride = { id: 'greeting', until: now + GREETING_OVERRIDE_MS, message: greetingMessage(now) }
+    const days = companionDays()
+    visualOverride = isMilestoneDay(days)
+      ? { id: 'dance', until: now + DANCE_OVERRIDE_MS, message: `我们互相陪伴 ${days} 天啦！以后也要一起哦` }
+      : { id: 'greeting', until: now + GREETING_OVERRIDE_MS, message: greetingMessage(now) }
   }
 
   const persistRuntimeState = (): void => {
@@ -573,7 +596,12 @@ export function createRuntime(storage: Storage): Runtime {
             : { id: 'happy', until: actionNow + 1800, message: '做得好！健康分正在恢复' }
         } else {
           events.push(...health.poke(actionNow))
-          visualOverride = { id: 'happy', until: actionNow + 1200, message: '嘿嘿，被你发现啦' }
+          // 10 秒内连点 3 次以上：从开心升级为害羞
+          clickCombo = actionNow - lastClickAt <= SHY_COMBO_WINDOW_MS ? clickCombo + 1 : 1
+          lastClickAt = actionNow
+          visualOverride = clickCombo >= 3
+            ? { id: 'shy', until: actionNow + SHY_OVERRIDE_MS, message: '别、别一直戳啦…' }
+            : { id: 'happy', until: actionNow + 1200, message: '嘿嘿，被你发现啦' }
         }
       }
       if (action.type === 'pet:greet') {

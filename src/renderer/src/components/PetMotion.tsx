@@ -14,6 +14,9 @@ import happyMotion from '../../../../assets/video/generated/happy.webm'
 import restMotion from '../../../../assets/video/generated/rest.webm'
 import boredMotion from '../../../../assets/video/generated/bored.webm'
 import petMotion from '../../../../assets/video/generated/pet.webm'
+import shyMotion from '../../../../assets/video/generated/shy.webm'
+import danceMotion from '../../../../assets/video/generated/dance.webm'
+import deflatedMotion from '../../../../assets/video/generated/deflated.webm'
 import idle from '../../../../assets/generated/final/idle.png'
 import idleMotionStill from '../../../../assets/generated/final/idle-motion.png'
 import eyeStrain from '../../../../assets/generated/final/eye-strain.png'
@@ -42,7 +45,10 @@ const clips = {
   hydrating: { src: dry, ...clipTimelines.hydrating },
   'water-prompt': { src: dry, ...clipTimelines['water-prompt'] },
   bored: { src: boredMotion, ...clipTimelines.bored },
-  pet: { src: petMotion, ...clipTimelines.pet }
+  pet: { src: petMotion, ...clipTimelines.pet },
+  shy: { src: shyMotion, ...clipTimelines.shy },
+  dance: { src: danceMotion, ...clipTimelines.dance },
+  deflated: { src: deflatedMotion, ...clipTimelines.deflated }
 } as const
 
 const stills: Record<string, string> = { idle: idleMotionStill, 'eye-strain': eyeStrain, deflated, drink, stretch, 'eye-rest': eyeRest, reminder: idle }
@@ -84,7 +90,9 @@ export function PetMotion({ visual, pressureValue, recovery = 100 }: { visual: s
     playsInline
     style={visual === 'pressure'
       ? { transform: `scale(${1.45 - Math.min(1, Math.max(0, (pressureValue - 55) / 45)) * 0.37})` }
-      : undefined}
+      : visual === 'deflated'
+        ? { transform: `scale(${0.72 + recovery * 0.0028})` }
+        : undefined}
     onError={() => setFailed(true)}
     onTimeUpdate={(event) => {
       const action = nextPlaybackAction(clip, event.currentTarget.currentTime)

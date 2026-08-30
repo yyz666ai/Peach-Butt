@@ -19,6 +19,9 @@
     { "id": "pressure", "file": "generated/pressure.webm", "role": "按久坐压力定格到逐渐变红、膨胀的状态", "start": 0, "end": 5.3, "playMode": "scrub" },
     { "id": "explosion", "file": "generated/explosion.webm", "role": "只保留桃子破裂瞬间，不保留椅子尾帧", "start": 0, "end": 0.5, "playMode": "once" },
     { "id": "bored", "file": "generated/bored.webm", "role": "idle 超过 10 分钟无交互时的无聊求关注插播（MiniMax-H3 生成，24fps）", "start": 0, "end": 5, "playMode": "once", "fps": 24 },
-    { "id": "pet", "file": "generated/pet.webm", "role": "悬停超过 2 秒的摸头享受反馈（MiniMax-H3 生成，24fps）", "start": 0, "end": 5, "playMode": "once", "fps": 24 }
+    { "id": "pet", "file": "generated/pet.webm", "role": "悬停超过 2 秒的摸头享受反馈（MiniMax-H3 生成，24fps）", "start": 0, "end": 5, "playMode": "once", "fps": 24 },
+    { "id": "shy", "file": "generated/shy.webm", "role": "10 秒内连点 3 次以上的害羞反馈（MiniMax-H3 生成，24fps）", "start": 0, "end": 5, "playMode": "once", "fps": 24 },
+    { "id": "dance", "file": "generated/dance.webm", "role": "陪伴 7/30/100 天里程碑庆祝舞蹈（MiniMax-H3 生成，24fps）", "start": 0, "end": 5, "playMode": "once", "fps": 24 },
+    { "id": "deflated", "file": "generated/deflated.webm", "role": "瘪气锁定的皱巴巴呼吸循环，随恢复进度放大（MiniMax-H3 生成，24fps）", "start": 0, "end": 5, "playMode": "loop", "fps": 24 }
   ]
 }
