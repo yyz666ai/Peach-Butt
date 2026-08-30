@@ -342,23 +342,30 @@ assets/generated/final/
 
 ### Sprint 1（本周末，2 天）
 1. ✅ 视觉 bug：脚部裁切 + 气泡距离（已修）
-3. ✅ 大屏接管层 UI（参考 5.1）—— 接管不隐藏桌宠，直接在桌宠窗内扩大到 640×560
-4. ✅ "我去了我去了…" 按钮 + 点击收尾逻辑（IPC 白名单 `takeover:acknowledge`）
+3. ✅ 大屏接管层 UI（参考 5.1）—— 接管不隐藏桌宠，直接在桌宠窗内扩大到 workArea 全屏（实测 1512×870 @ 0,33；Mac 菜单栏仍可访问）
+4. ✅ "我去了我去了…" 按钮 + 点击收尾逻辑（IPC 白名单 `takeover:acknowledge`；ack 后桌宠窗 `preTakeoverBounds` 恢复原位原尺寸）
 5. ✅ 接入 swell-1/2/3 + CSS scale 实现 5.2 swellLevel 0-3（每 5 分钟进一档）
 6. ✅ 大屏接管接入 5 项触发（喝水 / 活动 / 护眼 / 上厕所 / 反久坐）
+7. ✅ 接管触发提示音（Web Audio 合成；复用 soundEnabled；反久坐双急促音、水碎裂三连降调、其他单提示音）
 
 ### Sprint 2（下周，5 天）
-7. ✅ 反久坐 swell 监听 + 大屏接管流程闭环（含 ack 泄压）
-8. ✅ 喝水 5.3 干裂阶段提示（hydrationStage 0-3 自动推导；接管层显示「碎片拼回 X/3」拼回进度）
-9. ✅ 护眼 5.4 跟做倒计时（点按钮 → 90s 倒计时 + 桃屁屁动图，倒计时完自动确认）
-10. ✅ 活动 5.5 跟做倒计时（点按钮 → 60s 倒计时；按钮文案切到「跟着我跳！」）
-11. ✅ 上厕所大屏接管（用 toilet.webm 即可）
+8. ✅ 反久坐 swell 监听 + 大屏接管流程闭环（含 ack 泄压：清 continuousWorkStartedAt + 记 stand 打卡 pressure-20）
+9. ✅ 喝水 5.3 干裂阶段提示（hydrationStage 0-3 自动推导；接管层显示「碎片拼回 X/3」拼回进度；pet 干裂滤镜 stage 1/2/3 渐进；接管背景三档色调）
+10. ✅ 护眼 5.4 跟做倒计时（点按钮 → 90s 倒计时 + 桃屁屁动图，倒计时完自动确认）
+11. ✅ 活动 5.5 跟做倒计时（点按钮 → 60s 倒计时；按钮文案切到「跟着我跳！」）
+12. ✅ 上厕所大屏接管（用 toilet.webm 即可）
 
 ### Sprint 3（打磨，3 天）
-12. ✅ 右键菜单精简：只剩"喝水打卡"（5.6 决策）
-13. ✅ 重新跑测试套件：208 用例全绿（追加 7 个：swellLevel 阶梯、hydrationStage 阶梯、接管触发、ack 行为、gentle 模式、anti-sedentary 全流程、hydrateCount 累计/重置/菜单路径）
-14. ⬜ 重新打包 .app 并真机验证
-15. ⬜ docs/07 收尾更新 + docs/16（本文件）作为后续维护基线
+13. ✅ 右键菜单精简：只剩"喝水打卡"（5.6 决策；活动/护眼/如厕靠桃屁屁视觉提醒）
+14. ✅ 重新跑测试套件：209 用例全绿（追加 8 个：swellLevel 阶梯、hydrationStage 阶梯、接管触发、ack 行为、gentle 模式、anti-sedentary 全流程、hydrateCount 累计/重置/菜单路径、喝水拼满 3 次的拼齐反馈）
+15. ✅ 重新打包 .app 并真机验证：4 张全屏接管变体截图（anti-sedentary / water / eyes / stand）全部视觉确认
+16. ⬜ docs/07 收尾更新 + docs/16（本文件）作为后续维护基线
+
+### Sprint 4（待做）
+- 干裂阶段视频素材：stage 1/2 视觉差异目前用 CSS filter 实现，长期建议拍专门的 crack 视频
+- 护眼 / 活动 跟做视频：现在倒计时只显示文字 + 桃屁屁动图，理想是同步播放跟做引导视频
+- 接管层按钮的鼠标 hover 态动画 polish
+- dashboard 端把 hydrateCount 进度可视化
 
 ---
 
