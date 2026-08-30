@@ -263,10 +263,11 @@ export function createRuntime(storage: Storage): Runtime {
   let lastHydrateAt = 0
   // 记一口水：所有喝水确认路径（点宠/菜单/接管按钮）统一走这里。
   // 拼满 3 口视为完全修复，下一次喝水重新开轮；24 小时不喝自动清零。
-  const noteHydration = (at: number): void => {
+  const noteHydration = (at: number): boolean => {
     if (lastHydrateAt === 0 || at - lastHydrateAt > 24 * 60 * 60_000) hydrateCount = 0
     hydrateCount = hydrateCount >= 3 ? 1 : hydrateCount + 1
     lastHydrateAt = at
+    return hydrateCount === 3
   }
   // 大屏接管：到点提醒或反久坐 swellLevel 3 触发；点 ack 才解除
   let activeTakeover: TakeoverSnapshot | null = null
@@ -778,11 +779,13 @@ visual: visual.id,
         } else if (reminder) {
           const kind = reminder.kind
           const wasDry = kind === 'water' && actionNow - reminder.dueAt >= 15 * 60_000
-          if (kind === 'water') noteHydration(actionNow)
+          const mended = kind === 'water' && noteHydration(actionNow)
           events.push(...health.completeHabit(kind, actionNow))
           reminders.complete(kind, actionNow)
           reminder = null
-          visualOverride = wasDry
+          visualOverride = mended
+            ? { id: 'happy', until: actionNow + 3600, message: '拼回来啦！我又水水润润的了' }
+            : wasDry
             ? { id: 'hydrating', until: actionNow + WATER_PROMPT_DURATION_MS, message: '喝到了！我正在慢慢恢复水润' }
             : { id: 'happy', until: actionNow + 1800, message: '做得好！健康分正在恢复' }
         } else {
@@ -812,11 +815,13 @@ visual: visual.id,
       }
       if (action.type === 'reminder:complete') {
         const wasDry = action.kind === 'water' && reminder?.kind === 'water' && actionNow - reminder.dueAt >= 15 * 60_000
-        if (action.kind === 'water') noteHydration(actionNow)
+        const mended = action.kind === 'water' && noteHydration(actionNow)
         events.push(...health.completeHabit(action.kind, actionNow))
         reminders.complete(action.kind, actionNow)
         reminder = null
-        visualOverride = wasDry
+        visualOverride = mended
+          ? { id: 'happy', until: actionNow + 3600, message: '拼回来啦！我又水水润润的了' }
+          : wasDry
           ? { id: 'hydrating', until: actionNow + WATER_PROMPT_DURATION_MS, message: '喝到了！我正在慢慢恢复水润' }
           : { id: 'happy', until: actionNow + 1800, message: '做得好！继续保持' }
       }
@@ -836,12 +841,15 @@ visual: visual.id,
         if (target && target.kind === action.kind) {
           activeTakeover = null
           takeoverSince = 0
-          // 喝水接管确认：记一口水（拼回进度 +1）；连续 3 口后清零；24 小时后自动清零
+          // 喝水接管确认：记一口水（拼回进度 +1）；拼满 3 口播放拼齐庆祝；24 小时后自动清零
           if (action.kind === 'water') {
-            noteHydration(actionNow)
+            const mended = noteHydration(actionNow)
             events.push(...health.completeHabit('water', actionNow))
             reminders.complete('water', actionNow)
             reminder = null
+            visualOverride = mended
+              ? { id: 'happy', until: actionNow + 3600, message: '拼回来啦！我又水水润润的了' }
+              : { id: 'hydrating', until: actionNow + WATER_PROMPT_DURATION_MS, message: '喝到了！我正在慢慢恢复水润' }
           }
           // 反久坐接管确认：清空连续专注起点（主动认错休息），并记一次活动打卡泄压
           if (action.kind === 'anti-sedentary') {

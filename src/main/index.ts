@@ -44,15 +44,16 @@ function load(window: BrowserWindow, view: 'pet' | 'dashboard' | 'alert'): void 
 function createPetWindow(): BrowserWindow {
   const area = screen.getPrimaryDisplay().workArea
   const petSize = runtime?.snapshot().settings.petSize ?? 140
-  // 接管 preview：直接以 640×560 大窗启动，否则接管 UI 会挤在默认小窗里无法验证
+  // 接管 preview：直接铺满 workArea 启动，验证「全屏接管」的真实视觉效果
   const previewTakeover = Boolean(process.env.PEACH_BUTT_TAKEOVER_PREVIEW?.trim())
-  const width = previewTakeover ? 640 : petSize + 20
+  const width = previewTakeover ? area.width : petSize + 20
   // The transparent window is deliberately taller than the visible pet. This
   // gives the speech bubble its own space and keeps feet/chair legs in frame.
-  const height = previewTakeover ? 560 : Math.round(width * PET_WINDOW_HEIGHT_RATIO)
+  const height = previewTakeover ? area.height : Math.round(width * PET_WINDOW_HEIGHT_RATIO)
   const window = new BrowserWindow({
     width, height,
-    x: area.x + area.width - width - 28, y: area.y + area.height - height - 28,
+    x: previewTakeover ? area.x : area.x + area.width - width - 28,
+    y: previewTakeover ? area.y : area.y + area.height - height - 28,
     transparent: true, frame: false, alwaysOnTop: true, resizable: true,
     hasShadow: false, skipTaskbar: process.platform !== 'win32', show: false,
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: true }
@@ -62,21 +63,23 @@ function createPetWindow(): BrowserWindow {
   load(window, 'pet')
   window.once('ready-to-show', () => window.showInactive())
   window.on('closed', () => { petWindow = null })
-  // 大屏接管：桌宠窗临时扩大到 600×520 容纳接管 UI（标题+按钮+桃屁屁动图）
+  // 大屏接管：桌宠窗铺满整个 workArea；关闭后恢复原位原尺寸
+  let preTakeoverBounds: Electron.Rectangle | null = null
   runtime?.subscribe((snapshot) => {
     if (window.isDestroyed()) return
     if (previewTakeover) return
+    const bounds = window.getBounds()
     if (snapshot.takeover) {
-      if (window.getBounds().width < 560) {
-        const areaNow = screen.getPrimaryDisplay().workArea
-        window.setBounds({
-          x: areaNow.x + areaNow.width - 640,
-          y: areaNow.y + areaNow.height - 580,
-          width: 640,
-          height: 560
-        })
+      if (bounds.width < area.width - 200) {
+        // 还没铺满：记住原位置，扩到宠物所在屏幕的整个工作区
+        preTakeoverBounds = bounds
+        const workArea = screen.getDisplayMatching(bounds).workArea
+        window.setBounds({ x: workArea.x, y: workArea.y, width: workArea.width, height: workArea.height })
       }
-    } else if (window.getBounds().width > 400) {
+    } else if (preTakeoverBounds) {
+      window.setBounds(preTakeoverBounds, true)
+      preTakeoverBounds = null
+    } else if (bounds.width > 400) {
       resizePet(runtime?.snapshot().settings.petSize ?? 140)
     }
   })

@@ -22,11 +22,11 @@ button { cursor: pointer; }
 @keyframes status-in { from { opacity: 0; transform: translateY(-5px) scale(.98); } }
 
 /* 大屏接管层：到点提醒、反久坐、喝水干裂时铺满屏幕 */
-.takeover { position: absolute; inset: 0; z-index: 100; display: grid; grid-template-rows: 1fr auto auto; gap: 18px; padding: clamp(30px, 6vh, 60px) clamp(40px, 8vw, 100px); background: radial-gradient(circle at 50% 38%, #ffd9a8 0%, #ffba87 38%, #e96a4a 72%, #c4452a 100%); color: #4a2614; align-items: center; justify-items: center; animation: takeover-in .22s ease-out both; pointer-events: auto; }
+.takeover { position: absolute; inset: 0; z-index: 100; display: grid; grid-template-rows: auto auto auto; align-content: center; gap: 4vh; padding: clamp(30px, 6vh, 60px) clamp(40px, 8vw, 100px); background: radial-gradient(circle at 50% 38%, #ffd9a8 0%, #ffba87 38%, #e96a4a 72%, #c4452a 100%); color: #4a2614; align-items: center; justify-items: center; animation: takeover-in .22s ease-out both; pointer-events: auto; }
 .takeover.is-anti-sedentary { background: radial-gradient(circle at 50% 38%, #ffb0a0 0%, #ff8a6e 38%, #d8442a 72%, #7a1a08 100%); }
 @keyframes takeover-in { from { opacity: 0; transform: scale(.98); } }
-.takeover-pet { width: min(56vw, 560px); max-height: 46vh; display: grid; place-items: center; }
-.takeover-pet .pet-media { width: 100%; height: 100%; max-height: 46vh; object-fit: contain; }
+.takeover-pet { width: min(44vw, 640px); max-height: 44vh; display: grid; place-items: center; }
+.takeover-pet .pet-media { width: 100%; height: 100%; max-height: 44vh; object-fit: contain; }
 .takeover.is-water .takeover-pet { animation: dry-shake 1.4s ease-in-out infinite; }
 @keyframes dry-shake { 0%, 100% { transform: translateX(0) rotate(0); } 25% { transform: translateX(-3px) rotate(-2deg); } 75% { transform: translateX(3px) rotate(2deg); } }
 .takeover-copy { display: grid; gap: 8px; text-align: center; text-shadow: 0 2px 12px rgba(255, 240, 216, .85); animation: takeover-copy-in .35s cubic-bezier(.2,.86,.26,1) both; }

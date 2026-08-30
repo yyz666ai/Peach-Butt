@@ -1617,4 +1617,24 @@ describe('runtime data integrity', () => {
     runtime.dispatch({ type: 'reminder:complete', kind: 'water' })
     expect(runtime.snapshot().hydrateCount).toBe(2)
   })
+
+  it('celebrates with a mended message when the third sip completes the repair round', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'settings:update', settings: waterOnlySettings(runtime.snapshot().settings) })
+
+    runtime.tick(start + 5 * 60_000, 0)
+    for (const sip of [1, 2, 3]) {
+      vi.setSystemTime(start + (4 + sip) * 60_000)
+      runtime.dispatch({ type: 'reminder:complete', kind: 'water' })
+      runtime.tick(start + (5 + sip) * 60_000, 0)
+      // 每口之后下一轮水提醒重新计时，等它再次到点才能喝下一口
+      if (sip < 3) runtime.tick(start + (5 + sip) * 60_000 + 45 * 60_000, 0)
+    }
+
+    const snapshot = runtime.snapshot()
+    expect(snapshot.hydrateCount).toBe(3)
+    expect(snapshot.visual).toBe('happy')
+    expect(snapshot.message).toBe('拼回来啦！我又水水润润的了')
+  })
 })
