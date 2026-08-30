@@ -6,7 +6,7 @@
 
 **Architecture:** Electron 主进程负责透明窗口、托盘、系统空闲检测和 SQLite；React 渲染同一套应用的桌宠视图与统计视图；纯 TypeScript 核心包负责番茄、提醒、压力、健康分和事件聚合。所有角色位图由用户参考图通过 gpt-image-2 图生图生成，渲染层只加载位图，不用代码绘制角色。
 
-**Tech Stack:** Electron 43、electron-vite、TypeScript、React 19、Vitest 4、better-sqlite3、Recharts、electron-builder、gpt-image-2。
+**Tech Stack:** Electron 43、electron-vite 5、Vite 7、TypeScript、React 19、Vitest 4、better-sqlite3、Recharts、electron-builder、gpt-image-2。
 
 ---
 
@@ -76,7 +76,7 @@ Run:
 
 ```bash
 npm install react@19.2.8 react-dom@19.2.8 recharts better-sqlite3
-npm install -D electron@43.4.1 electron-vite typescript vite@8.2.2 vitest@4.1.11 @types/node @types/react @types/react-dom @types/better-sqlite3 electron-builder @electron/rebuild pngjs @types/pngjs
+npm install -D electron@43.4.1 electron-vite@5.0.0 typescript vite@7.3.6 vitest@4.1.11 @vitejs/plugin-react@5.2.0 @types/node @types/react @types/react-dom @types/better-sqlite3 electron-builder @electron/rebuild pngjs @types/pngjs
 ```
 
 Expected: `npm install` 成功并生成 `package-lock.json`，无 `EACCES` 或编译失败。
