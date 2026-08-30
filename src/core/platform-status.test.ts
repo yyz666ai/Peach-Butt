@@ -35,8 +35,13 @@ function snapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
         eyes: { enabled: true, intervalMinutes: 20 }
       },
       launchAtLogin: false,
-      soundEnabled: true
+      soundEnabled: true,
+      reminderIntensity: 'standard'
     },
+    swellLevel: 0,
+    hydrationStage: 0,
+    hydrateCount: 0,
+    takeover: null,
     trends: [],
     monthStats: [],
     ...overrides

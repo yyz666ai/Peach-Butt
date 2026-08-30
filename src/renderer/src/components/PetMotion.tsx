@@ -24,6 +24,9 @@ import deflated from '../../../../assets/generated/final/deflated.png'
 import drink from '../../../../assets/generated/final/drink.png'
 import stretch from '../../../../assets/generated/final/stretch.png'
 import eyeRest from '../../../../assets/generated/final/eye-rest.png'
+import swell1 from '../../../../assets/generated/final/swell-1.png'
+import swell2 from '../../../../assets/generated/final/swell-2.png'
+import swell3 from '../../../../assets/generated/final/swell-3.png'
 import { clipTimelines, nextPlaybackAction } from './pet-motion-timeline'
 
 const clips = {
@@ -51,9 +54,19 @@ const clips = {
   deflated: { src: deflatedMotion, ...clipTimelines.deflated }
 } as const
 
-const stills: Record<string, string> = { idle: idleMotionStill, 'eye-strain': eyeStrain, deflated, drink, stretch, 'eye-rest': eyeRest, reminder: idle }
+const stills: Record<string, string> = { idle: idleMotionStill, 'eye-strain': eyeStrain, deflated, drink, stretch, 'eye-rest': eyeRest, reminder: idle,
+  'swell-1': swell1, 'swell-2': swell2, 'swell-3': swell3 }
 
-export function PetMotion({ visual, pressureValue, recovery = 100 }: { visual: string; pressureValue: number; recovery?: number }): React.JSX.Element {
+// 反久坐膨胀视频（已有 pressure.webm，按压力值取帧）：与 swellLevel 1/2/3 对应
+const swellMap: Record<0 | 1 | 2 | 3, string> = { 0: idleMotionStill, 1: swell1, 2: swell2, 3: swell3 }
+
+export function PetMotion({ visual, pressureValue, recovery = 100, swellLevel = 0, hydrationStage = 0 }: {
+  visual: string
+  pressureValue: number
+  recovery?: number
+  swellLevel?: 0 | 1 | 2 | 3
+  hydrationStage?: 0 | 1 | 2 | 3
+}): React.JSX.Element {
   const video = useRef<HTMLVideoElement>(null)
   const [failed, setFailed] = useState(false)
   const clip = clips[visual as keyof typeof clips]
@@ -78,6 +91,12 @@ export function PetMotion({ visual, pressureValue, recovery = 100 }: { visual: s
 
   if (!clip || failed) {
     return <img className="pet-media" src={stills[visual] ?? idle} alt="桃屁屁桌宠" draggable={false} style={visual === 'deflated' ? { transform: `scale(${0.72 + recovery * 0.0028})` } : undefined} />
+  }
+
+  // 反久坐膨胀：swellLevel 1/2/3 用 swell 静态图 + CSS scale，video 用 pressure.webm 红脸段
+  const isSwell = visual === 'pressure' && swellLevel > 0
+  if (isSwell) {
+    return <img className="pet-media swell-media" src={swellMap[swellLevel]} alt="桃屁屁桌宠" draggable={false} style={{ transform: `scale(${1 + swellLevel * 0.13})` }}/>
   }
 
   return <video

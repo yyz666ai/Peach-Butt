@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StoredEvent, DailyStats, Storage, UsageSession } from './storage'
+import type { AppSettings } from '../shared/contracts'
 
 vi.mock('electron', () => ({
   Notification: class {
@@ -1465,5 +1466,155 @@ describe('runtime data integrity', () => {
         usage: { state: 'idle', startedAt: start + 5 * 60_000, checkpointAt: start + 5 * 60_000 }
       }
     })
+  })
+
+  // ===== 大屏接管 + 反久坐膨胀 + 喝水干裂 =====
+
+  function waterOnlySettings(base: AppSettings): AppSettings {
+    return {
+      ...base,
+      reminders: {
+        water: { enabled: true, intervalMinutes: 5 },
+        stand: { enabled: false, intervalMinutes: 50 },
+        toilet: { enabled: false, intervalMinutes: 120 },
+        eyes: { enabled: false, intervalMinutes: 20 }
+      }
+    }
+  }
+
+  function noReminderSettings(base: AppSettings): AppSettings {
+    return {
+      ...base,
+      reminders: {
+        water: { enabled: false, intervalMinutes: 45 },
+        stand: { enabled: false, intervalMinutes: 50 },
+        toilet: { enabled: false, intervalMinutes: 120 },
+        eyes: { enabled: false, intervalMinutes: 20 }
+      }
+    }
+  }
+
+  it('ramps the anti-sedentary swell level in five-minute steps after half the limit', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'pomodoro:start' })
+
+    // 默认 40 分钟上限：20 分钟开始膨胀，每 5 分钟进一档
+    runtime.tick(start + 19 * 60_000, 0)
+    expect(runtime.snapshot().swellLevel).toBe(0)
+    runtime.tick(start + 25 * 60_000, 0)
+    expect(runtime.snapshot().swellLevel).toBe(1)
+    runtime.tick(start + 30 * 60_000, 0)
+    expect(runtime.snapshot().swellLevel).toBe(2)
+    runtime.tick(start + 35 * 60_000, 0)
+    expect(runtime.snapshot().swellLevel).toBe(3)
+  })
+
+  it('dries, cracks and shatters progressively as a water reminder keeps being ignored', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'settings:update', settings: waterOnlySettings(runtime.snapshot().settings) })
+
+    runtime.tick(start + 5 * 60_000, 0)
+    expect(runtime.snapshot()).toMatchObject({ reminder: { kind: 'water' }, hydrationStage: 0 })
+    runtime.tick(start + 20 * 60_000, 0)
+    expect(runtime.snapshot().hydrationStage).toBe(1)
+    runtime.tick(start + 35 * 60_000, 0)
+    expect(runtime.snapshot().hydrationStage).toBe(2)
+    runtime.tick(start + 50 * 60_000, 0)
+    expect(runtime.snapshot().hydrationStage).toBe(3)
+  })
+
+  it('takes over the screen when a reminder has been ignored for five minutes', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'settings:update', settings: waterOnlySettings(runtime.snapshot().settings) })
+
+    runtime.tick(start + 5 * 60_000, 0)
+    expect(runtime.snapshot().takeover).toBeNull()
+    runtime.tick(start + 10 * 60_000, 0)
+
+    expect(runtime.snapshot().takeover).toMatchObject({ kind: 'water' })
+    expect(runtime.snapshot().takeover?.reason).toContain('5')
+
+    vi.setSystemTime(start + 10 * 60_000)
+    runtime.dispatch({ type: 'takeover:acknowledge', kind: 'water' })
+
+    expect(runtime.snapshot()).toMatchObject({
+      takeover: null,
+      reminder: null,
+      hydrateCount: 1
+    })
+  })
+
+  it('suppresses takeovers in gentle reminder mode', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'settings:update', settings: { ...waterOnlySettings(runtime.snapshot().settings), reminderIntensity: 'gentle' } })
+
+    runtime.tick(start + 5 * 60_000, 0)
+    runtime.tick(start + 10 * 60_000, 0)
+
+    expect(runtime.snapshot().takeover).toBeNull()
+    expect(runtime.snapshot().reminder).toMatchObject({ kind: 'water' })
+  })
+
+  it('takes over with anti-sedentary at swell level 3 outside focus and resets the streak on acknowledge', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'settings:update', settings: noReminderSettings(runtime.snapshot().settings) })
+    runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 45 })
+
+    // 默认 40 分钟上限：20 分钟开始膨胀，35 分钟到 level 3；36 分钟时仍在专注（未到 40 分钟爆炸线）
+    runtime.tick(start + 36 * 60_000, 0)
+    expect(runtime.snapshot().swellLevel).toBe(3)
+    expect(runtime.snapshot().takeover).toBeNull()
+    vi.setSystemTime(start + 36 * 60_000)
+    // reset 不清空连续专注：人还在电脑前，反久坐计时保持已积累的 36 分钟
+    runtime.dispatch({ type: 'pomodoro:reset' })
+
+    runtime.tick(start + 36 * 60_000 + 1_000, 0)
+    expect(runtime.snapshot().takeover).toMatchObject({ kind: 'anti-sedentary' })
+    expect(runtime.snapshot().takeover?.reason).toContain('36')
+
+    vi.setSystemTime(start + 36 * 60_000 + 1_000)
+    runtime.dispatch({ type: 'takeover:acknowledge', kind: 'anti-sedentary' })
+
+    // ack = 主动起身：连续计时清零（swell 归 0），活动打卡泄压 20（90 → 70）
+    expect(runtime.snapshot()).toMatchObject({
+      takeover: null,
+      swellLevel: 0,
+      health: { pressure: 70 }
+    })
+  })
+
+  it('rehydrates the pet one check-in at a time and wraps after three', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'settings:update', settings: waterOnlySettings(runtime.snapshot().settings) })
+
+    // 4 轮「到点 → 忽略 5 分钟接管 → 确认喝水」：前 3 轮 1→2→3，第 4 轮重新开轮回到 1
+    for (let cycle = 1; cycle <= 4; cycle++) {
+      runtime.tick(start + (cycle * 10 - 5) * 60_000, 0)
+      runtime.tick(start + cycle * 10 * 60_000, 0)
+      vi.setSystemTime(start + cycle * 10 * 60_000)
+      runtime.dispatch({ type: 'takeover:acknowledge', kind: 'water' })
+      expect(runtime.snapshot().hydrateCount).toBe(cycle <= 3 ? cycle : 1)
+    }
+  })
+
+  it('counts menu water check-ins toward the hydration repair progress', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'settings:update', settings: waterOnlySettings(runtime.snapshot().settings) })
+
+    runtime.tick(start + 5 * 60_000, 0)
+    vi.setSystemTime(start + 5 * 60_000)
+    runtime.dispatch({ type: 'reminder:complete', kind: 'water' })
+    expect(runtime.snapshot().hydrateCount).toBe(1)
+
+    vi.setSystemTime(start + 6 * 60_000)
+    runtime.dispatch({ type: 'reminder:complete', kind: 'water' })
+    expect(runtime.snapshot().hydrateCount).toBe(2)
   })
 })

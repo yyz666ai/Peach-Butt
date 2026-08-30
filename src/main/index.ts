@@ -32,6 +32,9 @@ function load(window: BrowserWindow, view: 'pet' | 'dashboard' | 'alert'): void 
     if (visualPreview) {
       if (!previewAlert) query.petVisual = visualPreview
     }
+    // 调试参数：?takeoverKind=anti-sedentary 直接渲染接管 UI 用于截图验证
+    const takeoverPreview = process.env.PEACH_BUTT_TAKEOVER_PREVIEW
+    if (takeoverPreview) query.takeoverKind = takeoverPreview
   }
   if (view === 'alert' && previewAlert) query.alertPreview = previewAlert
   if (process.env.ELECTRON_RENDERER_URL) void window.loadURL(`${process.env.ELECTRON_RENDERER_URL}?${new URLSearchParams(query).toString()}`)
@@ -41,10 +44,12 @@ function load(window: BrowserWindow, view: 'pet' | 'dashboard' | 'alert'): void 
 function createPetWindow(): BrowserWindow {
   const area = screen.getPrimaryDisplay().workArea
   const petSize = runtime?.snapshot().settings.petSize ?? 140
-  const width = petSize + 20
+  // 接管 preview：直接以 640×560 大窗启动，否则接管 UI 会挤在默认小窗里无法验证
+  const previewTakeover = Boolean(process.env.PEACH_BUTT_TAKEOVER_PREVIEW?.trim())
+  const width = previewTakeover ? 640 : petSize + 20
   // The transparent window is deliberately taller than the visible pet. This
   // gives the speech bubble its own space and keeps feet/chair legs in frame.
-  const height = Math.round(width * PET_WINDOW_HEIGHT_RATIO)
+  const height = previewTakeover ? 560 : Math.round(width * PET_WINDOW_HEIGHT_RATIO)
   const window = new BrowserWindow({
     width, height,
     x: area.x + area.width - width - 28, y: area.y + area.height - height - 28,
@@ -57,6 +62,24 @@ function createPetWindow(): BrowserWindow {
   load(window, 'pet')
   window.once('ready-to-show', () => window.showInactive())
   window.on('closed', () => { petWindow = null })
+  // 大屏接管：桌宠窗临时扩大到 600×520 容纳接管 UI（标题+按钮+桃屁屁动图）
+  runtime?.subscribe((snapshot) => {
+    if (window.isDestroyed()) return
+    if (previewTakeover) return
+    if (snapshot.takeover) {
+      if (window.getBounds().width < 560) {
+        const areaNow = screen.getPrimaryDisplay().workArea
+        window.setBounds({
+          x: areaNow.x + areaNow.width - 640,
+          y: areaNow.y + areaNow.height - 580,
+          width: 640,
+          height: 560
+        })
+      }
+    } else if (window.getBounds().width > 400) {
+      resizePet(runtime?.snapshot().settings.petSize ?? 140)
+    }
+  })
   return window
 }
 
@@ -111,7 +134,7 @@ function openDashboard(): void {
   if (dashboardWindow) { dashboardWindow.show(); dashboardWindow.focus(); return }
   dashboardWindow = new BrowserWindow({
     width: 1050, height: 760, minWidth: 960, minHeight: 650,
-    title: '桃屁屁 · 健康记录', backgroundColor: '#fff8f3',
+    title: 'Peach Butt · 健康小屋', backgroundColor: '#fff8f3',
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: true }
   })
   load(dashboardWindow, 'dashboard')
@@ -121,10 +144,10 @@ function openDashboard(): void {
 function createTray(): void {
   const icon = nativeImage.createFromPath(join(app.getAppPath(), 'assets/generated/final/idle.png')).resize({ width: 20, height: 20 })
   tray = new Tray(icon)
-  tray.setToolTip('桃屁屁健康助手')
+  tray.setToolTip('Peach Butt')
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: '显示桃屁屁', click: () => petWindow?.show() },
-    { label: '健康统计', click: openDashboard },
+    { label: 'Show Peach Butt', click: () => petWindow?.show() },
+    { label: '健康小屋', click: openDashboard },
     { type: 'separator' },
     { label: '退出', click: () => app.quit() }
   ]))
@@ -147,12 +170,10 @@ function showPetMenu(): void {
       ]
     },
     {
-      label: '记录健康行为',
+      // 只保留喝水打卡：活动/护眼/如厕靠桃屁屁的视觉状态提醒，用户看见跟着做即可
+      label: '喝水打卡',
       submenu: [
-        { label: '喝水', click: () => dispatch({ type: 'reminder:complete', kind: 'water' }) },
-        { label: '起身活动', click: () => dispatch({ type: 'reminder:complete', kind: 'stand' }) },
-        { label: '休息眼睛', click: () => dispatch({ type: 'reminder:complete', kind: 'eyes' }) },
-        { label: '上厕所', click: () => dispatch({ type: 'reminder:complete', kind: 'toilet' }) }
+        { label: '喝了一口水', click: () => dispatch({ type: 'reminder:complete', kind: 'water' }) }
       ]
     },
     { label: '打招呼', click: () => dispatch({ type: 'pet:greet' }) },
@@ -235,11 +256,12 @@ function isFinitePoint(value: unknown): value is { x: number; y: number } {
 function isSafeAction(value: unknown): value is AppAction {
   if (!value || typeof value !== 'object') return false
   const action = value as Partial<AppAction> & Record<string, unknown>
-  const types = new Set<AppAction['type']>(['pomodoro:start', 'pomodoro:configure-and-start', 'pomodoro:toggle-pause', 'pomodoro:reset', 'pomodoro:cancel', 'pet:click', 'pet:greet', 'pet:size', 'reminder:complete', 'reminder:snooze', 'reminder:undo', 'rest:complete', 'dashboard:open', 'settings:update'])
+  const types = new Set<AppAction['type']>(['pomodoro:start', 'pomodoro:configure-and-start', 'pomodoro:toggle-pause', 'pomodoro:reset', 'pomodoro:cancel', 'pet:click', 'pet:greet', 'pet:size', 'reminder:complete', 'reminder:snooze', 'reminder:undo', 'rest:complete', 'takeover:acknowledge', 'dashboard:open', 'settings:update'])
   if (typeof action.type !== 'string' || !types.has(action.type as AppAction['type'])) return false
   if (action.type === 'pet:size') return typeof action.size === 'number' && Number.isFinite(action.size) && action.size >= 120 && action.size <= 320
   if (action.type === 'pomodoro:configure-and-start') return typeof action.workMinutes === 'number' && Number.isFinite(action.workMinutes) && action.workMinutes >= 1 && action.workMinutes <= 120
   if (action.type === 'reminder:complete' || action.type === 'reminder:snooze' || action.type === 'rest:complete') return isReminderKind(action.kind)
+  if (action.type === 'takeover:acknowledge') return isTakeoverKind(action.kind)
   if (action.type === 'settings:update') {
     return isSafeSettings(action.settings)
   }
@@ -248,6 +270,10 @@ function isSafeAction(value: unknown): value is AppAction {
 
 function isReminderKind(value: unknown): value is ReminderKind {
   return ['water', 'stand', 'toilet', 'eyes'].includes(String(value))
+}
+
+function isTakeoverKind(value: unknown): value is NonNullable<AppSnapshot['takeover']>['kind'] {
+  return ['water', 'stand', 'toilet', 'eyes', 'anti-sedentary'].includes(String(value))
 }
 
 function isSafeSettings(value: unknown): value is AppSettings {

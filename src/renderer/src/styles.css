@@ -7,19 +7,45 @@ button { cursor: pointer; }
 /* Compact transparent desktop pet */
 .pet-shell { position: relative; width: 100vw; height: 100vh; user-select: none; overflow: hidden; }
 .pet-loading { display: grid; height: 100vh; place-items: center; color: #7c5747; font-size: 12px; }
-.pet-stage { position: absolute; inset: 34% 1% 1%; display: grid; place-items: end center; cursor: grab; touch-action: none; }
+.pet-stage { position: absolute; inset: 14% 2% 4% 2%; display: grid; place-items: end center; cursor: grab; touch-action: none; }
 .pet-stage:active { cursor: grabbing; }
 .pet-media { width: 100%; height: 100%; object-fit: contain; pointer-events: none; transform-origin: center bottom; }
 .pet-video { mix-blend-mode: normal; }
-.hover-status { position: absolute; z-index: 8; bottom: calc(66% + 10px); left: 50%; width: max-content; max-width: 92%; min-height: 0; padding: 8px 13px; transform: translateX(-50%); border: 1px solid rgba(123, 74, 46, .12); border-radius: 16px 16px 16px 6px; background: rgba(255, 247, 229, .97); box-shadow: 0 7px 22px rgba(98, 57, 33, .16); color: #68422f; text-align: center; pointer-events: none; animation: status-in .18s ease-out; }
+.hover-status { position: absolute; z-index: 8; top: 4%; left: 50%; width: max-content; max-width: 92%; min-height: 0; padding: 8px 13px; transform: translateX(-50%); border: 1px solid rgba(123, 74, 46, .12); border-radius: 16px 16px 16px 6px; background: rgba(255, 247, 229, .97); box-shadow: 0 7px 22px rgba(98, 57, 33, .16); color: #68422f; text-align: center; pointer-events: none; animation: status-in .18s ease-out; }
 .hover-status::after { content: ''; position: absolute; left: 24%; bottom: -7px; width: 12px; height: 12px; transform: rotate(45deg); border-right: 1px solid rgba(123, 74, 46, .12); border-bottom: 1px solid rgba(123, 74, 46, .12); background: rgba(255, 247, 229, .97); }
 .hover-status strong { display: block; overflow: hidden; font-size: 11px; line-height: 1.25; font-weight: 750; overflow-wrap: anywhere; text-overflow: ellipsis; white-space: nowrap; }
-.rest-checkins { position: absolute; z-index: 12; bottom: calc(66% + 10px); left: 50%; width: min(96%, 205px); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; padding: 7px; transform: translateX(-50%); border: 1px solid rgba(123, 74, 46, .13); border-radius: 17px; background: rgba(255, 248, 232, .98); box-shadow: 0 8px 24px rgba(98, 57, 33, .18); animation: status-in .18s ease-out; }
+.rest-checkins { position: absolute; z-index: 12; top: 4%; left: 50%; width: min(96%, 205px); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; padding: 7px; transform: translateX(-50%); border: 1px solid rgba(123, 74, 46, .13); border-radius: 17px; background: rgba(255, 248, 232, .98); box-shadow: 0 8px 24px rgba(98, 57, 33, .18); animation: status-in .18s ease-out; }
 .rest-checkins::after { content: ''; position: absolute; left: calc(50% - 6px); bottom: -6px; width: 12px; height: 12px; transform: rotate(45deg); background: #fff8e8; }
 .rest-checkins button { position: relative; z-index: 1; min-width: 0; display: grid; grid-template-columns: 24px 1fr; align-items: center; gap: 3px; padding: 5px 6px; border: 0; border-radius: 10px; color: #714733; background: #f7e7ca; font-size: 9px; font-weight: 800; }
 .rest-checkins button:hover { background: #eaf1d6; color: #5f7c35; }
 .rest-checkins img { width: 24px; height: 24px; object-fit: contain; }
 @keyframes status-in { from { opacity: 0; transform: translateY(-5px) scale(.98); } }
+
+/* 大屏接管层：到点提醒、反久坐、喝水干裂时铺满屏幕 */
+.takeover { position: absolute; inset: 0; z-index: 100; display: grid; grid-template-rows: 1fr auto auto; gap: 18px; padding: clamp(30px, 6vh, 60px) clamp(40px, 8vw, 100px); background: radial-gradient(circle at 50% 38%, #ffd9a8 0%, #ffba87 38%, #e96a4a 72%, #c4452a 100%); color: #4a2614; align-items: center; justify-items: center; animation: takeover-in .22s ease-out both; pointer-events: auto; }
+.takeover.is-anti-sedentary { background: radial-gradient(circle at 50% 38%, #ffb0a0 0%, #ff8a6e 38%, #d8442a 72%, #7a1a08 100%); }
+@keyframes takeover-in { from { opacity: 0; transform: scale(.98); } }
+.takeover-pet { width: min(56vw, 560px); max-height: 46vh; display: grid; place-items: center; }
+.takeover-pet .pet-media { width: 100%; height: 100%; max-height: 46vh; object-fit: contain; }
+.takeover.is-water .takeover-pet { animation: dry-shake 1.4s ease-in-out infinite; }
+@keyframes dry-shake { 0%, 100% { transform: translateX(0) rotate(0); } 25% { transform: translateX(-3px) rotate(-2deg); } 75% { transform: translateX(3px) rotate(2deg); } }
+.takeover-copy { display: grid; gap: 8px; text-align: center; text-shadow: 0 2px 12px rgba(255, 240, 216, .85); animation: takeover-copy-in .35s cubic-bezier(.2,.86,.26,1) both; }
+@keyframes takeover-copy-in { from { opacity: 0; transform: translateY(20px) scale(.96); } }
+.takeover-copy strong { font-size: clamp(40px, 7vw, 96px); line-height: 1.06; letter-spacing: -.035em; color: #4a2614; }
+.takeover-copy span { font-size: clamp(14px, 1.8vw, 22px); color: #6a3a23; font-weight: 650; }
+.takeover-copy small { font-size: clamp(11px, 1.1vw, 14px); color: #8a5a40; margin-top: 4px; }
+.takeover-ack { margin: 12px 0 0; padding: 14px 36px; border: 0; border-radius: 14px; background: linear-gradient(180deg, #ff8e6e, #f2694a); color: #fff; font-size: clamp(16px, 2vw, 22px); font-weight: 800; letter-spacing: .03em; box-shadow: 0 10px 26px rgba(220, 80, 50, .4), inset 0 1px rgba(255,255,255,.5); cursor: pointer; transition: transform .12s ease, box-shadow .12s ease; animation: ack-pulse 1.6s ease-in-out infinite; }
+.takeover-ack:hover { transform: translateY(-1px); box-shadow: 0 14px 32px rgba(220, 80, 50, .5), inset 0 1px rgba(255,255,255,.55); }
+.takeover-ack:active { transform: translateY(1px) scale(.99); }
+@keyframes ack-pulse { 0%, 100% { box-shadow: 0 10px 26px rgba(220, 80, 50, .4), inset 0 1px rgba(255,255,255,.5); } 50% { box-shadow: 0 10px 26px rgba(220, 80, 50, .65), inset 0 1px rgba(255,255,255,.5), 0 0 0 10px rgba(255, 142, 110, 0); } }
+/* 跟做模式：按钮变成进度态，停止脉冲 */
+.takeover.is-doing .takeover-ack { animation: none; background: linear-gradient(180deg, #a8cc45, #8bb52f); box-shadow: 0 10px 26px rgba(120, 160, 40, .4), inset 0 1px rgba(255,255,255,.5); cursor: default; }
+.takeover.is-doing .takeover-ack:hover { transform: none; }
+/* 喝水拼回进度 */
+.takeover-mend { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; color: #b34a2a !important; letter-spacing: .06em; }
+
+/* 反久坐膨胀：swellLevel 1/2/3 时桃屁屁整体放大 */
+.swell-media { transform-origin: center bottom; transition: transform .8s cubic-bezier(.3, .8, .4, 1); }
 
 .pet-menu { position: absolute; z-index: 20; left: 5px; right: 5px; bottom: 5px; padding: 11px; border: 1px solid rgba(121, 76, 50, .13); border-radius: 19px; background: rgba(255, 248, 234, .97); box-shadow: 0 12px 35px rgba(76, 44, 28, .24); color: #68422f; animation: menu-in .2s cubic-bezier(.2,.9,.25,1.1); }
 @keyframes menu-in { from { opacity: 0; transform: translateY(9px) scale(.96); } }

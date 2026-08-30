@@ -17,7 +17,7 @@ describe('desktop pet speech bubble contract', () => {
     expect(renderer).toContain("snapshot.restSession?.pending")
     expect(renderer).toContain("type: 'rest:complete'")
     expect(renderer).toContain('event.stopPropagation()')
-    expect(styles).toContain('bottom: calc(66% + 10px)')
+    expect(styles).toContain('top: 4%')
   })
 
   it('never starts greeting from hover', () => {

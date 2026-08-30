@@ -27,6 +27,23 @@ export interface RecoverySessionSnapshot {
   remainingSeconds: number
 }
 
+/**
+ * 大屏接管：到点提醒、反久坐膨胀、喝水干裂升级时铺满屏幕。
+ * 用户必须点「我去了我去了…」按钮才算认领。
+ */
+export interface TakeoverSnapshot {
+  /** 接管原因，决定桃屁屁动画 + 副文案 */
+  kind: 'water' | 'stand' | 'toilet' | 'eyes' | 'anti-sedentary'
+  /** 主标题（粗体大字） */
+  title: string
+  /** 副文案（桃屁屁第一人称抱怨） */
+  subtitle: string
+  /** 接管起始时间（毫秒） */
+  since: number
+  /** 触发原因：到点忽略分钟数 或 久坐连续分钟数 */
+  reason: string
+}
+
 export interface HealthSnapshot {
   day: string
   pressure: number
@@ -75,6 +92,8 @@ export interface AppSettings {
   longBreakEvery: number
   pressurePerMinute: number
   nickname: string
+  /** 到点提醒的接管强度：standard=大屏接管，gentle=只气泡 */
+  reminderIntensity: 'standard' | 'gentle'
   reminders: Record<ReminderKind, { enabled: boolean; intervalMinutes: number }>
   launchAtLogin: boolean
   soundEnabled: boolean
@@ -89,6 +108,14 @@ export interface AppSnapshot {
   overlay: { id: number; kind: 'rest-reminder' | 'explosion'; messages: string[] } | null
   visual: string
   message: string
+  /** 反久坐膨胀等级：0=正常，1=轻微胖，2=明显胖，3=危险（接近爆） */
+  swellLevel: 0 | 1 | 2 | 3
+  /** 喝水干裂阶段：0=正常，1=轻微干裂，2=严重干裂，3=碎裂 */
+  hydrationStage: 0 | 1 | 2 | 3
+  /** 喝水累计打卡次数（用于修补进度） */
+  hydrateCount: number
+  /** 大屏接管（null 表示无接管） */
+  takeover: TakeoverSnapshot | null
   growth: { level: number; name: string; energy: number; days: number }
   settings: AppSettings
   trends: DailyStats[]
@@ -109,6 +136,7 @@ export type AppAction =
   | { type: 'reminder:snooze'; kind: ReminderKind }
   | { type: 'reminder:undo' }
   | { type: 'rest:complete'; kind: ReminderKind }
+  | { type: 'takeover:acknowledge'; kind: TakeoverSnapshot['kind'] }
   | { type: 'dashboard:open' }
   | { type: 'settings:update'; settings: AppSettings }
 

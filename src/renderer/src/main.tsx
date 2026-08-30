@@ -58,6 +58,21 @@ function getVisualPreview(): VisualPreview | null {
   return previewVisuals[requested]
 }
 
+// preview-only takeover：?takeoverKind=water|stand|toilet|eyes|anti-sedentary 直接渲染接管 UI
+function getTakeoverPreview(): NonNullable<AppSnapshot['takeover']> | null {
+  const requested = new URLSearchParams(location.search).get('takeoverKind')
+  const kinds = ['water', 'stand', 'toilet', 'eyes', 'anti-sedentary'] as const
+  if (!requested || !(kinds as readonly string[]).includes(requested)) return null
+  const copy = {
+    water: { title: '该喝水啦', subtitle: '我都干成这样了，喝口水我就缓过来' },
+    stand: { title: '起来活动一下', subtitle: '我也想蹦两下，跟我一起？' },
+    toilet: { title: '该去厕所啦', subtitle: '别憋着，跟我说一声「我去了」' },
+    eyes: { title: '眼睛休息一下', subtitle: '跟我揉揉眼睛，1–2 分钟就好' },
+    'anti-sedentary': { title: '我撑不住了！', subtitle: '已经连续坐太久了，起来走走我才能消气' }
+  }[requested as typeof kinds[number]]
+  return { kind: requested as NonNullable<AppSnapshot['takeover']>['kind'], ...copy, since: Date.now(), reason: '已忽略 5 分钟（preview）' }
+}
+
 function PetView(): React.JSX.Element {
   const [snapshot, act] = useSnapshot()
   const preview = getVisualPreview()
@@ -144,10 +159,63 @@ function PetView(): React.JSX.Element {
         ? <section className="hover-status" aria-live="polite"><strong>恢复 {formatTime(preview.recoveryRemainingSeconds)}</strong></section>
         : bubbleVisible && !preview && <section className="hover-status" aria-live="polite"><strong>{bubbleCopy}</strong></section>}
     <div className="pet-stage" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
-      <PetMotion visual={preview?.visual ?? snapshot.visual} pressureValue={preview?.pressure ?? snapshot.health.pressure} recovery={preview?.recovery ?? snapshot.health.recovery}/>
+      <PetMotion visual={preview?.visual ?? snapshot.visual} pressureValue={preview?.pressure ?? snapshot.health.pressure} recovery={preview?.recovery ?? snapshot.health.recovery} swellLevel={preview ? 0 : snapshot.swellLevel} hydrationStage={preview ? 0 : snapshot.hydrationStage}/>
     </div>
     {confettiOn && !preview && <Confetti/>}
+    {!preview && snapshot.takeover && <Takeover takeover={snapshot.takeover} hydrateCount={snapshot.hydrateCount} onAck={(kind) => void act({ type: 'takeover:acknowledge', kind })}/>}
+    {!snapshot.takeover && (() => { const t = getTakeoverPreview(); return t ? <Takeover takeover={t} onAck={() => { /* preview 模式：仅展示 UI */ }}/> : null })()}
   </main>
+}
+
+// 大屏接管：到点提醒、反久坐、喝水干裂时铺满屏幕，必须点「我去了我去了…」按钮才能收回。
+// 护眼/活动进入跟做模式：点击按钮后倒计时（护眼 90s / 活动 60s），做完自动确认收下。
+const FOLLOW_ALONG_SECONDS: Partial<Record<NonNullable<AppSnapshot['takeover']>['kind'], number>> = { eyes: 90, stand: 60 }
+const FOLLOW_ALONG_COPY: Record<string, { doing: string; button: string }> = {
+  eyes: { doing: '跟着我，一起揉揉眼睛～', button: '好，跟我一起做！' },
+  stand: { doing: '跟着我跳！起来走两圈～', button: '好，跟我一起跳！' }
+}
+
+function Takeover({ takeover, onAck, hydrateCount = 0 }: {
+  takeover: NonNullable<AppSnapshot['takeover']>
+  onAck: (kind: NonNullable<AppSnapshot['takeover']>['kind']) => void
+  hydrateCount?: number
+}): React.JSX.Element {
+  const visual = takeover.kind === 'water' ? 'dry'
+    : takeover.kind === 'stand' ? 'stretch'
+    : takeover.kind === 'eyes' ? 'eye-strain'
+    : takeover.kind === 'toilet' ? 'toilet'
+    : 'pressure'
+  const followSeconds = FOLLOW_ALONG_SECONDS[takeover.kind]
+  const [remaining, setRemaining] = useState<number | null>(null)
+  const doing = remaining !== null
+  const ackRef = useRef(onAck)
+  ackRef.current = onAck
+  useEffect(() => {
+    if (remaining === null) return
+    if (remaining <= 0) {
+      ackRef.current(takeover.kind)
+      setRemaining(null)
+      return
+    }
+    const timer = window.setTimeout(() => setRemaining(remaining - 1), 1_000)
+    return () => window.clearTimeout(timer)
+  }, [remaining, takeover.kind])
+  return <section className={`takeover is-${takeover.kind}${doing ? ' is-doing' : ''}`} aria-modal="true" role="dialog" aria-labelledby="takeover-title">
+    <div className="takeover-pet">
+      <PetMotion visual={visual} pressureValue={takeover.kind === 'anti-sedentary' ? 100 : 50} recovery={100} swellLevel={takeover.kind === 'anti-sedentary' ? 3 : 0} hydrationStage={takeover.kind === 'water' ? 2 : 0}/>
+    </div>
+    <div className="takeover-copy">
+      <strong id="takeover-title">{takeover.title}</strong>
+      <span>{doing && takeover.kind in FOLLOW_ALONG_COPY ? FOLLOW_ALONG_COPY[takeover.kind].doing : takeover.subtitle}</span>
+      {takeover.kind === 'water' && <small className="takeover-mend" aria-label="喝水拼回进度">碎片拼回 {Math.min(3, hydrateCount)}/3</small>}
+      <small>{doing ? `还剩 ${formatTime(remaining ?? 0)}` : takeover.reason}</small>
+    </div>
+    <button className="takeover-ack" disabled={doing} onClick={() => {
+      if (doing) return
+      if (followSeconds !== undefined) setRemaining(followSeconds)
+      else onAck(takeover.kind)
+    }} autoFocus>{doing ? `跟做中 ${formatTime(remaining ?? 0)}` : '我去了我去了…'}</button>
+  </section>
 }
 
 const habitItems: Array<{ kind: ReminderKind; label: string; asset: string }> = [
@@ -189,7 +257,7 @@ function Dashboard(): React.JSX.Element {
 
   return <main className="cottage" style={{ backgroundImage: `url(${roomBackground})` }}>
     <header className="cottage-topbar">
-      <div className="cottage-brand"><img src={idle} alt=""/><div><strong>桃屁屁</strong><span>你的健康小助手</span></div></div>
+      <div className="cottage-brand"><img src={idle} alt=""/><div><strong>Peach Butt</strong><span>你的健康小助手</span></div></div>
       <div className="date-actions"><time>{date}</time><button ref={settingsTrigger} aria-label="设置" onClick={() => setSettingsOpen(true)}><Settings/></button><button aria-label="关闭" onClick={() => window.close()}><X/></button></div>
     </header>
 

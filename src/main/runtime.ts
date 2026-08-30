@@ -10,6 +10,7 @@ import type {
   AppSettings,
   AppSnapshot,
   RestSessionSnapshot,
+  TakeoverSnapshot,
   UsageState
 } from '../shared/contracts'
 import { emptyDailyStats, type DailyStats, type Storage } from './storage'
@@ -31,7 +32,64 @@ const DEFAULT_SETTINGS: AppSettings = {
     eyes: { enabled: true, intervalMinutes: 20 }
   },
   launchAtLogin: false,
-  soundEnabled: true
+  soundEnabled: true,
+  reminderIntensity: 'standard'
+}
+
+// 反久坐 swellLevel 触发时机：连续专注满「上限的一半」开始涨，每 5 分钟进一档
+const SWELL_TRIGGER_FRACTION = 0.5
+const SWELL_STEP_MINUTES = 5
+const SWELL_LEVELS: ReadonlyArray<{ id: 'swell-1' | 'swell-2' | 'swell-3'; minutesAfterTrigger: number }> = [
+  { id: 'swell-1', minutesAfterTrigger: SWELL_STEP_MINUTES },
+  { id: 'swell-2', minutesAfterTrigger: SWELL_STEP_MINUTES * 2 },
+  { id: 'swell-3', minutesAfterTrigger: SWELL_STEP_MINUTES * 3 }
+]
+
+// 喝水干裂阶段：0 正常 / 1 轻微（≥15 分钟忽略）/ 2 严重（≥30 分钟）/ 3 碎裂（≥45 分钟）
+const HYDRATION_DRY_AT_MINUTES = 15
+const HYDRATION_SEVERE_AT_MINUTES = 30
+const HYDRATION_SHATTER_AT_MINUTES = 45
+
+function computeSwellLevel(continuousWorkStartedAt: number | null, limitMinutes: number, now: number): 0 | 1 | 2 | 3 {
+  if (continuousWorkStartedAt === null) return 0
+  const continuousMinutes = (now - continuousWorkStartedAt) / 60_000
+  const triggerAt = limitMinutes * SWELL_TRIGGER_FRACTION
+  if (continuousMinutes < triggerAt) return 0
+  const overMinutes = continuousMinutes - triggerAt
+  if (overMinutes >= SWELL_LEVELS[2].minutesAfterTrigger) return 3
+  if (overMinutes >= SWELL_LEVELS[1].minutesAfterTrigger) return 2
+  if (overMinutes >= SWELL_LEVELS[0].minutesAfterTrigger) return 1
+  return 0
+}
+
+function computeHydrationStage(reminder: AppSnapshot['reminder'], now: number): 0 | 1 | 2 | 3 {
+  if (!reminder || reminder.kind !== 'water') return 0
+  const ignoredMinutes = (now - reminder.dueAt) / 60_000
+  if (ignoredMinutes >= HYDRATION_SHATTER_AT_MINUTES) return 3
+  if (ignoredMinutes >= HYDRATION_SEVERE_AT_MINUTES) return 2
+  if (ignoredMinutes >= HYDRATION_DRY_AT_MINUTES) return 1
+  return 0
+}
+
+function takeoverCopy(kind: TakeoverSnapshot['kind']): { title: string; subtitle: string } {
+  switch (kind) {
+    case 'water':
+      return { title: '该喝水啦', subtitle: '我都干成这样了，喝口水我就缓过来' }
+    case 'stand':
+      return { title: '起来活动一下', subtitle: '我也想蹦两下，跟我一起？' }
+    case 'toilet':
+      return { title: '该去厕所啦', subtitle: '别憋着，跟我说一声「我去了」' }
+    case 'eyes':
+      return { title: '眼睛休息一下', subtitle: '跟我揉揉眼睛，1–2 分钟就好' }
+    case 'anti-sedentary':
+      return { title: '我撑不住了！', subtitle: '已经连续坐太久了，起来走走我才能消气' }
+  }
+}
+
+function takeoverReason(kind: TakeoverSnapshot['kind'], ignoredMinutes: number, continuousMinutes: number): string {
+  if (kind === 'anti-sedentary') return `连续专注 ${Math.round(continuousMinutes)} 分钟`
+  if (ignoredMinutes > 0) return `已忽略 ${Math.round(ignoredMinutes)} 分钟`
+  return '刚刚到点'
 }
 
 // 压力增速 = 100 / 连续专注上限，保证爆炸前能完整看到变红过程
@@ -200,6 +258,19 @@ export function createRuntime(storage: Storage): Runtime {
   let reconciliationDay = typeof restoredSession.reconciliationDay === 'string' ? restoredSession.reconciliationDay : null
   // 最近一次用户交互（点击/操作），用于「冷落求关注」判断；重启后重新计时
   let lastInteractionAt = now
+  // 喝水累计打卡：每次喝水完成 +1，达到 3 次或 24 小时后重置；用于 hydrateCount 字段
+  let hydrateCount = 0
+  let lastHydrateAt = 0
+  // 记一口水：所有喝水确认路径（点宠/菜单/接管按钮）统一走这里。
+  // 拼满 3 口视为完全修复，下一次喝水重新开轮；24 小时不喝自动清零。
+  const noteHydration = (at: number): void => {
+    if (lastHydrateAt === 0 || at - lastHydrateAt > 24 * 60 * 60_000) hydrateCount = 0
+    hydrateCount = hydrateCount >= 3 ? 1 : hydrateCount + 1
+    lastHydrateAt = at
+  }
+  // 大屏接管：到点提醒或反久坐 swellLevel 3 触发；点 ack 才解除
+  let activeTakeover: TakeoverSnapshot | null = null
+  let takeoverSince = 0
   // 待机连击点击计数：10 秒内连点 3 次以上升级为害羞
   let clickCombo = 0
   let lastClickAt = 0
@@ -453,17 +524,59 @@ export function createRuntime(storage: Storage): Runtime {
       },
       restSession: restSession?.snapshot() ?? null,
       overlay,
-      visual: visual.id,
-      message: visual.message,
-      growth: {
+visual: visual.id,
+    message: visual.message,
+    swellLevel: computeSwellLevel(continuousWorkStartedAt, settings.continuousWorkLimitMinutes, lastTickAt),
+    hydrationStage: computeHydrationStage(reminder, lastTickAt),
+    hydrateCount: hydrateCount,
+    takeover: activeTakeover,
+    growth: {
         level: growthLevelOf(growthEnergy),
         name: GROWTH_LEVELS[growthLevelOf(growthEnergy) - 1].name,
         energy: growthEnergy,
         days: companionDays()
       },
       settings,
-      trends: trends(),
-      monthStats: monthStats()
+    trends: trends(),
+    monthStats: monthStats()
+  }
+  }
+
+  // 构建大屏接管：swellLevel 3（危险阶段）→ 反久坐；其他提醒到点 → 喝水/活动/护眼/如厕
+  const maybeBuildTakeover = (at: number): void => {
+    if (activeTakeover) return
+    if (settings.reminderIntensity !== 'standard') return
+    const h = health.snapshot()
+    if (h.mode === 'deflated') return
+    const p = pomodoro.snapshot()
+    const inWork = p.phase === 'work' || p.phase === 'awaiting_rest_confirmation' ||
+      (p.phase === 'paused' && p.pausedPhase === 'work')
+    if (inWork) return
+    const ignoredMinutes = reminder ? (at - reminder.dueAt) / 60_000 : 0
+    if (reminder && ignoredMinutes >= 5) {
+      const copy = takeoverCopy(reminder.kind as TakeoverSnapshot['kind'])
+      activeTakeover = {
+        kind: reminder.kind as TakeoverSnapshot['kind'],
+        title: copy.title,
+        subtitle: copy.subtitle,
+        since: at,
+        reason: takeoverReason(reminder.kind as TakeoverSnapshot['kind'], ignoredMinutes, 0)
+      }
+      takeoverSince = at
+      return
+    }
+    const continuousMinutes = continuousWorkStartedAt ? (at - continuousWorkStartedAt) / 60_000 : 0
+    const swell = computeSwellLevel(continuousWorkStartedAt, settings.continuousWorkLimitMinutes, at)
+    if (swell === 3 && continuousWorkStartedAt !== null) {
+      const copy = takeoverCopy('anti-sedentary')
+      activeTakeover = {
+        kind: 'anti-sedentary',
+        title: copy.title,
+        subtitle: copy.subtitle,
+        since: at,
+        reason: takeoverReason('anti-sedentary', 0, continuousMinutes)
+      }
+      takeoverSince = at
     }
   }
 
@@ -579,6 +692,7 @@ export function createRuntime(storage: Storage): Runtime {
     applyReconciliationBonus(healthEvents, effectiveNow)
     mutateStats(healthEvents, effectiveNow)
     syncGrowthEnergy(effectiveNow)
+    maybeBuildTakeover(effectiveNow)
     advanceUsage(effectiveNow)
     persistRuntimeState()
     return publish()
@@ -664,6 +778,7 @@ export function createRuntime(storage: Storage): Runtime {
         } else if (reminder) {
           const kind = reminder.kind
           const wasDry = kind === 'water' && actionNow - reminder.dueAt >= 15 * 60_000
+          if (kind === 'water') noteHydration(actionNow)
           events.push(...health.completeHabit(kind, actionNow))
           reminders.complete(kind, actionNow)
           reminder = null
@@ -697,6 +812,7 @@ export function createRuntime(storage: Storage): Runtime {
       }
       if (action.type === 'reminder:complete') {
         const wasDry = action.kind === 'water' && reminder?.kind === 'water' && actionNow - reminder.dueAt >= 15 * 60_000
+        if (action.kind === 'water') noteHydration(actionNow)
         events.push(...health.completeHabit(action.kind, actionNow))
         reminders.complete(action.kind, actionNow)
         reminder = null
@@ -713,6 +829,34 @@ export function createRuntime(storage: Storage): Runtime {
           reminders.complete(action.kind, actionNow)
           reminder = null
           visualOverride = null
+        }
+      }
+      if (action.type === 'takeover:acknowledge') {
+        const target = activeTakeover
+        if (target && target.kind === action.kind) {
+          activeTakeover = null
+          takeoverSince = 0
+          // 喝水接管确认：记一口水（拼回进度 +1）；连续 3 口后清零；24 小时后自动清零
+          if (action.kind === 'water') {
+            noteHydration(actionNow)
+            events.push(...health.completeHabit('water', actionNow))
+            reminders.complete('water', actionNow)
+            reminder = null
+          }
+          // 反久坐接管确认：清空连续专注起点（主动认错休息），并记一次活动打卡泄压
+          if (action.kind === 'anti-sedentary') {
+            continuousWorkStartedAt = null
+            events.push(...health.completeHabit('stand', actionNow))
+            reminders.complete('stand', actionNow)
+            visualOverride = { id: 'happy', until: actionNow + 1800, message: '呼…终于喘过来了，谢谢你听我说话' }
+          }
+          // 护眼/活动/如厕接管确认：记一次打卡 + 撒花式 happy
+          if (action.kind === 'stand' || action.kind === 'eyes' || action.kind === 'toilet') {
+            events.push(...health.completeHabit(action.kind, actionNow))
+            reminders.complete(action.kind, actionNow)
+            reminder = null
+            visualOverride = { id: 'happy', until: actionNow + 1800, message: '感觉好多了，谢谢你～' }
+          }
         }
       }
       if (action.type === 'reminder:snooze') {
@@ -824,6 +968,9 @@ function sanitizeSettings(candidate: unknown, fallback: AppSettings): AppSetting
     pressurePerMinute: positive(source.pressurePerMinute, fallback.pressurePerMinute, 0.01, 100),
     nickname: typeof source.nickname === 'string' ? source.nickname.trim().slice(0, 12) : fallback.nickname,
     reminders: reminderSettings,
+    reminderIntensity: source.reminderIntensity === 'gentle' || source.reminderIntensity === 'standard'
+      ? source.reminderIntensity
+      : fallback.reminderIntensity,
     launchAtLogin: typeof source.launchAtLogin === 'boolean' ? source.launchAtLogin : fallback.launchAtLogin,
     soundEnabled: typeof source.soundEnabled === 'boolean' ? source.soundEnabled : fallback.soundEnabled
   }
