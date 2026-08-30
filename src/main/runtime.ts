@@ -21,7 +21,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   continuousWorkLimitMinutes: 40,
   longBreakMinutes: 15,
   longBreakEvery: 4,
+  // 仅作向后兼容保留：实际压力增速由连续专注上限推导（见 pressureRateFor）
   pressurePerMinute: 1,
+  nickname: '',
   reminders: {
     water: { enabled: true, intervalMinutes: 45 },
     stand: { enabled: true, intervalMinutes: 50 },
@@ -30,6 +32,12 @@ const DEFAULT_SETTINGS: AppSettings = {
   },
   launchAtLogin: false,
   soundEnabled: true
+}
+
+// 压力增速 = 100 / 连续专注上限，保证爆炸前能完整看到变红过程
+// （旧逻辑固定 1 点/分钟，默认 40 分钟爆炸时压力才到 40，从未进入压力形态）
+function pressureRateFor(value: AppSettings): number {
+  return 100 / value.continuousWorkLimitMinutes
 }
 
 const reminderCopy: Record<ReminderKind, string> = {
@@ -45,6 +53,10 @@ const restVisual: Record<ReminderKind, string> = {
   water: 'water-prompt', stand: 'activity', toilet: 'toilet', eyes: 'eye-strain'
 }
 const TRANSFORM_OVERRIDE_MS = 6_500
+const GREETING_OVERRIDE_MS = 10_150
+const AMBIENCE_MIN_DELAY_MS = 60_000
+const AMBIENCE_DELAY_SPREAD_MS = 60_000
+const AMBIENCE_RETRY_MS = 30_000
 const restOverlayMessages = [
   '起来活动一下啦！',
   '要去喝水啦！',
@@ -64,6 +76,7 @@ interface RuntimeSessionState {
   recoveryRestStartedAt: number | null
   overlaySequence: number
   usage: UsageCheckpoint | null
+  lastGreetedDay: string | null
 }
 
 interface PersistedRuntimeState {
@@ -105,7 +118,7 @@ export function createRuntime(storage: Storage): Runtime {
     : atomic?.session)
   const health = createHealthEngine({
     initialNow: now,
-    pressurePerMinute: settings.pressurePerMinute,
+    pressurePerMinute: pressureRateFor(settings),
     initialState: restoredHealth ?? undefined
   })
   let pomodoro = createPomodoro({
@@ -161,12 +174,28 @@ export function createRuntime(storage: Storage): Runtime {
   let lastCompletedHabit: { completion: HabitCompletion; at: number } | null = null
   let restRotationAt: number | null = restSession ? now : null
   let visualOverride: { id: string; until: number; message: string } | null = null
+  let lastGreetedDay = restoredSession.lastGreetedDay
   const listeners = new Set<(snapshot: AppSnapshot) => void>()
 
   const dateKey = (ts = Date.now()): string => {
     const d = new Date(ts)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
+
+  const callName = (): string => settings.nickname ? `${settings.nickname}，` : ''
+
+  const greetingMessage = (at: number): string => {
+    const hour = new Date(at).getHours()
+    const name = callName()
+    if (hour >= 5 && hour < 11) return `${name}早上好呀，今天也一起加油～`
+    if (hour >= 11 && hour < 14) return `${name}中午好，记得按时吃饭哦`
+    if (hour >= 14 && hour < 18) return `${name}下午好，我会安静陪你`
+    if (hour >= 18 && hour < 23) return `${name}晚上好，别太累啦`
+    return `${name}这么晚还在忙？我陪你，但早点休息哦`
+  }
+
+  const ambienceDelay = (): number => AMBIENCE_MIN_DELAY_MS + Math.random() * AMBIENCE_DELAY_SPREAD_MS
+  let nextAmbienceAt = now + ambienceDelay()
 
   const currentUsageState = (): UsageState => {
     if (health.snapshot().mode === 'deflated') return recoveryRestStartedAt === null ? 'deflated' : 'recovering'
@@ -181,6 +210,12 @@ export function createRuntime(storage: Storage): Runtime {
 
   let usage: UsageCheckpoint = { state: currentUsageState(), startedAt: now, checkpointAt: now }
 
+  // 每日首次见面问候：当天第一次启动播一次打招呼（瘪气锁定时不打扰）
+  if (health.snapshot().mode !== 'deflated' && lastGreetedDay !== dateKey(now)) {
+    lastGreetedDay = dateKey(now)
+    visualOverride = { id: 'greeting', until: now + GREETING_OVERRIDE_MS, message: greetingMessage(now) }
+  }
+
   const persistRuntimeState = (): void => {
     storage.saveRuntimeState('runtime', {
       health: health.snapshot(),
@@ -190,7 +225,8 @@ export function createRuntime(storage: Storage): Runtime {
         continuousWorkStartedAt,
         recoveryRestStartedAt,
         overlaySequence,
-        usage
+        usage,
+        lastGreetedDay
       }
     } satisfies PersistedRuntimeState)
   }
@@ -277,11 +313,11 @@ export function createRuntime(storage: Storage): Runtime {
     if (visualOverride?.id === 'exploding' && visualOverride.until > lastTickAt) return visualOverride
     if (h.mode === 'deflated') {
       return recoveryRestStartedAt === null
-        ? { id: 'deflated', message: '我瘪掉了……点我并离开电脑休息 5 分钟' }
+        ? { id: 'deflated', message: `${callName()}我瘪掉了……点我并离开电脑休息 5 分钟` }
         : { id: 'deflated', message: '正在恢复，离开电脑休息满 5 分钟吧' }
     }
     const session = restSession?.snapshot()
-    if (session?.current) return { id: restVisual[session.current], message: reminderCopy[session.current] }
+    if (session?.current) return { id: restVisual[session.current], message: callName() + reminderCopy[session.current] }
     if (session?.allCompleted && (p.phase === 'break' || (p.phase === 'paused' && p.pausedPhase === 'break'))) {
       return session.longBreak
         ? { id: 'sleep', message: '四项都完成啦，安心睡一会儿' }
@@ -290,9 +326,9 @@ export function createRuntime(storage: Storage): Runtime {
     if (p.phase === 'awaiting_rest_confirmation') return { id: 'stretch', message: '番茄结束啦，点我开始休息' }
     if (p.phase === 'break' && p.breakKind === 'long') return { id: 'sleep', message: '长休息中，好好放松吧' }
     if (reminder) {
-      if (reminder.kind === 'water' && lastTickAt - reminder.dueAt >= 15 * 60_000) return { id: 'dry', message: '我都渴得干裂啦，快喝口水吧' }
-      if (reminder.kind === 'eyes' && lastTickAt - reminder.dueAt >= 10 * 60_000) return { id: 'eye-strain', message: '眼睛又红又干啦，看看远处吧' }
-      return { id: reminderVisual[reminder.kind], message: reminderCopy[reminder.kind] }
+      if (reminder.kind === 'water' && lastTickAt - reminder.dueAt >= 15 * 60_000) return { id: 'dry', message: `${callName()}我都渴得干裂啦，快喝口水吧` }
+      if (reminder.kind === 'eyes' && lastTickAt - reminder.dueAt >= 10 * 60_000) return { id: 'eye-strain', message: `${callName()}眼睛又红又干啦，看看远处吧` }
+      return { id: reminderVisual[reminder.kind], message: callName() + reminderCopy[reminder.kind] }
     }
     if (visualOverride?.id === 'transform' && visualOverride.until > lastTickAt) return visualOverride
     const selected = selectPetVisual({
@@ -300,7 +336,7 @@ export function createRuntime(storage: Storage): Runtime {
       pressure: h.pressure,
       greeting: visualOverride?.id === 'greeting' && visualOverride.until > lastTickAt
     })
-    if (selected === 'pressure') return { id: selected, message: h.pressure >= 80 ? '快要爆炸了！现在就起来活动' : '坐得太久，我越来越红啦' }
+    if (selected === 'pressure') return { id: selected, message: h.pressure >= 80 ? `${callName()}快要爆炸了！现在就起来活动` : '坐得太久，我越来越红啦' }
     if (selected === 'focus') {
       const message = visualOverride?.id === 'focus' && visualOverride.until > lastTickAt ? visualOverride.message : '专注中，我也在认真工作'
       return { id: selected, message }
@@ -417,6 +453,17 @@ export function createRuntime(storage: Storage): Runtime {
       reminder = { kind: due[0].kind, dueAt: effectiveNow }
       if (Notification.isSupported()) new Notification({ title: '桃屁屁提醒', body: reminderCopy[due[0].kind] }).show()
     }
+    // 待机随机小动作：每 1–2 分钟插播一次开心/伸懒腰，让宠物有「活着」的感觉
+    if (effectiveNow >= nextAmbienceAt) {
+      if (currentVisual().id === 'idle' && !visualOverride) {
+        visualOverride = Math.random() < 0.5
+          ? { id: 'happy', until: effectiveNow + 2_000, message: '嘿嘿，活动一下筋骨～' }
+          : { id: 'rest', until: effectiveNow + 4_200, message: '伸个懒腰，你也一起？' }
+        nextAmbienceAt = effectiveNow + ambienceDelay()
+      } else {
+        nextAmbienceAt = effectiveNow + AMBIENCE_RETRY_MS
+      }
+    }
     mutateStats(healthEvents, effectiveNow)
     advanceUsage(effectiveNow)
     persistRuntimeState()
@@ -514,7 +561,10 @@ export function createRuntime(storage: Storage): Runtime {
           visualOverride = { id: 'happy', until: actionNow + 1200, message: '嘿嘿，被你发现啦' }
         }
       }
-      if (action.type === 'pet:greet') visualOverride = { id: 'greeting', until: actionNow + 10_150, message: '嗨！我会安静陪你，需要时再叫我' }
+      if (action.type === 'pet:greet') {
+        lastGreetedDay = dateKey(actionNow)
+        visualOverride = { id: 'greeting', until: actionNow + GREETING_OVERRIDE_MS, message: greetingMessage(actionNow) }
+      }
       if (action.type === 'pet:size') {
         settings = sanitizeSettings({ ...settings, petSize: action.size }, settings)
         storage.setSetting('settings', settings)
@@ -560,7 +610,7 @@ export function createRuntime(storage: Storage): Runtime {
           focusing: wasFocusing
         }))
         settings = sanitizeSettings(action.settings, settings)
-        health.setPressurePerMinute(settings.pressurePerMinute)
+        health.setPressurePerMinute(pressureRateFor(settings))
         storage.setSetting('settings', settings)
         reminders.updateSettings(settings.reminders, actionNow)
         pomodoro = createPomodoro({ ...settings, initialNow: actionNow, initialState: previous })
@@ -580,6 +630,7 @@ export function createRuntime(storage: Storage): Runtime {
       }
       mutateStats(events, actionNow)
       advanceUsage(actionNow)
+      nextAmbienceAt = Math.max(nextAmbienceAt, actionNow + 45_000)
       persistRuntimeState()
       return publish()
     },
@@ -642,6 +693,7 @@ function sanitizeSettings(candidate: unknown, fallback: AppSettings): AppSetting
     longBreakMinutes: positive(source.longBreakMinutes, fallback.longBreakMinutes, 1, 240),
     longBreakEvery: Math.round(positive(source.longBreakEvery, fallback.longBreakEvery, 1, 24)),
     pressurePerMinute: positive(source.pressurePerMinute, fallback.pressurePerMinute, 0.01, 100),
+    nickname: typeof source.nickname === 'string' ? source.nickname.trim().slice(0, 12) : fallback.nickname,
     reminders: reminderSettings,
     launchAtLogin: typeof source.launchAtLogin === 'boolean' ? source.launchAtLogin : fallback.launchAtLogin,
     soundEnabled: typeof source.soundEnabled === 'boolean' ? source.soundEnabled : fallback.soundEnabled
@@ -708,7 +760,8 @@ function validateRuntimeSession(value: unknown): RuntimeSessionState {
     overlaySequence: Number.isSafeInteger(value.overlaySequence) && (value.overlaySequence as number) >= 0
       ? value.overlaySequence as number
       : 0,
-    usage: validUsageCheckpoint(value.usage)
+    usage: validUsageCheckpoint(value.usage),
+    lastGreetedDay: typeof value.lastGreetedDay === 'string' ? value.lastGreetedDay : null
   }
 }
 
@@ -734,7 +787,8 @@ function emptyRuntimeSession(): RuntimeSessionState {
     continuousWorkStartedAt: null,
     recoveryRestStartedAt: null,
     overlaySequence: 0,
-    usage: null
+    usage: null,
+    lastGreetedDay: null
   }
 }
 

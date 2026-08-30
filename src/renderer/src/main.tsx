@@ -255,6 +255,9 @@ function SettingsPanel({ draft, setDraft, save, close }: { draft: AppSettings; s
   return <div className="settings-scrim" onMouseDown={close}>
     <section ref={panel} className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" onKeyDown={trapFocus} onMouseDown={(event) => event.stopPropagation()}>
       <header><div><span>桃桃设置</span><strong id="settings-title">按你的节奏来</strong></div><button ref={closeButton} aria-label="关闭设置" onClick={close}><X/></button></header>
+      <label className="setting-nickname">怎么称呼你
+        <input type="text" maxLength={12} placeholder="留个名字，桃屁屁会喊你" value={draft.nickname} onChange={(e) => setDraft({ ...draft, nickname: e.target.value })}/>
+      </label>
       <div className="setting-pair">
         <label>专注时长<input type="number" min="1" max="120" value={draft.workMinutes} onChange={(e) => setDraft({ ...draft, workMinutes: Number(e.target.value) })}/><span>分钟</span></label>
         <label>连续专注上限<input type="number" min="1" max="240" value={draft.continuousWorkLimitMinutes} onChange={(e) => setDraft({ ...draft, continuousWorkLimitMinutes: Number(e.target.value) })}/><span>分钟</span></label>
@@ -312,13 +315,11 @@ function getBubbleCopy(snapshot: AppSnapshot, focusing: boolean): string {
   if (focusing) return `还剩 ${formatTime(snapshot.pomodoro.remainingSeconds)}`
   if (snapshot.pomodoro.phase === 'break') return `休息 ${formatTime(snapshot.pomodoro.remainingSeconds)}`
   if (snapshot.pomodoro.phase === 'awaiting_rest_confirmation') return '点我开始休息'
-  if (snapshot.reminder?.kind === 'water') return snapshot.visual === 'dry' ? '快喝水，我干裂啦' : '该喝水啦'
-  if (snapshot.reminder?.kind === 'stand') return '起来走走吧'
-  if (snapshot.reminder?.kind === 'eyes') return snapshot.visual === 'eye-strain' ? '眼睛红了，休息一下' : '看看远处吧'
-  if (snapshot.reminder?.kind === 'toilet') return '该去厕所啦'
-  if (snapshot.visual === 'pressure') return '该起来走走啦'
-  if (snapshot.visual === 'deflated') return '帮我恢复元气吧'
-  if (snapshot.visual === 'greeting' || snapshot.visual === 'wave') return '嗨，我陪着你'
+  // 提醒、压力、瘪气、问候和短暂反馈直接采用主进程文案（含昵称称呼）
+  if (snapshot.reminder) return snapshot.message
+  if (['pressure', 'deflated', 'greeting', 'wave', 'happy', 'rest', 'transform', 'hydrating'].includes(snapshot.visual)) {
+    return snapshot.message
+  }
   return '我会安静陪你'
 }
 

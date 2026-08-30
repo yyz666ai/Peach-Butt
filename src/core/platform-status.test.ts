@@ -26,6 +26,7 @@ function snapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
       longBreakMinutes: 15,
       longBreakEvery: 4,
       pressurePerMinute: 1,
+      nickname: '',
       reminders: {
         water: { enabled: true, intervalMinutes: 60 },
         stand: { enabled: true, intervalMinutes: 45 },

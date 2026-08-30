@@ -102,14 +102,30 @@ describe('runtime data integrity', () => {
     vi.useRealTimers()
   })
 
-  it('starts idle without playing the full greeting automatically', () => {
-    const runtime = createRuntime(memoryStorage())
-    runtimes.push(runtime)
+  it('greets on the first launch of the day and stays idle on later launches', () => {
+    const storage = memoryStorage()
+    const first = createRuntime(storage)
+    runtimes.push(first)
 
-    expect(runtime.snapshot()).toMatchObject({
+    expect(first.snapshot().visual).toBe('greeting')
+    expect(first.snapshot().message).toContain('早上好')
+
+    const second = createRuntime(storage)
+    runtimes.push(second)
+
+    expect(second.snapshot()).toMatchObject({
       visual: 'idle',
       message: '点我互动，右键可以开始专注'
     })
+  })
+
+  it('addresses the user by nickname in the daily greeting', () => {
+    const storage = memoryStorage()
+    storage.settings.set('settings', { nickname: '小明' })
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+
+    expect(runtime.snapshot().message).toContain('小明，早上好')
   })
 
   it('returns every day of the current month with missing dates zero-filled', () => {
@@ -142,9 +158,9 @@ describe('runtime data integrity', () => {
     const second = createRuntime(storage)
     runtimes.push(second)
 
-    expect(second.snapshot().health).toMatchObject({ pressure: 10, score: 8 })
+    expect(second.snapshot().health).toMatchObject({ pressure: 55, score: 8 })
     expect(storage.runtime.get('runtime')).toMatchObject({
-      health: { pressure: 10, score: 8 },
+      health: { pressure: 55, score: 8 },
       pomodoro: expect.any(Object),
       session: expect.any(Object)
     })
@@ -385,7 +401,7 @@ describe('runtime data integrity', () => {
     runtime.tick(start + 40 * 60_000, 0)
 
     expect(runtime.snapshot().health.pressure).toBe(0)
-    expect(storage.daily.get('2026-08-20')?.pressurePeak).toBe(40)
+    expect(storage.daily.get('2026-08-20')?.pressurePeak).toBe(100)
   })
 
   it('keeps completed pomodoros when work duration or settings change', () => {
@@ -551,6 +567,27 @@ describe('runtime data integrity', () => {
     runtime.tick(start + 9_500, 0)
 
     expect(runtime.snapshot().visual).toBe('greeting')
+  })
+
+  it('plays a random ambience clip after a stretch of quiet idle time', () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+    try {
+      const runtime = createRuntime(memoryStorage())
+      runtimes.push(runtime)
+
+      runtime.tick(start + 11_000, 0)
+      expect(runtime.snapshot().visual).toBe('idle')
+
+      // random = 0 → 首次插播在 60 秒整
+      runtime.tick(start + 61_000, 0)
+      expect(runtime.snapshot().visual).toBe('happy')
+
+      // 插播结束回到待机
+      runtime.tick(start + 64_000, 0)
+      expect(runtime.snapshot().visual).toBe('idle')
+    } finally {
+      random.mockRestore()
+    }
   })
 
   it('turns every completed pomodoro into a standing reminder before the break starts', () => {
@@ -898,7 +935,7 @@ describe('runtime data integrity', () => {
 
     expect(runtime.snapshot()).toMatchObject({
       pomodoro: { phase: 'awaiting_rest_confirmation' },
-      health: { pressure: 2, continuousActiveSeconds: 120 }
+      health: { pressure: 5, continuousActiveSeconds: 120 }
     })
   })
 
@@ -1056,7 +1093,7 @@ describe('runtime data integrity', () => {
     })
   })
 
-  it('applies pressurePerMinute changes without losing current health state', () => {
+  it('derives the pressure rate from the continuous work limit', () => {
     const runtime = createRuntime(memoryStorage())
     runtimes.push(runtime)
     runtime.dispatch({ type: 'pomodoro:start' })
@@ -1064,14 +1101,14 @@ describe('runtime data integrity', () => {
 
     runtime.dispatch({
       type: 'settings:update',
-      settings: { ...runtime.snapshot().settings, pressurePerMinute: 2 }
+      settings: { ...runtime.snapshot().settings, continuousWorkLimitMinutes: 20 }
     })
+    // 前 1 分钟按默认 40 分钟上限累计：100 / 40 = 2.5 点
+    expect(runtime.snapshot().health.pressure).toBeCloseTo(2.5)
     runtime.tick(start + 120_000, 0)
 
-    expect(runtime.snapshot()).toMatchObject({
-      settings: { pressurePerMinute: 2 },
-      health: { pressure: 3 }
-    })
+    // 上限改为 20 分钟后增速变为 100 / 20 = 5 点/分钟
+    expect(runtime.snapshot().health.pressure).toBeCloseTo(7.5)
   })
 
   it('uses a monotonic runtime clock for health, pomodoro and usage', () => {

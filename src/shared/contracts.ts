@@ -74,6 +74,7 @@ export interface AppSettings {
   longBreakMinutes: number
   longBreakEvery: number
   pressurePerMinute: number
+  nickname: string
   reminders: Record<ReminderKind, { enabled: boolean; intervalMinutes: number }>
   launchAtLogin: boolean
   soundEnabled: boolean
