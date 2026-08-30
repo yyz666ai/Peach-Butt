@@ -24,4 +24,3 @@ assets/frames/
 assets/video/source/*.mp4
 assets/video/source/*.mov
 electron.vite.config.*.mjs
-electron.vite.config.*.mjs
