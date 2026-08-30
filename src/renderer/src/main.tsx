@@ -64,6 +64,7 @@ function PetView(): React.JSX.Element {
   const bubbleTimer = useRef<number | null>(null)
   const lastBubbleKey = useRef('')
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
+  const patTimer = useRef<number | null>(null)
   const showBubble = (): void => {
     setBubbleVisible(true)
     if (bubbleTimer.current !== null) window.clearTimeout(bubbleTimer.current)
@@ -71,7 +72,17 @@ function PetView(): React.JSX.Element {
   }
   useEffect(() => () => {
     if (bubbleTimer.current !== null) window.clearTimeout(bubbleTimer.current)
+    if (patTimer.current !== null) window.clearTimeout(patTimer.current)
   }, [])
+  // 摸头：悬停超过 2 秒，桃屁屁舒服地眯眼享受（每次悬停最多触发一次）
+  useEffect(() => {
+    if (petHovered && !preview) {
+      patTimer.current = window.setTimeout(() => { void act({ type: 'pet:pat' }) }, 2_000)
+    } else if (patTimer.current !== null) {
+      window.clearTimeout(patTimer.current)
+      patTimer.current = null
+    }
+  }, [petHovered, preview])
   useEffect(() => {
     if (preview) return
     if (!snapshot) return
@@ -317,7 +328,7 @@ function getBubbleCopy(snapshot: AppSnapshot, focusing: boolean): string {
   if (snapshot.pomodoro.phase === 'awaiting_rest_confirmation') return '点我开始休息'
   // 提醒、压力、瘪气、问候和短暂反馈直接采用主进程文案（含昵称称呼）
   if (snapshot.reminder) return snapshot.message
-  if (['pressure', 'deflated', 'greeting', 'wave', 'happy', 'rest', 'transform', 'hydrating'].includes(snapshot.visual)) {
+  if (['pressure', 'deflated', 'greeting', 'wave', 'happy', 'rest', 'transform', 'hydrating', 'pet', 'bored'].includes(snapshot.visual)) {
     return snapshot.message
   }
   return '我会安静陪你'

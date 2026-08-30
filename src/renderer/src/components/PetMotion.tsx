@@ -12,6 +12,8 @@ import eyeStrainMotion from '../../../../assets/video/generated/eye-strain.webm'
 import activityMotion from '../../../../assets/video/generated/activity.webm'
 import happyMotion from '../../../../assets/video/generated/happy.webm'
 import restMotion from '../../../../assets/video/generated/rest.webm'
+import boredMotion from '../../../../assets/video/generated/bored.webm'
+import petMotion from '../../../../assets/video/generated/pet.webm'
 import idle from '../../../../assets/generated/final/idle.png'
 import idleMotionStill from '../../../../assets/generated/final/idle-motion.png'
 import eyeStrain from '../../../../assets/generated/final/eye-strain.png'
@@ -38,7 +40,9 @@ const clips = {
   rest: { src: restMotion, ...clipTimelines.rest },
   dry: { src: dry, ...clipTimelines.dry },
   hydrating: { src: dry, ...clipTimelines.hydrating },
-  'water-prompt': { src: dry, ...clipTimelines['water-prompt'] }
+  'water-prompt': { src: dry, ...clipTimelines['water-prompt'] },
+  bored: { src: boredMotion, ...clipTimelines.bored },
+  pet: { src: petMotion, ...clipTimelines.pet }
 } as const
 
 const stills: Record<string, string> = { idle: idleMotionStill, 'eye-strain': eyeStrain, deflated, drink, stretch, 'eye-rest': eyeRest, reminder: idle }

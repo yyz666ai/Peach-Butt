@@ -17,6 +17,8 @@
     { "id": "dry", "file": "generated/dry.webm", "role": "喝水提醒未响应时的干裂阶段", "start": 0.08, "end": 1.45, "playMode": "once" },
     { "id": "hydrating", "file": "generated/dry.webm", "role": "喝水打卡后的恢复阶段", "start": 1.45, "end": 9.8, "playMode": "once" },
     { "id": "pressure", "file": "generated/pressure.webm", "role": "按久坐压力定格到逐渐变红、膨胀的状态", "start": 0, "end": 5.3, "playMode": "scrub" },
-    { "id": "explosion", "file": "generated/explosion.webm", "role": "只保留桃子破裂瞬间，不保留椅子尾帧", "start": 0, "end": 0.5, "playMode": "once" }
+    { "id": "explosion", "file": "generated/explosion.webm", "role": "只保留桃子破裂瞬间，不保留椅子尾帧", "start": 0, "end": 0.5, "playMode": "once" },
+    { "id": "bored", "file": "generated/bored.webm", "role": "idle 超过 10 分钟无交互时的无聊求关注插播（MiniMax-H3 生成，24fps）", "start": 0, "end": 5, "playMode": "once", "fps": 24 },
+    { "id": "pet", "file": "generated/pet.webm", "role": "悬停超过 2 秒的摸头享受反馈（MiniMax-H3 生成，24fps）", "start": 0, "end": 5, "playMode": "once", "fps": 24 }
   ]
 }

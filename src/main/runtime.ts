@@ -54,6 +54,9 @@ const restVisual: Record<ReminderKind, string> = {
 }
 const TRANSFORM_OVERRIDE_MS = 6_500
 const GREETING_OVERRIDE_MS = 10_150
+const PET_PAT_OVERRIDE_MS = 5_100
+const BORED_OVERRIDE_MS = 5_100
+const BORED_AFTER_IDLE_MS = 10 * 60_000
 const AMBIENCE_MIN_DELAY_MS = 60_000
 const AMBIENCE_DELAY_SPREAD_MS = 60_000
 const AMBIENCE_RETRY_MS = 30_000
@@ -175,6 +178,8 @@ export function createRuntime(storage: Storage): Runtime {
   let restRotationAt: number | null = restSession ? now : null
   let visualOverride: { id: string; until: number; message: string } | null = null
   let lastGreetedDay = restoredSession.lastGreetedDay
+  // 最近一次用户交互（点击/操作），用于「冷落求关注」判断；重启后重新计时
+  let lastInteractionAt = now
   const listeners = new Set<(snapshot: AppSnapshot) => void>()
 
   const dateKey = (ts = Date.now()): string => {
@@ -453,6 +458,16 @@ export function createRuntime(storage: Storage): Runtime {
       reminder = { kind: due[0].kind, dueAt: effectiveNow }
       if (Notification.isSupported()) new Notification({ title: '桃屁屁提醒', body: reminderCopy[due[0].kind] }).show()
     }
+    // 冷落求关注：idle 状态下超过 10 分钟没有任何用户交互，插播一次无聊动作
+    // （currentVisual() 会顺带清理已过期的 override，放在条件最前面）
+    if (
+      effectiveNow - lastInteractionAt >= BORED_AFTER_IDLE_MS &&
+      currentVisual().id === 'idle'
+    ) {
+      visualOverride = { id: 'bored', until: effectiveNow + BORED_OVERRIDE_MS, message: `${callName()}好无聊呀……理理我嘛` }
+      lastInteractionAt = effectiveNow
+      nextAmbienceAt = effectiveNow + ambienceDelay()
+    }
     // 待机随机小动作：每 1–2 分钟插播一次开心/伸懒腰，让宠物有「活着」的感觉
     if (effectiveNow >= nextAmbienceAt) {
       if (currentVisual().id === 'idle' && !visualOverride) {
@@ -565,6 +580,13 @@ export function createRuntime(storage: Storage): Runtime {
         lastGreetedDay = dateKey(actionNow)
         visualOverride = { id: 'greeting', until: actionNow + GREETING_OVERRIDE_MS, message: greetingMessage(actionNow) }
       }
+      // 摸头：悬停超过 2 秒触发，只在无提醒、无休息轮播、非专注时享受地眯眼
+      if (action.type === 'pet:pat' && !locked) {
+        const phase = pomodoro.snapshot().phase
+        if (!reminder && !restSession && phase !== 'work' && phase !== 'awaiting_rest_confirmation') {
+          visualOverride = { id: 'pet', until: actionNow + PET_PAT_OVERRIDE_MS, message: '好舒服呀……再摸摸' }
+        }
+      }
       if (action.type === 'pet:size') {
         settings = sanitizeSettings({ ...settings, petSize: action.size }, settings)
         storage.setSetting('settings', settings)
@@ -630,6 +652,7 @@ export function createRuntime(storage: Storage): Runtime {
       }
       mutateStats(events, actionNow)
       advanceUsage(actionNow)
+      lastInteractionAt = actionNow
       nextAmbienceAt = Math.max(nextAmbienceAt, actionNow + 45_000)
       persistRuntimeState()
       return publish()

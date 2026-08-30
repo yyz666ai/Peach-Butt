@@ -102,6 +102,7 @@ export type AppAction =
   | { type: 'pomodoro:cancel' }
   | { type: 'pet:click' }
   | { type: 'pet:greet' }
+  | { type: 'pet:pat' }
   | { type: 'pet:size'; size: number }
   | { type: 'reminder:complete'; kind: ReminderKind }
   | { type: 'reminder:snooze'; kind: ReminderKind }

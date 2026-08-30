@@ -128,6 +128,53 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot().message).toContain('小明，早上好')
   })
 
+  it('enjoys a head pat with the pet clip when idle', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+
+    runtime.dispatch({ type: 'pet:pat' })
+
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'pet',
+      message: '好舒服呀……再摸摸'
+    })
+  })
+
+  it('ignores head pats while focusing on pomodoro work', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'pomodoro:start' })
+    vi.setSystemTime(start + 8_000)
+    runtime.tick(start + 8_000, 0)
+
+    runtime.dispatch({ type: 'pet:pat' })
+
+    expect(runtime.snapshot().visual).toBe('focus')
+  })
+
+  it('plays the bored clip after ten idle minutes without interaction', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+
+    runtime.tick(start + 10 * 60_000, 600)
+
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'bored',
+      message: '好无聊呀……理理我嘛'
+    })
+  })
+
+  it('does not get bored while a reminder is waiting for the user', () => {
+    const storage = memoryStorage()
+    storage.settings.set('settings', { reminders: { water: { enabled: true, intervalMinutes: 5 }, stand: { enabled: true, intervalMinutes: 50 }, toilet: { enabled: true, intervalMinutes: 120 }, eyes: { enabled: true, intervalMinutes: 20 } } })
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+
+    runtime.tick(start + 6 * 60_000, 0)
+
+    expect(runtime.snapshot().visual).not.toBe('bored')
+  })
+
   it('returns every day of the current month with missing dates zero-filled', () => {
     const storage = memoryStorage()
     storage.daily.set('2026-08-02', {
