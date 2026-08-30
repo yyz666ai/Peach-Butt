@@ -458,7 +458,8 @@ export function createRuntime(storage: Storage): Runtime {
       growth: {
         level: growthLevelOf(growthEnergy),
         name: GROWTH_LEVELS[growthLevelOf(growthEnergy) - 1].name,
-        energy: growthEnergy
+        energy: growthEnergy,
+        days: companionDays()
       },
       settings,
       trends: trends(),

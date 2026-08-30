@@ -4,6 +4,8 @@ import { Settings, X } from 'lucide-react'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { AppAction, AppSettings, AppSnapshot, ReminderKind } from '../../shared/contracts'
 import { PetMotion } from './components/PetMotion'
+import { Confetti, celebrationKey } from './components/Confetti'
+import { computeBadges, earnedBadgeCount } from './components/badges'
 import './styles.css'
 
 import idle from '../../../assets/generated/final/idle.png'
@@ -65,6 +67,9 @@ function PetView(): React.JSX.Element {
   const lastBubbleKey = useRef('')
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const patTimer = useRef<number | null>(null)
+  const [confettiOn, setConfettiOn] = useState(false)
+  const confettiTimer = useRef<number | null>(null)
+  const lastCelebrateKey = useRef('')
   const showBubble = (): void => {
     setBubbleVisible(true)
     if (bubbleTimer.current !== null) window.clearTimeout(bubbleTimer.current)
@@ -73,7 +78,19 @@ function PetView(): React.JSX.Element {
   useEffect(() => () => {
     if (bubbleTimer.current !== null) window.clearTimeout(bubbleTimer.current)
     if (patTimer.current !== null) window.clearTimeout(patTimer.current)
+    if (confettiTimer.current !== null) window.clearTimeout(confettiTimer.current)
   }, [])
+  // 撒花：陪伴里程碑（dance）或升级（transform + 我长大啦）触发一次
+  useEffect(() => {
+    if (preview || !snapshot) return
+    const key = celebrationKey(snapshot.visual, snapshot.message)
+    if (key && key !== lastCelebrateKey.current) {
+      lastCelebrateKey.current = key
+      setConfettiOn(true)
+      if (confettiTimer.current !== null) window.clearTimeout(confettiTimer.current)
+      confettiTimer.current = window.setTimeout(() => setConfettiOn(false), 4_800)
+    }
+  }, [preview, snapshot?.visual, snapshot?.message])
   // 摸头：悬停超过 2 秒，桃屁屁舒服地眯眼享受（每次悬停最多触发一次）
   useEffect(() => {
     if (petHovered && !preview) {
@@ -129,6 +146,7 @@ function PetView(): React.JSX.Element {
     <div className="pet-stage" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
       <PetMotion visual={preview?.visual ?? snapshot.visual} pressureValue={preview?.pressure ?? snapshot.health.pressure} recovery={preview?.recovery ?? snapshot.health.recovery}/>
     </div>
+    {confettiOn && !preview && <Confetti/>}
   </main>
 }
 
@@ -162,6 +180,8 @@ function Dashboard(): React.JSX.Element {
   const chartCeiling = Math.max(100, ...chart.map((item) => item.energy))
   const energyScore = Math.round(snapshot.health.score)
   const energyPercent = Math.min(100, Math.max(0, energyScore))
+  const badges = computeBadges(snapshot.growth)
+  const earned = earnedBadgeCount(snapshot.growth)
   const returnToPet = (): void => {
     setDockHint(true)
     window.setTimeout(() => window.close(), 700)
@@ -193,6 +213,12 @@ function Dashboard(): React.JSX.Element {
               <Line type="monotone" dataKey="energy" stroke="#f17b62" strokeWidth={5} dot={<PeachDot/>} activeDot={{ r: 9, fill: '#a8cc45', stroke: '#fff7e9', strokeWidth: 4 }}/>
             </LineChart></ResponsiveContainer></div>
       </div>
+      <footer className="badge-strip" aria-label={`小屋徽章，已收集 ${earned} / ${badges.length} 枚`}>
+        {badges.map((badge) => <span key={badge.id} className={`badge-chip${badge.earned ? ' is-earned' : ''}`} title={badge.earned ? badge.detail : `未解锁：${badge.detail}`}>
+          <i aria-hidden="true"/><b>{badge.label}</b>
+        </span>)}
+        <small>{earned}/{badges.length}</small>
+      </footer>
     </section>
 
     <section className="working-friend"><DashboardFriend/><p>{focusActive ? '你专注，我也认真做事' : '我先整理一下今天的小计划'}</p></section>

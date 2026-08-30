@@ -279,7 +279,7 @@ describe('runtime data integrity', () => {
     })
     const runtime = createRuntime(storage)
     runtimes.push(runtime)
-    expect(runtime.snapshot().growth).toEqual({ level: 1, name: '桃苗', energy: 195 })
+    expect(runtime.snapshot().growth).toEqual({ level: 1, name: '桃苗', energy: 195, days: 2 })
 
     vi.setSystemTime(start + 12_000)
     runtime.dispatch({ type: 'reminder:complete', kind: 'water' })
@@ -288,13 +288,13 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot()).toMatchObject({
       visual: 'transform',
       message: '我长大啦！现在是小桃了！',
-      growth: { level: 2, name: '小桃', energy: 203 }
+      growth: { level: 2, name: '小桃', energy: 203, days: 2 }
     })
     expect(storage.settings.get('growthEnergy')).toBe(203)
 
     // 升级只播一次，之后回到普通状态
     runtime.tick(start + 30_000, 0)
-    expect(runtime.snapshot().growth).toEqual({ level: 2, name: '小桃', energy: 203 })
+    expect(runtime.snapshot().growth).toEqual({ level: 2, name: '小桃', energy: 203, days: 2 })
   })
 
   it('does not drop the growth level when an explosion drains the daily score', () => {

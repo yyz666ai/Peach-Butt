@@ -89,7 +89,7 @@ export interface AppSnapshot {
   overlay: { id: number; kind: 'rest-reminder' | 'explosion'; messages: string[] } | null
   visual: string
   message: string
-  growth: { level: number; name: string; energy: number }
+  growth: { level: number; name: string; energy: number; days: number }
   settings: AppSettings
   trends: DailyStats[]
   monthStats: DailyStats[]
