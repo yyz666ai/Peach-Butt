@@ -127,7 +127,8 @@ for (const clip of manifest.clips) {
   if (video?.codec_name !== 'vp9') throw new Error(`${clip.id} 不是 VP9`)
   if (video?.tags?.alpha_mode !== '1') throw new Error(`${clip.id} 没有透明通道`)
   if (video?.width !== canvas.width || video?.height !== canvas.height) throw new Error(`${clip.id} 画布不是 480x500`)
-  if (video?.r_frame_rate !== `${canvas.fps}/1`) throw new Error(`${clip.id} 帧率不是 12fps`)
+  const clipFps = clip.fps ?? canvas.fps
+  if (video?.r_frame_rate !== `${clipFps}/1`) throw new Error(`${clip.id} 帧率不是 ${clipFps}fps`)
   if (probe.streams.some((stream) => stream.codec_type === 'audio')) throw new Error(`${clip.id} 不应包含音轨`)
   const duration = Number(probe.format.duration)
   if (!Number.isFinite(duration) || clip.start < 0 || clip.end <= clip.start || clip.end > duration + 0.02) throw new Error(`${clip.id} 时间线超出素材时长`)

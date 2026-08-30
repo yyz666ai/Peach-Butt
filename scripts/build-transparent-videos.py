@@ -265,7 +265,10 @@ def convert(source: Path, destination: Path, fps: int, width: int, session: obje
             with Image.open(frame) as image:
                 result = remove(
                     image.convert("RGB"), session=session,
-                    alpha_matting=False,
+                    alpha_matting=True,
+                    alpha_matting_foreground_threshold=240,
+                    alpha_matting_background_threshold=15,
+                    alpha_matting_erode_size=8,
                     post_process_mask=True,
                 )
                 result.save(keyed / frame.name, optimize=True)
@@ -520,8 +523,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("sources", type=Path)
     parser.add_argument("destination", type=Path)
-    parser.add_argument("--fps", type=int, default=12)
-    parser.add_argument("--width", type=int, default=560)
+    parser.add_argument("--fps", type=int, default=24)
+    parser.add_argument("--width", type=int, default=1024)
     parser.add_argument("--only", nargs="*", default=[])
     parser.add_argument(
         "--normalize-existing", action="store_true",
@@ -529,7 +532,10 @@ def main() -> None:
     )
     args = parser.parse_args()
     names = args.only or list(MOTION_NAMES)
-    session = None if args.normalize_existing else new_session("u2netp")
+    # isnet-general-use with alpha matting gives much cleaner edges than the
+    # old u2netp fast path; keep the source resolution high (>= 960px wide)
+    # before matting so the normalized 480x500 canvas stays sharp.
+    session = None if args.normalize_existing else new_session("isnet-general-use")
     for name in names:
         print(f"Processing {name}", flush=True)
         destination = args.destination / f"{name}.webm"

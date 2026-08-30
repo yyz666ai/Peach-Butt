@@ -14,6 +14,7 @@ interface VideoClip {
   playMode: 'once' | 'loop' | 'scrub'
   restKind?: 'stand' | 'water' | 'toilet' | 'eyes' | 'long-rest'
   bottomSafeMargin?: number
+  fps?: number
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -65,7 +66,7 @@ describe('video asset contract', () => {
     expect(byId('focus').bottomSafeMargin).toBe(8)
   })
 
-  it('uses normalized VP9 alpha videos at 480 by 500 and 12 fps', () => {
+  it('uses normalized VP9 alpha videos at 480 by 500 with 12 or 24 fps', () => {
     for (const clip of manifest.clips) {
       const probe = JSON.parse(execFileSync('ffprobe', [
         '-v', 'error', '-select_streams', 'v:0',
@@ -75,7 +76,7 @@ describe('video asset contract', () => {
       expect(probe.streams[0]).toMatchObject({
         width: 480,
         height: 500,
-        r_frame_rate: '12/1',
+        r_frame_rate: `${clip.fps ?? 12}/1`,
         codec_name: 'vp9',
         tags: { alpha_mode: '1' }
       })
