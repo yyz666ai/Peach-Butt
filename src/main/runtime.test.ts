@@ -1559,6 +1559,18 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot().reminder).toMatchObject({ kind: 'water' })
   })
 
+  it('persists soundEnabled and reminderIntensity after settings:update', () => {
+    const storage = memoryStorage()
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'settings:update', settings: { ...runtime.snapshot().settings, soundEnabled: false, reminderIntensity: 'gentle' } })
+
+    const persisted = storage.settings.get('settings') as { soundEnabled: boolean; reminderIntensity: string } | undefined
+    expect(persisted).toMatchObject({ soundEnabled: false, reminderIntensity: 'gentle' })
+    expect(runtime.snapshot().settings.soundEnabled).toBe(false)
+    expect(runtime.snapshot().settings.reminderIntensity).toBe('gentle')
+  })
+
   it('takes over with anti-sedentary at swell level 3 outside focus and resets the streak on acknowledge', () => {
     const runtime = createRuntime(memoryStorage())
     runtimes.push(runtime)

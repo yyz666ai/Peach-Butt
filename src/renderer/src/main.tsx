@@ -466,6 +466,21 @@ function SettingsPanel({ draft, setDraft, save, close }: { draft: AppSettings; s
         <label>长休息<input type="number" min="1" max="120" value={draft.longBreakMinutes} onChange={(e) => setDraft({ ...draft, longBreakMinutes: Number(e.target.value) })}/><span>分钟</span></label>
         <label>长休息周期<input type="number" min="1" max="12" value={draft.longBreakEvery} onChange={(e) => setDraft({ ...draft, longBreakEvery: Number(e.target.value) })}/><span>个番茄</span></label>
       </div>
+      <h3>提醒方式</h3>
+      <div className="setting-reminder-style">
+        <label className="setting-toggle">
+          <input type="checkbox" checked={draft.soundEnabled} onChange={(e) => setDraft({ ...draft, soundEnabled: e.target.checked })}/>
+          <span>启用提示音（接管触发时播放）</span>
+        </label>
+        <fieldset className="setting-intensity">
+          <legend>提醒强度</legend>
+          {(['standard', 'gentle'] as const).map((intensity) => <label key={intensity} className={intensity === draft.reminderIntensity ? 'is-selected' : ''}>
+            <input type="radio" name="reminderIntensity" value={intensity} checked={draft.reminderIntensity === intensity} onChange={() => setDraft({ ...draft, reminderIntensity: intensity })}/>
+            <strong>{intensity === 'standard' ? '大屏接管' : '温和气泡'}</strong>
+            <small>{intensity === 'standard' ? '到点后桃屁屁铺满屏幕提醒，必须点确认才收下' : '只显示气泡和音效，不强制接管屏幕'}</small>
+          </label>)}
+        </fieldset>
+      </div>
       <h3>生活提醒</h3>
       {(Object.keys(draft.reminders) as ReminderKind[]).map((kind) => <label className="setting-reminder" key={kind}>
         <input type="checkbox" checked={draft.reminders[kind].enabled} onChange={(e) => setDraft({ ...draft, reminders: { ...draft.reminders, [kind]: { ...draft.reminders[kind], enabled: e.target.checked } } })}/>
