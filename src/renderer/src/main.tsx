@@ -283,6 +283,42 @@ const habitItems: Array<{ kind: ReminderKind; label: string; asset: string }> = 
   { kind: 'toilet', label: '上厕所', asset: toiletAsset }
 ]
 
+// 桃屁屁身体状态卡片：实时反映接管机制背后的状态（喝水拼回 / 反久坐膨胀 / 水润干裂）
+const SWELL_LABELS = ['正常', '轻微膨胀', '明显膨胀', '即将爆掉'] as const
+const HYDRATION_LABELS = ['水润', '轻微干裂', '严重干裂', '碎裂了'] as const
+function PetStatusCard({ hydrateCount, swellLevel, hydrationStage }: {
+  hydrateCount: number
+  swellLevel: 0 | 1 | 2 | 3
+  hydrationStage: 0 | 1 | 2 | 3
+}): React.JSX.Element {
+  return <section className="pet-status-card" aria-label="桃屁屁当前身体状态">
+    <header><strong>桃屁屁身体状态</strong><span>实时反映健康提醒机制</span></header>
+    <div className="status-grid">
+      <div className={`status-item is-hydrate-${hydrateCount}`}>
+        <div className="status-label">喝水拼回</div>
+        <div className="status-dots" role="img" aria-label={`喝水拼回 ${Math.min(3, hydrateCount)} / 3`}>
+          {[0, 1, 2].map((i) => <span key={i} className={i < Math.min(3, hydrateCount) ? 'status-dot is-filled' : 'status-dot'}/>)}
+        </div>
+        <small>{Math.min(3, hydrateCount)} / 3 · 满 3 次算完全修复</small>
+      </div>
+      <div className={`status-item is-swell-${swellLevel}`}>
+        <div className="status-label">反久坐膨胀</div>
+        <div className="status-bars" role="img" aria-label={`膨胀等级 ${SWELL_LABELS[swellLevel]}`}>
+          {[0, 1, 2, 3].map((i) => <span key={i} className={i <= swellLevel ? `status-bar is-filled level-${i}` : 'status-bar'}/>)}
+        </div>
+        <small>{SWELL_LABELS[swellLevel]}</small>
+      </div>
+      <div className={`status-item is-hydration-${hydrationStage}`}>
+        <div className="status-label">水润度</div>
+        <div className="status-stages" role="img" aria-label={`水润状态 ${HYDRATION_LABELS[hydrationStage]}`}>
+          {[0, 1, 2, 3].map((i) => <span key={i} className={i === hydrationStage ? `status-stage is-current stage-${i}` : `status-stage stage-${i}`}/>)}
+        </div>
+        <small>{HYDRATION_LABELS[hydrationStage]}</small>
+      </div>
+    </div>
+  </section>
+}
+
 function Dashboard(): React.JSX.Element {
   const [snapshot, act] = useSnapshot()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -326,6 +362,8 @@ function Dashboard(): React.JSX.Element {
       </div>
       <div className="hero-metrics"><div><span>今日专注</span><strong>{snapshot.pomodoro.completedToday}<small> 个</small></strong></div><div><span>休息</span><strong>{snapshot.health.restCount}<small> 次</small></strong></div><div><span>活跃</span><strong>{formatDuration(snapshot.health.activeSecondsToday)}</strong></div></div>
     </section>
+
+    <PetStatusCard hydrateCount={snapshot.hydrateCount} swellLevel={snapshot.swellLevel} hydrationStage={snapshot.hydrationStage}/>
 
     <section className="motivation-note"><img src={motivationNoteAsset} alt=""/><p>照顾自己<br/>就是最好的<br/>生产力</p></section>
 

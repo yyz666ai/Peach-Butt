@@ -123,3 +123,39 @@ button { cursor: pointer; }
 .badge-chip i::after { content: ""; position: absolute; top: -3px; left: 52%; width: 9px; height: 6px; border-radius: 60% 40% 60% 40%; background: linear-gradient(135deg, #b7d95e, #82a83e); transform: rotate(-18deg); }
 .badge-chip b { font-size: clamp(9px, .72vw, 12px); font-weight: 800; color: #7a4c33; white-space: nowrap; }
 .badge-strip > small { margin-left: auto; flex: 0 0 auto; color: #a07159; font-size: clamp(9px, .68vw, 11px); font-weight: 750; }
+
+/* 桃屁屁身体状态卡片：实时反映接管机制背后的状态 */
+.pet-status-card { background: linear-gradient(180deg, #fff7e9 0%, #fde7d2 100%); border: 2px solid #f4d8a8; border-radius: 24px; padding: 18px clamp(20px, 2.4vw, 32px); display: grid; gap: 14px; box-shadow: 0 8px 22px rgba(176, 86, 38, .12); }
+.pet-status-card > header { display: flex; align-items: baseline; gap: 12px; }
+.pet-status-card > header strong { font-size: clamp(15px, 1.4vw, 19px); color: #4a2614; letter-spacing: -.01em; }
+.pet-status-card > header span { color: #a07159; font-size: clamp(10px, .82vw, 12px); font-weight: 650; }
+.status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(12px, 1.6vw, 24px); }
+.status-item { display: grid; gap: 6px; align-content: start; }
+.status-label { font-size: clamp(10px, .82vw, 12px); color: #8a5a40; font-weight: 750; letter-spacing: .03em; }
+.status-item small { font-size: clamp(10px, .82vw, 12px); color: #6a3a23; font-weight: 650; }
+
+/* 喝水拼回：3 个圆点 */
+.status-dots { display: flex; gap: 8px; padding: 4px 0; }
+.status-dot { width: clamp(20px, 2vw, 28px); height: clamp(20px, 2vw, 28px); border-radius: 50%; background: rgba(180, 130, 90, .18); border: 2px solid rgba(180, 130, 90, .25); transition: all .25s ease; }
+.status-dot.is-filled { background: linear-gradient(140deg, #8bb52f, #a8cc45); border-color: #6e9020; box-shadow: 0 2px 6px rgba(140, 180, 60, .4); }
+
+/* 反久坐膨胀：4 段横条（递增红） */
+.status-bars { display: flex; gap: 4px; align-items: end; padding: 4px 0; height: clamp(28px, 3vw, 38px); }
+.status-bar { flex: 1; height: 35%; border-radius: 4px; background: rgba(180, 130, 90, .18); border: 1px solid rgba(180, 130, 90, .2); transition: all .25s ease; }
+.status-bar.level-1 { height: 50%; }
+.status-bar.level-2 { height: 70%; }
+.status-bar.level-3 { height: 100%; }
+.status-bar.is-filled.level-0, .status-bar.is-filled.level-1 { background: linear-gradient(180deg, #ffb888, #f2885e); border-color: #d8603a; }
+.status-bar.is-filled.level-2 { background: linear-gradient(180deg, #ff8a6e, #e85a3a); border-color: #c03820; }
+.status-bar.is-filled.level-3 { background: linear-gradient(180deg, #e85a3a, #b02810); border-color: #7a1a08; animation: status-pulse 1.2s ease-in-out infinite; }
+@keyframes status-pulse { 0%, 100% { transform: scaleY(1); opacity: 1; } 50% { transform: scaleY(.95); opacity: .85; } }
+
+/* 水润度：4 段水滴（缺水越严重越深褐） */
+.status-stages { display: flex; gap: 4px; align-items: center; padding: 4px 0; }
+.status-stage { width: clamp(22px, 2.2vw, 30px); height: clamp(22px, 2.2vw, 30px); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: rgba(180, 130, 90, .15); border: 1.5px solid rgba(180, 130, 90, .25); transition: all .3s ease; }
+.status-stage.stage-0 { background: linear-gradient(135deg, #8fc8e8, #4a9bc4); border-color: #2a78a0; }
+.status-stage.stage-1 { background: linear-gradient(135deg, #f4d4a8, #e8b878); border-color: #c89860; }
+.status-stage.stage-2 { background: linear-gradient(135deg, #d8a070, #b87850); border-color: #8a5530; }
+.status-stage.stage-3 { background: linear-gradient(135deg, #a85030, #6a2810); border-color: #4a1a08; }
+.status-stage.is-current { box-shadow: 0 0 0 3px rgba(248, 200, 140, .6); transform: rotate(-45deg) scale(1.15); }
+.status-item.is-hydration-3 .status-stage.stage-3 { animation: dry-shake 1.4s ease-in-out infinite; }
