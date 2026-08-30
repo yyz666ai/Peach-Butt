@@ -280,4 +280,5 @@ The source code is available under the [MIT License](LICENSE). The Peach Butt ch
 | [04-交互设计与提示词](docs/04-交互设计与提示词.md) | 状态/动作总表、彩蛋交互、即梦 & gpt-image-2 提示词模板、文案库 |
 | [05-生图API联调记录](docs/05-生图API联调记录.md) | gpt-image-2 文生图/图生图调用方式、踩坑 |
 | [06-即梦补拍清单与提示词](docs/06-即梦补拍清单与提示词.md) | 缺失动作清单与可直接复制的即梦提示词 |
+| [07-陪伴感与成长系统优化](docs/07-陪伴感与成长系统优化.md) | 零素材改进 + 新交互设计（冷落/摸头/里程碑/等级） |
 | [product-interaction-logic](docs/product-interaction-logic.md) | 当前实现（As-Built）交互与状态机说明 |
