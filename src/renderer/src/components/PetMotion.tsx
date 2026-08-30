@@ -71,6 +71,11 @@ export function PetMotion({ visual, pressureValue, recovery = 100, swellLevel = 
   const [failed, setFailed] = useState(false)
   const clip = clips[visual as keyof typeof clips]
   const pressurePosition = visual === 'pressure' ? pressureValue : null
+  // 渐进干裂滤镜：stage 1 轻微去饱和 / 2 明显去饱和+暖色 / 3 灰化+深褐
+  const drynessFilter = hydrationStage === 1 ? 'saturate(.78) brightness(1.02)'
+    : hydrationStage === 2 ? 'saturate(.5) hue-rotate(-12deg) brightness(.96)'
+    : hydrationStage === 3 ? 'grayscale(.45) sepia(.4) saturate(.7) brightness(.9) contrast(1.05)'
+    : undefined
 
   useEffect(() => {
     setFailed(false)
@@ -90,13 +95,13 @@ export function PetMotion({ visual, pressureValue, recovery = 100, swellLevel = 
   }, [clip, pressurePosition])
 
   if (!clip || failed) {
-    return <img className="pet-media" src={stills[visual] ?? idle} alt="桃屁屁桌宠" draggable={false} style={visual === 'deflated' ? { transform: `scale(${0.72 + recovery * 0.0028})` } : undefined} />
+    return <img className="pet-media" src={stills[visual] ?? idle} alt="桃屁屁桌宠" draggable={false} style={{ ...(visual === 'deflated' ? { transform: `scale(${0.72 + recovery * 0.0028})` } : {}), ...(drynessFilter ? { filter: drynessFilter } : {}) }}/>
   }
 
   // 反久坐膨胀：swellLevel 1/2/3 用 swell 静态图 + CSS scale，video 用 pressure.webm 红脸段
   const isSwell = visual === 'pressure' && swellLevel > 0
   if (isSwell) {
-    return <img className="pet-media swell-media" src={swellMap[swellLevel]} alt="桃屁屁桌宠" draggable={false} style={{ transform: `scale(${1 + swellLevel * 0.13})` }}/>
+    return <img className="pet-media swell-media" src={swellMap[swellLevel]} alt="桃屁屁桌宠" draggable={false} style={{ transform: `scale(${1 + swellLevel * 0.13})`, ...(drynessFilter ? { filter: drynessFilter } : {}) }}/>
   }
 
   return <video
@@ -107,11 +112,11 @@ export function PetMotion({ visual, pressureValue, recovery = 100, swellLevel = 
     muted
     autoPlay={clip.playMode !== 'scrub'}
     playsInline
-    style={visual === 'pressure'
-      ? { transform: `scale(${1.45 - Math.min(1, Math.max(0, (pressureValue - 55) / 45)) * 0.37})` }
-      : visual === 'deflated'
-        ? { transform: `scale(${0.72 + recovery * 0.0028})` }
-        : undefined}
+    style={{
+      ...(visual === 'pressure' ? { transform: `scale(${1.45 - Math.min(1, Math.max(0, (pressureValue - 55) / 45)) * 0.37})` } : {}),
+      ...(visual === 'deflated' ? { transform: `scale(${0.72 + recovery * 0.0028})` } : {}),
+      ...(drynessFilter ? { filter: drynessFilter } : {})
+    }}
     onError={() => setFailed(true)}
     onTimeUpdate={(event) => {
       const action = nextPlaybackAction(clip, event.currentTarget.currentTime)

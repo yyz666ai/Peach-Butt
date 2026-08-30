@@ -8,6 +8,49 @@ import { Confetti, celebrationKey } from './components/Confetti'
 import { computeBadges, earnedBadgeCount } from './components/badges'
 import './styles.css'
 
+// 接管提示音：复用 Web Audio 合成短促音效，不引入音频文件
+let audioContext: AudioContext | null = null
+function ensureAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null
+  if (audioContext) return audioContext
+  const Ctor = (window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)
+  if (!Ctor) return null
+  audioContext = new Ctor()
+  return audioContext
+}
+function playTone(ctx: AudioContext, frequency: number, startOffsetMs: number, durationMs: number, gain: number): void {
+  const startAt = ctx.currentTime + startOffsetMs / 1000
+  const endAt = startAt + durationMs / 1000
+  const oscillator = ctx.createOscillator()
+  const envelope = ctx.createGain()
+  oscillator.type = 'sine'
+  oscillator.frequency.value = frequency
+  envelope.gain.setValueAtTime(0, startAt)
+  envelope.gain.linearRampToValueAtTime(gain, startAt + 0.01)
+  envelope.gain.exponentialRampToValueAtTime(0.0001, endAt)
+  oscillator.connect(envelope).connect(ctx.destination)
+  oscillator.start(startAt)
+  oscillator.stop(endAt + 0.02)
+}
+function playTakeoverChime(kind: NonNullable<AppSnapshot['takeover']>['kind'], hydrationStage: 0 | 1 | 2 | 3): void {
+  const ctx = ensureAudioContext()
+  if (!ctx) return
+  if (ctx.state === 'suspended') void ctx.resume().catch(() => {})
+  if (kind === 'anti-sedentary') {
+    // 反久坐：双急促 800Hz 警示音
+    playTone(ctx, 800, 0, 160, 0.32)
+    playTone(ctx, 800, 200, 200, 0.36)
+  } else if (kind === 'water' && hydrationStage >= 3) {
+    // 碎裂：低沉三连降调
+    playTone(ctx, 520, 0, 220, 0.3)
+    playTone(ctx, 360, 240, 220, 0.3)
+    playTone(ctx, 240, 480, 320, 0.32)
+  } else {
+    // 一般提醒：单声 600Hz 提示
+    playTone(ctx, 620, 0, 220, 0.28)
+  }
+}
+
 import idle from '../../../assets/generated/final/idle.png'
 import roomBackground from '../../../assets/dashboard/room-background.png'
 import waterAsset from '../../../assets/dashboard/water.png'
@@ -106,6 +149,20 @@ function PetView(): React.JSX.Element {
       confettiTimer.current = window.setTimeout(() => setConfettiOn(false), 4_800)
     }
   }, [preview, snapshot?.visual, snapshot?.message])
+  // 大屏接管触发时播放提示音（比视觉更难忽略）
+  const lastTakeoverId = useRef<string | null>(null)
+  useEffect(() => {
+    if (preview || !snapshot) return
+    const takeover = snapshot.takeover
+    if (!takeover) {
+      lastTakeoverId.current = null
+      return
+    }
+    const id = `${takeover.kind}:${takeover.reason}`
+    if (id === lastTakeoverId.current) return
+    lastTakeoverId.current = id
+    if (snapshot.settings.soundEnabled) playTakeoverChime(takeover.kind, snapshot.hydrationStage)
+  }, [preview, snapshot?.takeover, snapshot?.settings.soundEnabled, snapshot?.hydrationStage])
   // 摸头：悬停超过 2 秒，桃屁屁舒服地眯眼享受（每次悬停最多触发一次）
   useEffect(() => {
     if (petHovered && !preview) {
@@ -162,7 +219,7 @@ function PetView(): React.JSX.Element {
       <PetMotion visual={preview?.visual ?? snapshot.visual} pressureValue={preview?.pressure ?? snapshot.health.pressure} recovery={preview?.recovery ?? snapshot.health.recovery} swellLevel={preview ? 0 : snapshot.swellLevel} hydrationStage={preview ? 0 : snapshot.hydrationStage}/>
     </div>
     {confettiOn && !preview && <Confetti/>}
-    {!preview && snapshot.takeover && <Takeover takeover={snapshot.takeover} hydrateCount={snapshot.hydrateCount} onAck={(kind) => void act({ type: 'takeover:acknowledge', kind })}/>}
+    {!preview && snapshot.takeover && <Takeover takeover={snapshot.takeover} hydrateCount={snapshot.hydrateCount} hydrationStage={snapshot.hydrationStage} onAck={(kind) => void act({ type: 'takeover:acknowledge', kind })}/>}
     {!snapshot.takeover && (() => { const t = getTakeoverPreview(); return t ? <Takeover takeover={t} onAck={() => { /* preview 模式：仅展示 UI */ }}/> : null })()}
   </main>
 }
@@ -175,10 +232,11 @@ const FOLLOW_ALONG_COPY: Record<string, { doing: string; button: string }> = {
   stand: { doing: '跟着我跳！起来走两圈～', button: '好，跟我一起跳！' }
 }
 
-function Takeover({ takeover, onAck, hydrateCount = 0 }: {
+function Takeover({ takeover, onAck, hydrateCount = 0, hydrationStage = 2 }: {
   takeover: NonNullable<AppSnapshot['takeover']>
   onAck: (kind: NonNullable<AppSnapshot['takeover']>['kind']) => void
   hydrateCount?: number
+  hydrationStage?: 0 | 1 | 2 | 3
 }): React.JSX.Element {
   const visual = takeover.kind === 'water' ? 'dry'
     : takeover.kind === 'stand' ? 'stretch'
@@ -200,9 +258,9 @@ function Takeover({ takeover, onAck, hydrateCount = 0 }: {
     const timer = window.setTimeout(() => setRemaining(remaining - 1), 1_000)
     return () => window.clearTimeout(timer)
   }, [remaining, takeover.kind])
-  return <section className={`takeover is-${takeover.kind}${doing ? ' is-doing' : ''}`} aria-modal="true" role="dialog" aria-labelledby="takeover-title">
+  return <section className={`takeover is-${takeover.kind}${doing ? ' is-doing' : ''}${takeover.kind === 'water' ? ` is-hydration-${hydrationStage}` : ''}`} aria-modal="true" role="dialog" aria-labelledby="takeover-title">
     <div className="takeover-pet">
-      <PetMotion visual={visual} pressureValue={takeover.kind === 'anti-sedentary' ? 100 : 50} recovery={100} swellLevel={takeover.kind === 'anti-sedentary' ? 3 : 0} hydrationStage={takeover.kind === 'water' ? 2 : 0}/>
+      <PetMotion visual={visual} pressureValue={takeover.kind === 'anti-sedentary' ? 100 : 50} recovery={100} swellLevel={takeover.kind === 'anti-sedentary' ? 3 : 0} hydrationStage={takeover.kind === 'water' ? hydrationStage : 0}/>
     </div>
     <div className="takeover-copy">
       <strong id="takeover-title">{takeover.title}</strong>

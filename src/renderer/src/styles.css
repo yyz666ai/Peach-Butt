@@ -24,6 +24,9 @@ button { cursor: pointer; }
 /* 大屏接管层：到点提醒、反久坐、喝水干裂时铺满屏幕 */
 .takeover { position: absolute; inset: 0; z-index: 100; display: grid; grid-template-rows: auto auto auto; align-content: center; gap: 4vh; padding: clamp(30px, 6vh, 60px) clamp(40px, 8vw, 100px); background: radial-gradient(circle at 50% 38%, #ffd9a8 0%, #ffba87 38%, #e96a4a 72%, #c4452a 100%); color: #4a2614; align-items: center; justify-items: center; animation: takeover-in .22s ease-out both; pointer-events: auto; }
 .takeover.is-anti-sedentary { background: radial-gradient(circle at 50% 38%, #ffb0a0 0%, #ff8a6e 38%, #d8442a 72%, #7a1a08 100%); }
+.takeover.is-water.is-hydration-1 { background: radial-gradient(circle at 50% 38%, #ffe4c0 0%, #ffc9a0 38%, #e98a5a 72%, #a6512a 100%); }
+.takeover.is-water.is-hydration-2 { background: radial-gradient(circle at 50% 38%, #ffd2a0 0%, #ffa978 38%, #dc5e3a 72%, #8a3a1a 100%); }
+.takeover.is-water.is-hydration-3 { background: radial-gradient(circle at 50% 38%, #f0a070 0%, #c86038 32%, #6e2410 68%, #2c0a04 100%); }
 @keyframes takeover-in { from { opacity: 0; transform: scale(.98); } }
 .takeover-pet { width: min(44vw, 640px); max-height: 44vh; display: grid; place-items: center; }
 .takeover-pet .pet-media { width: 100%; height: 100%; max-height: 44vh; object-fit: contain; }
