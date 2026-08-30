@@ -26,7 +26,7 @@ except ModuleNotFoundError as error:
 CANVAS = (480, 500)
 BOTTOM_SAFE_MARGIN = 8
 MOTION_NAMES = ("greeting", "focus", "sleep", "toilet", "pressure", "transform", "dry")
-BRIGHTNESS = {"greeting": 1.16, "focus": 1.28, "sleep": 1.15, "toilet": 1.15, "pressure": 1.18, "transform": 1.16, "dry": 1.16}
+BRIGHTNESS = {"greeting": 1.16, "focus": 1.28, "sleep": 1.15, "toilet": 1.15, "pressure": 1.18, "transform": 1.16, "dry": 1.16, "happy": 1.16, "rest": 1.16}
 TRIM_RANGES = {
     # Keep the complete jump, spin and visible tornado. Playback is sped up in
     # the renderer so the transformation does not delay focus for too long.

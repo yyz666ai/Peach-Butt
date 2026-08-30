@@ -46,7 +46,7 @@ const inspectFrame = (png, clip, sampleLabel) => {
   const bottomMargin = png.height - bottom - 1
   const expectedBottomMargin = clip.bottomSafeMargin ?? canvas.bottomSafeMargin
   const minBottomMargin = clip.id === 'explosion' ? 6 : expectedBottomMargin - 3
-  const maxBottomMargin = clip.id === 'explosion' ? 40 : expectedBottomMargin + 14
+  const maxBottomMargin = clip.id === 'explosion' ? 40 : clip.allowHop ? 52 : expectedBottomMargin + 14
   if (bottomMargin < minBottomMargin || bottomMargin > maxBottomMargin) throw new Error(`${clip.id} ${sampleLabel} 脚底基线偏移: ${bottomMargin}px`)
   if (!intentionalWhiteProps.has(clip.id) && paleFringe / visible > 0.008) throw new Error(`${clip.id} ${sampleLabel} 浅色边缘残留过多`)
 

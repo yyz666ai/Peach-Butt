@@ -10,6 +10,8 @@ import dry from '../../../../assets/video/generated/dry.webm'
 import idleMotion from '../../../../assets/video/generated/idle.webm'
 import eyeStrainMotion from '../../../../assets/video/generated/eye-strain.webm'
 import activityMotion from '../../../../assets/video/generated/activity.webm'
+import happyMotion from '../../../../assets/video/generated/happy.webm'
+import restMotion from '../../../../assets/video/generated/rest.webm'
 import idle from '../../../../assets/generated/final/idle.png'
 import idleMotionStill from '../../../../assets/generated/final/idle-motion.png'
 import eyeStrain from '../../../../assets/generated/final/eye-strain.png'
@@ -32,6 +34,8 @@ const clips = {
   sleep: { src: sleep, ...clipTimelines.sleep },
   toilet: { src: toilet, ...clipTimelines.toilet },
   transform: { src: transform, ...clipTimelines.transform },
+  happy: { src: happyMotion, ...clipTimelines.happy },
+  rest: { src: restMotion, ...clipTimelines.rest },
   dry: { src: dry, ...clipTimelines.dry },
   hydrating: { src: dry, ...clipTimelines.hydrating },
   'water-prompt': { src: dry, ...clipTimelines['water-prompt'] }

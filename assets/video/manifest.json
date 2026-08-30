@@ -11,6 +11,8 @@
     { "id": "sleep", "file": "generated/sleep.webm", "role": "第四个番茄后的长休息，尾部交叉淡化回起点", "start": 0.05, "end": 4.9, "playMode": "loop", "restKind": "long-rest" },
     { "id": "toilet", "file": "generated/toilet.webm", "role": "当前休息队列的上厕所提醒", "start": 0.85, "end": 6.65, "playMode": "once", "restKind": "toilet" },
     { "id": "transform", "file": "generated/transform.webm", "role": "完整跳起、旋转与旋风尾部；1.55 倍速压缩前段等待", "start": 0.08, "end": 9.82, "playMode": "once" },
+    { "id": "happy", "file": "generated/happy.webm", "role": "点击或健康打卡成功后的开心蹦跳反馈；跳跃动作允许脚离地但落地帧贴底", "start": 0.2, "end": 2.2, "playMode": "once", "allowHop": true },
+    { "id": "rest", "file": "generated/rest.webm", "role": "短休四项完成后到休息倒计时结束的放松状态", "start": 0.3, "end": 4.4, "playMode": "once" },
     { "id": "water-prompt", "file": "generated/dry.webm", "role": "当前休息队列的喝水与恢复动作", "start": 1.45, "end": 9.8, "playMode": "once", "restKind": "water" },
     { "id": "dry", "file": "generated/dry.webm", "role": "喝水提醒未响应时的干裂阶段", "start": 0.08, "end": 1.45, "playMode": "once" },
     { "id": "hydrating", "file": "generated/dry.webm", "role": "喝水打卡后的恢复阶段", "start": 1.45, "end": 9.8, "playMode": "once" },

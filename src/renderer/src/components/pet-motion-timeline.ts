@@ -17,6 +17,8 @@ export const clipTimelines = {
   sleep: { start: 0.05, end: 4.9, playMode: 'loop' },
   toilet: { start: 0.85, end: 6.65, playMode: 'once' },
   transform: { start: 0.08, end: 9.82, playMode: 'once', rate: 1.55 },
+  happy: { start: 0.2, end: 2.2, playMode: 'once' },
+  rest: { start: 0.3, end: 4.4, playMode: 'once' },
   'water-prompt': { start: 1.45, end: 9.8, playMode: 'once' },
   // An ignored water reminder holds the cracked pose; the drinking portion is
   // reserved for an actual completed-water confirmation.
