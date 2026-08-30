@@ -18,6 +18,7 @@ function snapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
     overlay: null,
     visual: 'idle',
     message: '',
+    growth: { level: 1, name: '桃苗', energy: 0 },
     settings: {
       petSize: 140,
       workMinutes: 25,

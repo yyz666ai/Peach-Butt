@@ -60,6 +60,20 @@ const SHY_OVERRIDE_MS = 5_100
 const DANCE_OVERRIDE_MS = 5_100
 const SHY_COMBO_WINDOW_MS = 10_000
 const BORED_AFTER_IDLE_MS = 10 * 60_000
+// 深夜陪伴模式：23:00–6:00 待机改为打瞌睡；最近 5 分钟内有交互说明用户还醒着，改用揉眼文案
+const LATE_NIGHT_START_HOUR = 23
+const LATE_NIGHT_END_HOUR = 6
+const LATE_NIGHT_ACTIVE_MS = 5 * 60_000
+// 爆炸后情感修复：恢复成功后当天第一次打卡额外 +5 分「和好奖励」
+const RECONCILIATION_BONUS = 5
+// 成长等级：累计能量（历史每日健康分总和，取高水位防止爆炸扣分降级）
+const GROWTH_LEVELS = [
+  { min: 0, name: '桃苗' },
+  { min: 200, name: '小桃' },
+  { min: 500, name: '圆桃' },
+  { min: 1200, name: '蜜桃' },
+  { min: 3000, name: '仙桃' }
+] as const
 const AMBIENCE_MIN_DELAY_MS = 60_000
 const AMBIENCE_DELAY_SPREAD_MS = 60_000
 const AMBIENCE_RETRY_MS = 30_000
@@ -83,6 +97,8 @@ interface RuntimeSessionState {
   overlaySequence: number
   usage: UsageCheckpoint | null
   lastGreetedDay: string | null
+  // 和好奖励待发放的日期：爆炸恢复成功当天第一次打卡额外 +5 分，发完置空
+  reconciliationDay: string | null
 }
 
 interface PersistedRuntimeState {
@@ -181,6 +197,7 @@ export function createRuntime(storage: Storage): Runtime {
   let restRotationAt: number | null = restSession ? now : null
   let visualOverride: { id: string; until: number; message: string } | null = null
   let lastGreetedDay = restoredSession.lastGreetedDay
+  let reconciliationDay = typeof restoredSession.reconciliationDay === 'string' ? restoredSession.reconciliationDay : null
   // 最近一次用户交互（点击/操作），用于「冷落求关注」判断；重启后重新计时
   let lastInteractionAt = now
   // 待机连击点击计数：10 秒内连点 3 次以上升级为害羞
@@ -234,6 +251,40 @@ export function createRuntime(storage: Storage): Runtime {
   const isMilestoneDay = (days: number): boolean =>
     days === 7 || days === 30 || (days >= 100 && days % 100 === 0)
 
+  // 深夜时段（23:00–6:00）：待机切换为打瞌睡陪伴
+  const isLateNight = (at: number): boolean => {
+    const hour = new Date(at).getHours()
+    return hour >= LATE_NIGHT_START_HOUR || hour < LATE_NIGHT_END_HOUR
+  }
+
+  // 成长等级：累计能量 = 历史每日健康分（scoreEnd）总和（含今天，mutateStats 实时同步）
+  const totalEnergy = (): number =>
+    storage.getDailyStats('2000-01-01', dateKey()).reduce((sum, row) => sum + Math.max(0, row.scoreEnd), 0)
+  const growthLevelOf = (energy: number): number => {
+    let level = 1
+    for (let index = 0; index < GROWTH_LEVELS.length; index++) {
+      if (energy >= GROWTH_LEVELS[index].min) level = index + 1
+    }
+    return level
+  }
+  // 首次启动以当前累计能量为基线（不播升级动画）；之后取高水位，爆炸扣分不会降级
+  const storedEnergy = storage.getSetting<unknown>('growthEnergy', undefined)
+  let growthEnergy = typeof storedEnergy === 'number' && Number.isFinite(storedEnergy) && storedEnergy >= 0
+    ? storedEnergy
+    : totalEnergy()
+  if (typeof storedEnergy !== 'number') storage.setSetting('growthEnergy', growthEnergy)
+  const syncGrowthEnergy = (at: number): void => {
+    const live = totalEnergy()
+    if (live <= growthEnergy) return
+    const previousLevel = growthLevelOf(growthEnergy)
+    growthEnergy = live
+    storage.setSetting('growthEnergy', growthEnergy)
+    const level = growthLevelOf(growthEnergy)
+    if (level > previousLevel) {
+      visualOverride = { id: 'transform', until: at + TRANSFORM_OVERRIDE_MS, message: `我长大啦！现在是${GROWTH_LEVELS[level - 1].name}了！` }
+    }
+  }
+
   // 每日首次见面问候：当天第一次启动播一次打招呼（瘪气锁定时不打扰）；
   // 恰好是陪伴里程碑日（7/30/100…天）时改播庆祝舞蹈
   if (health.snapshot().mode !== 'deflated' && lastGreetedDay !== dateKey(now)) {
@@ -254,7 +305,8 @@ export function createRuntime(storage: Storage): Runtime {
         recoveryRestStartedAt,
         overlaySequence,
         usage,
-        lastGreetedDay
+        lastGreetedDay,
+        reconciliationDay
       }
     } satisfies PersistedRuntimeState)
   }
@@ -372,6 +424,12 @@ export function createRuntime(storage: Storage): Runtime {
     if (selected === 'greeting' && visualOverride) return visualOverride
     if (visualOverride && visualOverride.until > lastTickAt) return visualOverride
     visualOverride = null
+    // 深夜陪伴模式：23:00–6:00 待机改为打瞌睡；用户最近还在操作时改用揉眼劝睡文案
+    if (isLateNight(lastTickAt)) {
+      return lastTickAt - lastInteractionAt < LATE_NIGHT_ACTIVE_MS
+        ? { id: 'eye-strain', message: '这么晚还在忙？揉揉眼睛，早点睡吧' }
+        : { id: 'sleep', message: '早点睡啦，我陪你，但不鼓励熬夜' }
+    }
     return { id: 'idle', message: '点我互动，右键可以开始专注' }
   }
 
@@ -397,6 +455,11 @@ export function createRuntime(storage: Storage): Runtime {
       overlay,
       visual: visual.id,
       message: visual.message,
+      growth: {
+        level: growthLevelOf(growthEnergy),
+        name: GROWTH_LEVELS[growthLevelOf(growthEnergy) - 1].name,
+        energy: growthEnergy
+      },
       settings,
       trends: trends(),
       monthStats: monthStats()
@@ -419,6 +482,14 @@ export function createRuntime(storage: Storage): Runtime {
     reminder = null
     visualOverride = { id: 'exploding', until: at + 3000, message: '快去休息啦！' }
     publishOverlay('explosion', ['快去休息啦！'])
+  }
+
+  // 和好奖励：爆炸恢复当天（reconciliationDay）的第一次打卡额外 +5 分，只发一次
+  const applyReconciliationBonus = (events: HealthEvent[], at: number): void => {
+    if (reconciliationDay !== dateKey(at)) return
+    if (!events.some((event) => event.type === 'habit_completed' && event.rewarded)) return
+    reconciliationDay = null
+    events.push(...health.bonusScore(RECONCILIATION_BONUS, 'reconciliation', at))
   }
 
   const doTick = (tickNow = Date.now(), idleSeconds = powerMonitor.getSystemIdleTime()): AppSnapshot => {
@@ -472,7 +543,9 @@ export function createRuntime(storage: Storage): Runtime {
       if (recoveryEvents.length) {
         healthEvents.push(...recoveryEvents)
         recoveryRestStartedAt = null
-        visualOverride = { id: 'transform', until: effectiveNow + TRANSFORM_OVERRIDE_MS, message: '休息够啦，恢复活力！' }
+        // 情感修复：变身回来先道谢，并标记当天首次打卡可领 +5 和好奖励
+        visualOverride = { id: 'transform', until: effectiveNow + TRANSFORM_OVERRIDE_MS, message: '谢谢你等我回来～' }
+        reconciliationDay = dateKey(effectiveNow)
       }
     }
     handleExplosion(healthEvents, effectiveNow)
@@ -502,7 +575,9 @@ export function createRuntime(storage: Storage): Runtime {
         nextAmbienceAt = effectiveNow + AMBIENCE_RETRY_MS
       }
     }
+    applyReconciliationBonus(healthEvents, effectiveNow)
     mutateStats(healthEvents, effectiveNow)
+    syncGrowthEnergy(effectiveNow)
     advanceUsage(effectiveNow)
     persistRuntimeState()
     return publish()
@@ -678,7 +753,9 @@ export function createRuntime(storage: Storage): Runtime {
           at: actionNow
         }
       }
+      applyReconciliationBonus(events, actionNow)
       mutateStats(events, actionNow)
+      syncGrowthEnergy(actionNow)
       advanceUsage(actionNow)
       lastInteractionAt = actionNow
       nextAmbienceAt = Math.max(nextAmbienceAt, actionNow + 45_000)
@@ -812,7 +889,8 @@ function validateRuntimeSession(value: unknown): RuntimeSessionState {
       ? value.overlaySequence as number
       : 0,
     usage: validUsageCheckpoint(value.usage),
-    lastGreetedDay: typeof value.lastGreetedDay === 'string' ? value.lastGreetedDay : null
+    lastGreetedDay: typeof value.lastGreetedDay === 'string' ? value.lastGreetedDay : null,
+    reconciliationDay: typeof value.reconciliationDay === 'string' ? value.reconciliationDay : null
   }
 }
 
@@ -839,7 +917,8 @@ function emptyRuntimeSession(): RuntimeSessionState {
     recoveryRestStartedAt: null,
     overlaySequence: 0,
     usage: null,
-    lastGreetedDay: null
+    lastGreetedDay: null,
+    reconciliationDay: null
   }
 }
 

@@ -294,6 +294,20 @@ describe('health engine', () => {
     )
   })
 
+  it('grants a bonus score with a reason and ignores non-positive deltas', () => {
+    const engine = createHealthEngine({ initialNow: 0 })
+
+    const events = engine.bonusScore(5, 'reconciliation', 1_000)
+
+    expect(engine.snapshot().score).toBe(5)
+    expect(events).toEqual([
+      { type: 'score_changed', ts: 1_000, delta: 5, score: 5, reason: 'reconciliation' }
+    ])
+    expect(engine.bonusScore(-3, 'negative', 2_000)).toEqual([])
+    expect(engine.bonusScore(0, 'zero', 3_000)).toEqual([])
+    expect(engine.snapshot().score).toBe(5)
+  })
+
   it('resets daily counters without bypassing a deflated recovery lock', () => {
     const start = new Date(2026, 7, 20, 9, 0, 0).getTime()
     const nextDay = new Date(2026, 7, 21, 9, 0, 0).getTime()

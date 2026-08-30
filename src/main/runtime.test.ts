@@ -239,6 +239,131 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot().visual).toBe('greeting')
   })
 
+  it('dozes off with a sleep clip when idle late at night without recent interaction', () => {
+    const night = new Date(2026, 7, 20, 23, 30).getTime()
+    vi.setSystemTime(night)
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+
+    runtime.tick(night + 6 * 60_000, 0)
+
+    // 超过 5 分钟没有交互且已过问候窗口：深夜待机切换为打瞌睡，不再插播无聊/随机小动作
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'sleep',
+      message: '早点睡啦，我陪你，但不鼓励熬夜'
+    })
+  })
+
+  it('rubs its eyes when the user is still active in the small hours', () => {
+    const night = new Date(2026, 7, 21, 1, 0).getTime()
+    vi.setSystemTime(night)
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+
+    runtime.tick(night + 11_000, 0)
+
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'eye-strain',
+      message: '这么晚还在忙？揉揉眼睛，早点睡吧'
+    })
+  })
+
+  it('levels up with a transform clip when cumulative energy crosses a growth threshold', () => {
+    const storage = memoryStorage()
+    const yesterday = '2026-08-19'
+    storage.daily.set(yesterday, {
+      date: yesterday, scoreEnd: 195, scoreMin: 0, activeSeconds: 600,
+      focusSeconds: 300, pomodoroCount: 1, waterCount: 1, standCount: 0,
+      toiletCount: 0, eyeRestCount: 0, restCount: 1, explodeCount: 0,
+      ignoreCount: 0, pressurePeak: 20, stateSeconds: stateSeconds()
+    })
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+    expect(runtime.snapshot().growth).toEqual({ level: 1, name: '桃苗', energy: 195 })
+
+    vi.setSystemTime(start + 12_000)
+    runtime.dispatch({ type: 'reminder:complete', kind: 'water' })
+
+    // 195 + 今日 8 分 = 203，跨过小桃 200 分门槛
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'transform',
+      message: '我长大啦！现在是小桃了！',
+      growth: { level: 2, name: '小桃', energy: 203 }
+    })
+    expect(storage.settings.get('growthEnergy')).toBe(203)
+
+    // 升级只播一次，之后回到普通状态
+    runtime.tick(start + 30_000, 0)
+    expect(runtime.snapshot().growth).toEqual({ level: 2, name: '小桃', energy: 203 })
+  })
+
+  it('does not drop the growth level when an explosion drains the daily score', () => {
+    const storage = memoryStorage()
+    const yesterday = '2026-08-19'
+    storage.daily.set(yesterday, {
+      date: yesterday, scoreEnd: 205, scoreMin: 0, activeSeconds: 600,
+      focusSeconds: 300, pomodoroCount: 1, waterCount: 1, standCount: 0,
+      toiletCount: 0, eyeRestCount: 0, restCount: 1, explodeCount: 0,
+      ignoreCount: 0, pressurePeak: 20, stateSeconds: stateSeconds()
+    })
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+    expect(runtime.snapshot().growth).toMatchObject({ level: 2, name: '小桃' })
+
+    // 爆炸把今日分数清零，累计能量取高水位，等级不降级
+    runtime.dispatch({ type: 'settings:update', settings: { ...runtime.snapshot().settings, continuousWorkLimitMinutes: 3 } })
+    runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 25 })
+    runtime.tick(start + 180_000, 0)
+    expect(runtime.snapshot().health.mode).toBe('deflated')
+    expect(runtime.snapshot().growth).toMatchObject({ level: 2, name: '小桃', energy: 205 })
+  })
+
+  it('thanks the user after recovery and grants the reconciliation bonus on the first habit of the day', () => {
+    const storage = memoryStorage()
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'settings:update', settings: { ...runtime.snapshot().settings, continuousWorkLimitMinutes: 3 } })
+    runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 25 })
+    runtime.tick(start + 180_000, 0)
+    vi.setSystemTime(start + 181_000)
+    runtime.dispatch({ type: 'pet:click' })
+    runtime.tick(start + 481_000, 300)
+
+    expect(runtime.snapshot()).toMatchObject({
+      health: { mode: 'active' },
+      visual: 'transform',
+      message: '谢谢你等我回来～'
+    })
+
+    // 和好奖励标记持久化：重启后当天第一次打卡仍然发放
+    runtime.close()
+    vi.setSystemTime(start + 490_000)
+    const restored = createRuntime(storage)
+    runtimes.push(restored)
+    restored.dispatch({ type: 'reminder:complete', kind: 'water' })
+    expect(restored.snapshot().health.score).toBe(13)
+    expect(storage.events.filter((event) =>
+      event.type === 'score_changed' && (event.meta as { reason?: string }).reason === 'reconciliation')).toHaveLength(1)
+
+    // 同一天第二次打卡不再发放和好奖励（水还有奖励名额，只加正常分）
+    vi.setSystemTime(start + 500_000)
+    restored.dispatch({ type: 'reminder:complete', kind: 'water' })
+    expect(restored.snapshot().health.score).toBe(21)
+  })
+
+  it('grants no reconciliation bonus when habits complete on a day without recovery', () => {
+    const storage = memoryStorage()
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+    vi.setSystemTime(start + 10_000)
+
+    runtime.dispatch({ type: 'reminder:complete', kind: 'water' })
+
+    expect(runtime.snapshot().health.score).toBe(8)
+    expect(storage.events.some((event) =>
+      event.type === 'score_changed' && (event.meta as { reason?: string }).reason === 'reconciliation')).toBe(false)
+  })
+
   it('returns every day of the current month with missing dates zero-filled', () => {
     const storage = memoryStorage()
     storage.daily.set('2026-08-02', {

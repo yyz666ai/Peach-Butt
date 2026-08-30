@@ -321,6 +321,20 @@ function habitCount(today: AppSnapshot['trends'][number], kind: ReminderKind): n
 }
 function formatTime(seconds: number): string { return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}` }
 function formatDuration(seconds: number): string { const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); return h ? `${h}小时${m}分` : `${m}分钟` }
+// 成长等级口头禅：每升一级解锁一句新台词加入待机气泡池（按分钟轮换，不闪烁）
+const GROWTH_QUIPS: string[][] = [
+  ['我会安静陪你'],
+  ['我会安静陪你', '长出小桃子啦，一起加油'],
+  ['我会安静陪你', '圆滚滚的我陪你到点休息'],
+  ['我会安静陪你', '甜蜜蜜的蜜桃，照顾你也有劲'],
+  ['我会安静陪你', '仙桃状态全开，放心交给我'],
+  ['我会安静陪你', '仙桃状态全开，放心交给我']
+]
+function idleQuip(snapshot: AppSnapshot): string {
+  const level = Math.min(Math.max(snapshot.growth?.level ?? 1, 1), GROWTH_QUIPS.length)
+  const pool = GROWTH_QUIPS[level - 1]
+  return pool[Math.floor(Date.now() / 60_000) % pool.length]
+}
 function getBubbleCopy(snapshot: AppSnapshot, focusing: boolean): string {
   if (snapshot.message === '保持专注') return '保持专注'
   if (focusing) return `还剩 ${formatTime(snapshot.pomodoro.remainingSeconds)}`
@@ -328,10 +342,10 @@ function getBubbleCopy(snapshot: AppSnapshot, focusing: boolean): string {
   if (snapshot.pomodoro.phase === 'awaiting_rest_confirmation') return '点我开始休息'
   // 提醒、压力、瘪气、问候和短暂反馈直接采用主进程文案（含昵称称呼）
   if (snapshot.reminder) return snapshot.message
-  if (['pressure', 'deflated', 'greeting', 'wave', 'happy', 'rest', 'transform', 'hydrating', 'pet', 'bored', 'shy', 'dance'].includes(snapshot.visual)) {
+  if (['pressure', 'deflated', 'greeting', 'wave', 'happy', 'rest', 'transform', 'hydrating', 'pet', 'bored', 'shy', 'dance', 'sleep', 'eye-strain'].includes(snapshot.visual)) {
     return snapshot.message
   }
-  return '我会安静陪你'
+  return idleQuip(snapshot)
 }
 
 function App(): React.JSX.Element {

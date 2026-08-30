@@ -76,6 +76,7 @@ export interface HealthEngine {
   undoHabit(completion: HabitCompletion, now: number): HealthEvent[]
   poke(now: number): HealthEvent[]
   ignoreReminder(kind: ReminderKind, now: number): HealthEvent[]
+  bonusScore(delta: number, reason: string, now: number): HealthEvent[]
   snapshot(): HealthSnapshot
 }
 
@@ -265,6 +266,12 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
         { type: 'reminder_ignored', ts: now, kind, pressureAdded },
         { type: 'score_changed', ts: now, delta: -penalty, score: state.score, reason: 'ignored_reminder' }
       ]
+    },
+    bonusScore(delta, reason, now) {
+      const applied = Math.max(0, Math.round(delta))
+      if (applied === 0) return []
+      state.score += applied
+      return [{ type: 'score_changed', ts: now, delta: applied, score: state.score, reason }]
     },
     snapshot() {
       return { ...state }
