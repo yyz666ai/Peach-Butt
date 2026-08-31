@@ -889,6 +889,14 @@ if (
         visualOverride = { id: 'transform', until: actionNow + TRANSFORM_OVERRIDE_MS, message: t(settings.language, 'msg.transformBack') }
       }
       if (action.type === 'pomodoro:toggle-pause') pomodoro.snapshot().phase === 'paused' ? pomodoro.resume(actionNow) : pomodoro.pause(actionNow)
+      // 2026-09-01：用户主动取消 5 分钟恢复（不想离开电脑 / 误触开始）。
+      // 只清空计时，不重置 recovery 进度，下次再点开始会从中断点继续涨大。
+      if (action.type === 'recovery:cancel') {
+        if (locked && recoveryRestStartedAt !== null) {
+          recoveryRestStartedAt = null
+          events.push({ type: 'state_changed', ts: actionNow, mode: 'deflated' })
+        }
+      }
       if (action.type === 'pet:click') {
         const phase = pomodoro.snapshot().phase
         if (locked) {

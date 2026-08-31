@@ -175,7 +175,7 @@ export function PetMotion({ visual, pressureValue, recovery = 100, swellLevel = 
   }, [clip, pressurePosition, effectivePlayMode])
 
   if (!clip || failed) {
-    return <img className="pet-media" src={stills[visual] ?? idle} alt="桃屁屁桌宠" draggable={false} style={{ ...(visual === 'deflated' ? { transform: `scale(${0.72 + recovery * 0.0028})` } : {}), ...(drynessFilter ? { filter: drynessFilter } : {}) }}/>
+    return <img className="pet-media" src={stills[visual] ?? idle} alt="桃屁屁桌宠" draggable={false} style={{ ...(visual === 'deflated' ? { transform: `scale(${1.05 + recovery * 0.0028})` } : {}), ...(drynessFilter ? { filter: drynessFilter } : {}) }}/>
   }
 
   // 体型归一化：per-clip scale 拉齐不同素材的取景差异（专注素材含椅子显得瘦小）
@@ -196,7 +196,9 @@ export function PetMotion({ visual, pressureValue, recovery = 100, swellLevel = 
     style={{
       // 反久坐：压力越高越红润紧绷（scale 收缩），swellProgress 0..1 叠加膨胀（与旧 swellLevel 1/2/3 衔接）
       ...(visual === 'pressure' ? { transform: `scale(${(1.45 - Math.min(1, Math.max(0, (pressureValue - 55) / 45)) * 0.37) * (1 + swellProgressValue * 0.39) * clipScale})` } : clipScale !== 1 ? { transform: `scale(${clipScale})` } : {}),
-      ...(visual === 'deflated' ? { transform: `scale(${(0.72 + recovery * 0.0028) * clipScale})` } : {}),
+      // 2026-09-01：瘪了之后桃屁屁也需要保持可见，base scale 从 0.72 抬到 1.05，
+      // 防止 reset 改回 0.72 还让视频在 pet-stage 里缩成一小坨。
+      ...(visual === 'deflated' ? { transform: `scale(${(1.05 + recovery * 0.0028) * clipScale})` } : {}),
       ...(drynessFilter ? { filter: drynessFilter } : {})
     }}
     onError={() => setFailed(true)}

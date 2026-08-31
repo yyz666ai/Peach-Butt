@@ -58,6 +58,8 @@ function playTakeoverChime(kind: NonNullable<AppSnapshot['takeover']>['kind'], h
 }
 
 import idle from '../../../assets/generated/final/idle.png'
+import idleMotionStill from '../../../assets/generated/final/idle-motion.png'
+import deflatedStill from '../../../assets/generated/final/deflated.png'
 import roomBackground from '../../../assets/dashboard/room-background.png'
 import waterAsset from '../../../assets/dashboard/water.png'
 import activityStretchAsset from '../../../assets/dashboard/activity-stretch.png'
@@ -66,6 +68,12 @@ import toiletAsset from '../../../assets/dashboard/toilet.png'
 import milestoneAsset from '../../../assets/dashboard/milestone.png'
 import motivationNoteAsset from '../../../assets/dashboard/motivation-note.png'
 import explosionVideo from '../../../assets/video/generated/explosion.webm'
+import deflatedMotion from '../../../assets/video/generated/deflated.webm'
+import pressureMotion from '../../../assets/video/generated/pressure.webm'
+import sleepMotion from '../../../assets/video/generated/sleep.webm'
+import restMotion from '../../../assets/video/generated/rest-v7.webm'
+import boredMotion from '../../../assets/video/generated/bored-v7.webm'
+import focusV3 from '../../../assets/video/generated/focus-v3.webm'
 
 function useSnapshot(): [AppSnapshot | null, (action: AppAction) => Promise<void>] {
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null)
@@ -252,11 +260,21 @@ function PetView(): React.JSX.Element {
   const focusing = snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused'
   const bubbleCopy = getBubbleCopy(snapshot, focusing)
   const restChoices = snapshot.restSession?.pending ?? []
+  // 2026-09-01：deblated 期间（mode='deflated'）用专门面板，无脑展示，点击按钮 pet:click 触发 5 分钟休息
+  // preview 模式下没有真实 snapshot，用 previewVisuals.visual === 'deflated' 模拟同样形态。
+  // 5 分钟 = 300 秒，与 motion-timing.ts 的 RECOVERY_REST_REQUIRED_SECONDS 一致。
+  const PREVIEW_RECOVERY_REQUIRED = 300
+  const recovering = (snapshot.health.mode === 'deflated') || (preview?.visual === 'deflated')
+  const inRestSession = recovering && (preview?.recoveryRemainingSeconds !== undefined || snapshot.recoverySession !== null)
+  const recoveryRemaining = preview?.recoveryRemainingSeconds ?? snapshot.recoverySession?.remainingSeconds ?? 0
+  const recoveryElapsed = preview?.recoveryRemainingSeconds !== undefined
+    ? Math.max(0, PREVIEW_RECOVERY_REQUIRED - preview.recoveryRemainingSeconds)
+    : snapshot.recoverySession?.elapsedSeconds ?? 0
   const takeoverPreview = getTakeoverPreview()
   // 2026-08-31：接管期间整段桌宠区域（pet-stage / 气泡 / 打卡提示）都藏掉。
   // 否则背景会露出主线 PetMotion 当前 visual（如瘪桃子），与接管角色重叠打架。
   const takeoverVisible = snapshot.takeover ?? takeoverPreview
-  return <main className={`pet-shell${preview ? ' visual-preview' : ''}${takeoverVisible ? ' takeover-on-top' : ''}`} onMouseEnter={enter} onMouseLeave={() => setPetHovered(false)} onContextMenu={(event) => { event.preventDefault(); if (!preview) window.pipeach.showPetMenu() }}>
+  return <main className={`pet-shell${preview ? ' visual-preview' : ''}${takeoverVisible ? ' takeover-on-top' : ''}${recovering ? ' is-deflated' : ''}`} onMouseEnter={enter} onMouseLeave={() => setPetHovered(false)} onContextMenu={(event) => { event.preventDefault(); if (!preview) window.pipeach.showPetMenu() }}>
     {!takeoverVisible && (restChoices.length > 0 && petHovered
       ? <section className="rest-checkins" aria-label={t(lang, 'restCheckins.aria')}>
           {habitItems.filter((item) => restChoices.includes(item.kind)).map((item) => <button
@@ -265,19 +283,54 @@ function PetView(): React.JSX.Element {
             onClick={(event) => { event.stopPropagation(); void act({ type: 'rest:complete', kind: item.kind }) }}
           ><img src={item.asset} alt=""/><span>{habitLabel(lang, item.kind)}</span></button>)}
         </section>
-      : preview?.recoveryRemainingSeconds !== undefined
-        ? <section className="hover-status" aria-live="polite"><strong>恢复 {formatTime(preview.recoveryRemainingSeconds)}</strong></section>
-        : bubbleVisible && !preview
-          ? <section className="hover-status" aria-live="polite"><strong>{bubbleCopy}</strong></section>
-          : askFocusVisible && !preview && !petHovered
-            ? <section className="hover-status ask-focus" aria-live="polite">
-                <strong>{t(lang, 'bubble.askFocus')}</strong>
-                <button
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => { event.stopPropagation(); setAskFocusVisible(false); void act({ type: 'pomodoro:start' }) }}
-                >{t(lang, 'bubble.askFocusYes')}</button>
-              </section>
-            : null)}
+  // preview 也走 deflated 分支：用于设计验证（按需点击按钮查样式）
+      : recovering
+        ? inRestSession
+          ? <section className="hover-status is-recovery" aria-live="polite">
+              <strong>{t(lang, 'recovery.timerTitle')}</strong>
+              <div className="recovery-ring" aria-hidden="true">
+                <svg viewBox="0 0 100 100">
+                  <circle className="recovery-ring-track" cx="50" cy="50" r="46"/>
+                  <circle
+                    className="recovery-ring-progress"
+                    cx="50" cy="50" r="46"
+                    style={{
+                      strokeDasharray: `${2 * Math.PI * 46}`,
+                      strokeDashoffset: `${2 * Math.PI * 46 * Math.max(0, Math.min(1, (recoveryElapsed / PREVIEW_RECOVERY_REQUIRED)))}`
+                    }}
+                  />
+                </svg>
+                <em>{formatTime(recoveryRemaining)}</em>
+              </div>
+              <small>{t(lang, 'recovery.timerLeft', { minutes: String(Math.floor(recoveryRemaining / 60)), seconds: String(recoveryRemaining % 60).padStart(2, '0') })}</small>
+              <button
+                className="recovery-cancel"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => { event.stopPropagation(); void act({ type: 'recovery:cancel' }) }}
+              >{t(lang, 'recovery.cancelButton')}</button>
+            </section>
+          : <section className="hover-status is-deflated" aria-live="polite">
+              <strong>{t(lang, 'visual.deflatedAsk', { name: '' })}</strong>
+              <small>{t(lang, 'recovery.startSub')}</small>
+              <button
+                className="recovery-start"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => { event.stopPropagation(); void act({ type: 'pet:click' }) }}
+              >{t(lang, 'recovery.startButton')}</button>
+            </section>
+        : preview?.recoveryRemainingSeconds !== undefined
+          ? <section className="hover-status" aria-live="polite"><strong>恢复 {formatTime(preview.recoveryRemainingSeconds)}</strong></section>
+          : bubbleVisible && !preview
+            ? <section className="hover-status" aria-live="polite"><strong>{bubbleCopy}</strong></section>
+            : askFocusVisible && !preview && !petHovered
+              ? <section className="hover-status ask-focus" aria-live="polite">
+                  <strong>{t(lang, 'bubble.askFocus')}</strong>
+                  <button
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => { event.stopPropagation(); setAskFocusVisible(false); void act({ type: 'pomodoro:start' }) }}
+                  >{t(lang, 'bubble.askFocusYes')}</button>
+                </section>
+              : null)}
     {!takeoverVisible && <div key={whirlKey} className={`pet-stage${whirlKey > 0 ? ' is-whirling' : ''}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
       <PetMotion visual={previewFocusVisual ?? (snapshot.visual === 'focus' ? `focus:${focusVariant}` : preview?.visual ?? snapshot.visual)} pressureValue={preview?.pressure ?? snapshot.health.pressure} recovery={preview?.recovery ?? snapshot.health.recovery} swellLevel={preview ? 0 : snapshot.swellLevel} hydrationStage={preview ? 0 : snapshot.hydrationStage} hydrationProgress={preview ? 0 : snapshot.hydrationProgress} swellProgress={preview ? 0 : snapshot.swellProgress}/>
     </div>}
@@ -608,28 +661,80 @@ function SettingsPanel({ draft, setDraft, save, close }: { draft: AppSettings; s
 const defaultRestMessages = ['起来活动一下啦！', '要去喝水啦！', '该去上个厕所啦！', '让眼睛休息一下吧！']
 
 function AlertView(): React.JSX.Element {
-  const [snapshot] = useSnapshot()
+  const [snapshot, act] = useSnapshot()
   const video = useRef<HTMLVideoElement>(null)
   const [messageIndex, setMessageIndex] = useState(0)
   const overlay = snapshot?.overlay
   const previewAlert = new URLSearchParams(location.search).get('alertPreview')
+  const previewDeflated = previewAlert === 'deflated'
   const previewRestDue = previewAlert === 'rest-due'
   const explosion = previewAlert === 'explosion' || overlay?.kind === 'explosion'
+  // 2026-09-01：alert 不再写死 idle.png，跟随 snapshot.visual 切换；
+  // deflated 状态在 alert 显 deflated 视频 + 大按钮 + 倒计时环。
+  const isDeflatedMode = snapshot?.health.mode === 'deflated'
   const messages = explosion ? ['快去休息啦！'] : previewRestDue ? defaultRestMessages : (overlay?.messages.length ? overlay.messages : defaultRestMessages)
+  // 2026-09-01：deflated 面板用 snapshot.health.mode 触发，不需要消息轮换；爆炸保留轮换。
+  const rotatingMessages = !explosion && !previewDeflated && !isDeflatedMode
   useEffect(() => {
-    if (messages.length < 2) return
+    if (!rotatingMessages || messages.length < 2) return
     const timer = window.setInterval(() => setMessageIndex((index) => (index + 1) % messages.length), 2_050)
     return () => window.clearInterval(timer)
-  }, [messages.join('|')])
+  }, [messages.join('|'), rotatingMessages])
   useEffect(() => {
     const element = video.current
-    if (!element || !explosion) return
+    if (!element) return
+    if (!explosion && !previewDeflated && !isDeflatedMode) return
     const play = (): void => { element.currentTime = 0; void element.play() }
     if (element.readyState >= 1) play(); else element.addEventListener('loadedmetadata', play, { once: true })
-  }, [explosion])
-  return <main className={`alert-view ${explosion ? 'is-explosion' : 'is-rest'}`}>
-    {explosion ? <video ref={video} src={explosionVideo} muted playsInline/> : <img src={idle} alt=""/>}
-    <div key={`${overlay?.id ?? 'preview'}-${messageIndex}`}><strong>{messages[messageIndex % messages.length]}</strong><span>{explosion ? t(snapshot?.settings.language, 'overlay.explosionSub') : t(snapshot?.settings.language, 'overlay.restSub')}</span></div>
+  }, [explosion, previewDeflated, isDeflatedMode])
+  // deflated 状态显 deflatedMotion（视频），保持与 pet window 视觉一致；
+  // explosion 仍走 explosion 视频；其他 fallback 用 idle.png 静图避免白窗口。
+  const mediaVisual = explosion ? 'explosion'
+    : (previewDeflated || isDeflatedMode) ? 'deflated'
+    : snapshot?.visual ?? 'idle'
+  const lang = snapshot?.settings.language ?? 'zh'
+  return <main className={`alert-view ${explosion ? 'is-explosion' : isDeflatedMode || previewDeflated ? 'is-deflated' : 'is-rest'}`}>
+    {explosion
+      ? <video ref={video} key="explosion" className="pet-media" src={explosionVideo} muted autoPlay playsInline/>
+      : mediaVisual === 'deflated'
+        ? <video ref={video} key="deflated" className="pet-media" src={deflatedMotion} muted autoPlay playsInline
+            style={{ transform: `scale(${0.78 + (snapshot?.health.recovery ?? 0) * 0.0022})` }} />
+        : mediaVisual === 'sleep'
+          ? <video className="pet-media" src={sleepMotion} muted autoPlay playsInline/>
+          : mediaVisual === 'pressure'
+            ? <video className="pet-media" src={pressureMotion} muted autoPlay playsInline/>
+            : mediaVisual === 'focus' || mediaVisual.startsWith('focus:')
+              ? <video className="pet-media" src={focusV3} muted autoPlay playsInline/>
+              : mediaVisual === 'rest'
+                ? <video className="pet-media" src={restMotion} muted autoPlay playsInline/>
+                : <img className="pet-media" src={idle} alt=""/>}
+    {explosion
+      ? <div key={`${overlay?.id ?? 'preview'}-${messageIndex}`}><strong>{messages[messageIndex % messages.length]}</strong><span>{t(lang, 'overlay.explosionSub')}</span></div>
+      : isDeflatedMode || previewDeflated
+        ? <div className="recovery-panel">
+            <strong>{snapshot?.message || t(lang, 'visual.deflatedRecovering')}</strong>
+            {snapshot?.recoverySession
+              ? <>
+                  <div className="recovery-ring" aria-hidden="true">
+                    <svg viewBox="0 0 100 100">
+                      <circle className="recovery-ring-track" cx="50" cy="50" r="46"/>
+                      <circle className="recovery-ring-progress" cx="50" cy="50" r="46"
+                        style={{
+                          strokeDasharray: `${2 * Math.PI * 46}`,
+                          strokeDashoffset: `${2 * Math.PI * 46 * Math.max(0, Math.min(1, (snapshot.recoverySession.elapsedSeconds / snapshot.recoverySession.requiredSeconds)))}`
+                        }}/>
+                    </svg>
+                    <em>{formatTime(snapshot.recoverySession.remainingSeconds)}</em>
+                  </div>
+                  <small>{t(lang, 'recovery.timerLeft', { minutes: String(Math.floor(snapshot.recoverySession.remainingSeconds / 60)), seconds: String(snapshot.recoverySession.remainingSeconds % 60).padStart(2, '0') })}</small>
+                  <button className="recovery-cancel recovery-large" onClick={() => void act({ type: 'recovery:cancel' })}>{t(lang, 'recovery.cancelButton')}</button>
+                </>
+              : <>
+                  <small>{t(lang, 'recovery.startSub')}</small>
+                  <button className="recovery-start recovery-large" onClick={() => void act({ type: 'pet:click' })}>{t(lang, 'recovery.startButton')}</button>
+                </>}
+          </div>
+        : <div key={`${overlay?.id ?? 'preview'}-${messageIndex}`}><strong>{messages[messageIndex % messages.length]}</strong><span>{t(lang, 'overlay.restSub')}</span></div>}
   </main>
 }
 

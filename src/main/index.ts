@@ -83,6 +83,17 @@ function createPetWindow(): BrowserWindow {
     } else if (bounds.width > 400) {
       resizePet(runtime?.snapshot().settings.petSize ?? 140)
     }
+    // 2026-09-01：deflated 时 pet 窗口自动放大到 320×480（与 alert 同等占位），
+    // 让用户看清桃 + 恢复按钮。离开 deflated 模式自动收回原尺寸。
+    const deflated = snapshot.health.mode === 'deflated'
+    if (deflated && bounds.width < 280) {
+      const workArea = screen.getDisplayMatching(bounds).workArea
+      const newW = 320
+      const newH = 480
+      petWindow?.setBounds({ x: workArea.x + workArea.width - newW - 28, y: workArea.y + workArea.height - newH - 28, width: newW, height: newH })
+    } else if (!deflated && bounds.width >= 280) {
+      resizePet(runtime?.snapshot().settings.petSize ?? 140)
+    }
   })
   return window
 }

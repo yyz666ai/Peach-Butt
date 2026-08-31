@@ -17,6 +17,7 @@ const ALL_ACTION_TYPES: AppAction['type'][] = [
   'pet:greet',
   'pet:pat',
   'pet:size',
+  'recovery:cancel',
   'reminder:complete',
   'reminder:snooze',
   'reminder:undo',

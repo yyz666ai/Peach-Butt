@@ -23,6 +23,13 @@ button { cursor: pointer; }
    高度统一 44vh；video 始终 object-fit: contain 维持原始体型，避免 reward 缩小、focus 偏小。 */
 .pet-stage { --pet-max-w: min(44vw, 640px); --pet-max-h: 44vh; }
 .pet-stage > * { width: 100%; height: 100%; max-width: var(--pet-max-w); max-height: var(--pet-max-h); }
+/* 2026-09-01：deflated 时桌宠 + 恢复面板共占 pet 窗口，pet-stage 居中且不贴顶/贴底，
+   给恢复气泡留出紧贴桃上方的位置（避免气泡飘到窗口顶部、与桃隔太远）。 */
+.pet-shell.is-deflated .pet-stage { inset: 36% 2% 8% 2%; --pet-max-w: min(80vw, 680px); --pet-max-h: 50vh; }
+.pet-shell.is-deflated .pet-stage > * { max-width: min(80vw, 680px); max-height: 50vh; }
+.pet-shell.is-deflated .hover-status { top: auto; bottom: 60%; pointer-events: auto; max-height: 38vh; }
+.pet-shell.is-deflated .hover-status::after { bottom: -7px; left: 50%; transform: translateX(-50%) rotate(45deg); }
+.pet-shell.is-deflated .hover-status.is-recovery .recovery-ring { width: 42px; height: 42px; }
 .hover-status { position: absolute; z-index: 8; top: 11%; left: 50%; width: max-content; max-width: 96%; min-height: 0; padding: 8px 13px; transform: translateX(-50%); border: 1px solid rgba(123, 74, 46, .12); border-radius: 16px 16px 16px 6px; background: rgba(255, 247, 229, .97); box-shadow: 0 7px 22px rgba(98, 57, 33, .16); color: #68422f; text-align: center; pointer-events: none; animation: status-in .18s ease-out; }
 .hover-status::after { content: ''; position: absolute; left: 24%; bottom: -7px; width: 12px; height: 12px; transform: rotate(45deg); border-right: 1px solid rgba(123, 74, 46, .12); border-bottom: 1px solid rgba(123, 74, 46, .12); background: rgba(255, 247, 229, .97); }
 /* 2026-08-31：去掉 ellipsis，文案允许多行；长文本换行不省略 */
@@ -76,6 +83,21 @@ button { cursor: pointer; }
 .hover-status.ask-focus button::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff 0 35%, #ffd9a8 100%); box-shadow: 0 0 0 2px rgba(255, 255, 255, .35); }
 .hover-status.ask-focus button:hover { transform: translateY(-1px) scale(1.04); box-shadow: 0 7px 18px rgba(233, 109, 82, .42), inset 0 1px 0 rgba(255, 255, 255, .45); }
 .hover-status.ask-focus button:active { transform: scale(.96); }
+/* 2026-09-01：瘪了之后永远显示的引导面板——无脑展示，不依赖 hover。
+   is-deflated = 桃屁屁 lock 了但还没开始休息；is-recovery = 已经开始 5 分钟休息。 */
+.hover-status.is-deflated, .hover-status.is-recovery { pointer-events: auto; display: grid; justify-items: center; gap: 5px; padding: 10px 13px 11px; min-width: 168px; }
+.hover-status.is-deflated strong, .hover-status.is-recovery strong { margin: 0; max-width: 220px; font-size: 11px; }
+.hover-status.is-deflated small, .hover-status.is-recovery small { display: block; max-width: 230px; font-size: 9.5px; font-weight: 700; color: #8d5a40; line-height: 1.35; }
+.recovery-start, .recovery-cancel { display: inline-flex; align-items: center; gap: 4px; padding: 5px 14px; border: 0; border-radius: 999px; color: #fff; font-size: 10.5px; font-weight: 800; letter-spacing: .04em; cursor: pointer; transition: transform .14s ease, box-shadow .14s ease; }
+.recovery-start { background: linear-gradient(135deg, #ffb6c1 0%, #f9896b 100%); box-shadow: 0 5px 14px rgba(233, 109, 82, .34), inset 0 1px 0 rgba(255, 255, 255, .45); }
+.recovery-cancel { background: rgba(255, 248, 232, .92); color: #6a3a23; border: 1px solid rgba(123, 74, 46, .18); box-shadow: 0 3px 9px rgba(120, 70, 40, .12); }
+.recovery-start:hover, .recovery-cancel:hover { transform: translateY(-1px) scale(1.03); }
+.recovery-start:active, .recovery-cancel:active { transform: scale(.96); }
+.recovery-ring { position: relative; width: 56px; height: 56px; margin: 2px 0 1px; }
+.recovery-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.recovery-ring-track { fill: rgba(120, 70, 40, .12); stroke: rgba(120, 70, 40, .12); stroke-width: 6; }
+.recovery-ring-progress { fill: transparent; stroke: #ef765f; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset .35s ease; transform-origin: center; }
+.recovery-ring em { position: absolute; inset: 0; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 800; color: #ef765f; font-variant-numeric: tabular-nums; }
 /* 静图兜底（视频加载失败等）：轻微呼吸起伏，避免「傻站着一张图」 */
 img.pet-media { animation: pet-still-breath 3.4s ease-in-out infinite; transform-origin: center bottom; }
 @keyframes pet-still-breath { 0%, 100% { scale: 1 1; } 50% { scale: 1.015 .985; } }
@@ -105,6 +127,18 @@ img.pet-media { animation: pet-still-breath 3.4s ease-in-out infinite; transform
 .alert-view.is-explosion video { grid-area: 1 / 1; justify-self: center; width: min(92vw, 1100px); height: min(86vh, 820px); }
 .alert-view.is-explosion div { position: absolute; inset: auto 0 8%; place-items: center; }
 @keyframes alert-copy { 0% { opacity: 0; transform: translateY(30px) scale(.88); } 18% { opacity: 1; transform: translateY(0) scale(1.04); } 28%, 78% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: translateY(-12px) scale(.98); } }
+/* 2026-09-01：alert 上的反瘪恢复面板（独立 panel，不参与轮换动画） */
+.alert-view.is-deflated { grid-template-columns: minmax(280px, .55fr) minmax(0, 1fr); }
+.alert-view.is-deflated > video, .alert-view.is-deflated > img { justify-self: center; width: min(42vw, 600px); max-width: var(--pet-max-w, 640px); max-height: 68vh; object-fit: contain; }
+.alert-view.is-deflated .recovery-panel { display: grid; justify-items: center; align-content: center; gap: clamp(10px, 1.4vh, 18px); padding: clamp(10px, 1.4vw, 24px); color: #733820; text-shadow: 0 2px 10px #fff0d8; animation: none; }
+.alert-view.is-deflated .recovery-panel strong { max-width: 12em; font-size: clamp(32px, 5.2vw, 96px); line-height: 1.08; letter-spacing: -.035em; color: #4a2614; text-shadow: 0 1px 2px rgba(255, 248, 232, .95), 0 2px 14px rgba(255, 242, 220, .9), 0 0 34px rgba(255, 236, 206, .7); }
+.alert-view.is-deflated .recovery-panel small { display: block; max-width: 18em; font-size: clamp(13px, 1.5vw, 22px); font-weight: 700; color: #6a3a23; line-height: 1.5; text-shadow: 0 1px 2px rgba(255, 248, 232, .9); }
+.alert-view.is-deflated .recovery-panel .recovery-ring { width: clamp(96px, 14vw, 160px); height: clamp(96px, 14vw, 160px); margin: 0; }
+.alert-view.is-deflated .recovery-panel .recovery-ring-track { fill: rgba(120, 70, 40, .14); stroke: rgba(120, 70, 40, .14); stroke-width: 6; }
+.alert-view.is-deflated .recovery-panel .recovery-ring-progress { stroke-width: 6; }
+.alert-view.is-deflated .recovery-panel .recovery-ring em { font-size: clamp(18px, 2.4vw, 32px); }
+.alert-view.is-deflated .recovery-large.recovery-start { padding: 14px 38px; font-size: clamp(15px, 1.9vw, 22px); box-shadow: 0 12px 32px rgba(220, 80, 50, .42), inset 0 1px 0 rgba(255, 255, 255, .5); animation: ack-pulse 1.6s ease-in-out infinite; }
+.alert-view.is-deflated .recovery-large.recovery-cancel { padding: 10px 26px; font-size: clamp(12px, 1.3vw, 16px); }
 
 /* 桃桃小屋 dashboard */
 .cottage-loading { height: 100vh; display: grid; place-items: center; background: #ffe3bc; color: #74432b; }

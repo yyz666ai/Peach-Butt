@@ -21,6 +21,7 @@ const SAFE_ACTION_TYPES: Record<AppAction['type'], true> = {
   'pet:greet': true,
   'pet:pat': true,
   'pet:size': true,
+  'recovery:cancel': true,
   'reminder:complete': true,
   'reminder:snooze': true,
   'reminder:undo': true,

@@ -159,6 +159,7 @@ export type AppAction =
   | { type: 'pet:greet' }
   | { type: 'pet:pat' }
   | { type: 'pet:size'; size: number }
+  | { type: 'recovery:cancel' }
   | { type: 'reminder:complete'; kind: ReminderKind }
   | { type: 'reminder:snooze'; kind: ReminderKind }
   | { type: 'reminder:undo' }

@@ -1278,6 +1278,33 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot()).toMatchObject({ health: { mode: 'active', recovery: 100 }, visual: 'transform' })
   })
 
+  it('lets the user cancel an in-progress recovery without losing the deflated lock', () => {
+    const storage = memoryStorage()
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+    runtime.dispatch({
+      type: 'settings:update',
+      settings: { ...runtime.snapshot().settings, continuousWorkLimitMinutes: 3 }
+    })
+    runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 25 })
+    runtime.tick(start + 180_000, 0)
+    vi.setSystemTime(start + 181_000)
+    runtime.dispatch({ type: 'pomodoro:start' })
+
+    runtime.dispatch({ type: 'pet:click' })
+    expect(runtime.snapshot()).toMatchObject({
+      health: { mode: 'deflated' },
+      recoverySession: { requiredSeconds: 300 }
+    })
+
+    runtime.dispatch({ type: 'recovery:cancel' })
+    expect(runtime.snapshot()).toMatchObject({
+      health: { mode: 'deflated' },
+      recoverySession: null
+    })
+    expect(runtime.snapshot().message).toMatch(/点我并离开电脑/)
+  })
+
   it('restores a locked explosion and an in-progress rest queue across runtime restart', () => {
     const lockedStorage = memoryStorage()
     const first = createRuntime(lockedStorage)
