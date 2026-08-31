@@ -36,7 +36,8 @@ function snapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
       },
       launchAtLogin: false,
       soundEnabled: true,
-      reminderIntensity: 'standard'
+      reminderIntensity: 'standard',
+      language: 'zh'
     },
     swellLevel: 0,
     hydrationStage: 0,

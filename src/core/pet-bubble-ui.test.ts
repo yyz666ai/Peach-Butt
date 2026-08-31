@@ -20,10 +20,13 @@ describe('desktop pet speech bubble contract', () => {
     expect(styles).toContain('top: 4%')
   })
 
-  it('never starts greeting from hover', () => {
-    expect(renderer).not.toContain('greetedAt')
-    expect(renderer).not.toContain("void act({ type: 'pet:greet' })")
-    expect(mainProcess).toContain("打招呼")
+  it('starts greeting from hover with a throttle guard (2026-08-31 需求变更：悬停即打招呼)', () => {
+    // 悬停打招呼是用户明确要求的行为；必须带 2 分钟节流 + 专注/接管/提醒时静默
+    expect(renderer).toContain('lastHoverGreetAt')
+    expect(renderer).toContain("void act({ type: 'pet:greet' })")
+    expect(renderer).toContain('< 120_000')
+    expect(renderer).toContain('if (snapshot.takeover || snapshot.reminder) return')
+    expect(renderer).toContain('focusingNow')
     expect(mainProcess).toContain("type: 'pet:greet'")
   })
 

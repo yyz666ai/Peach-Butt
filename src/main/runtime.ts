@@ -13,6 +13,7 @@ import type {
   TakeoverSnapshot,
   UsageState
 } from '../shared/contracts'
+import { callNamePrefix, growthLevelName, t, type StringKey } from '../shared/i18n'
 import { emptyDailyStats, type DailyStats, type Storage } from './storage'
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -33,7 +34,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   },
   launchAtLogin: false,
   soundEnabled: true,
-  reminderIntensity: 'standard'
+  reminderIntensity: 'standard',
+  language: 'zh'
 }
 
 // 反久坐 swellLevel 触发时机：连续专注满「上限的一半」开始涨，每 5 分钟进一档
@@ -71,25 +73,14 @@ function computeHydrationStage(reminder: AppSnapshot['reminder'], now: number): 
   return 0
 }
 
-function takeoverCopy(kind: TakeoverSnapshot['kind']): { title: string; subtitle: string } {
-  switch (kind) {
-    case 'water':
-      return { title: '该喝水啦', subtitle: '我都干成这样了，喝口水我就缓过来' }
-    case 'stand':
-      return { title: '起来活动一下', subtitle: '我也想蹦两下，跟我一起？' }
-    case 'toilet':
-      return { title: '该去厕所啦', subtitle: '别憋着，跟我说一声「我去了」' }
-    case 'eyes':
-      return { title: '眼睛休息一下', subtitle: '跟我揉揉眼睛，1–2 分钟就好' }
-    case 'anti-sedentary':
-      return { title: '我撑不住了！', subtitle: '已经连续坐太久了，起来走走我才能消气' }
-  }
+function takeoverCopy(kind: TakeoverSnapshot['kind'], lang: AppSettings['language']): { title: string; subtitle: string } {
+  return { title: t(lang, `takeover.${kind}.title` as StringKey), subtitle: t(lang, `takeover.${kind}.subtitle` as StringKey) }
 }
 
-function takeoverReason(kind: TakeoverSnapshot['kind'], ignoredMinutes: number, continuousMinutes: number): string {
-  if (kind === 'anti-sedentary') return `连续专注 ${Math.round(continuousMinutes)} 分钟`
-  if (ignoredMinutes > 0) return `已忽略 ${Math.round(ignoredMinutes)} 分钟`
-  return '刚刚到点'
+function takeoverReason(kind: TakeoverSnapshot['kind'], lang: AppSettings['language'], ignoredMinutes: number, continuousMinutes: number): string {
+  if (kind === 'anti-sedentary') return t(lang, 'takeover.reason.antiSedentary', { minutes: Math.round(continuousMinutes) })
+  if (ignoredMinutes > 0) return t(lang, 'takeover.reason.ignored', { minutes: Math.round(ignoredMinutes) })
+  return t(lang, 'takeover.reason.justDue')
 }
 
 // 压力增速 = 100 / 连续专注上限，保证爆炸前能完整看到变红过程
@@ -98,12 +89,8 @@ function pressureRateFor(value: AppSettings): number {
   return 100 / value.continuousWorkLimitMinutes
 }
 
-const reminderCopy: Record<ReminderKind, string> = {
-  water: '该喝水啦，看看我怎么补充水分',
-  stand: '这一轮结束啦，起来走走再休息',
-  toilet: '别憋着，该去上厕所啦',
-  eyes: '看看远处，让眼睛休息一下'
-}
+const reminderCopy = (lang: AppSettings['language'], kind: ReminderKind): string =>
+  t(lang, `reminder.${kind}` as StringKey)
 const reminderVisual: Record<ReminderKind, string> = {
   water: 'water-prompt', stand: 'stretch', toilet: 'toilet', eyes: 'eye-rest'
 }
@@ -135,11 +122,8 @@ const GROWTH_LEVELS = [
 const AMBIENCE_MIN_DELAY_MS = 60_000
 const AMBIENCE_DELAY_SPREAD_MS = 60_000
 const AMBIENCE_RETRY_MS = 30_000
-const restOverlayMessages = [
-  '起来活动一下啦！',
-  '要去喝水啦！',
-  '该去上个厕所啦！',
-  '让眼睛休息一下吧！'
+const restOverlayCopy = (lang: AppSettings['language']): string[] => [
+  t(lang, 'overlay.rest1'), t(lang, 'overlay.rest2'), t(lang, 'overlay.rest3'), t(lang, 'overlay.rest4')
 ]
 
 interface UsageCheckpoint {
@@ -282,16 +266,17 @@ export function createRuntime(storage: Storage): Runtime {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
 
-  const callName = (): string => settings.nickname ? `${settings.nickname}，` : ''
+  const callName = (): string => callNamePrefix(settings.language, settings.nickname)
 
   const greetingMessage = (at: number): string => {
     const hour = new Date(at).getHours()
     const name = callName()
-    if (hour >= 5 && hour < 11) return `${name}早上好呀，今天也一起加油～`
-    if (hour >= 11 && hour < 14) return `${name}中午好，记得按时吃饭哦`
-    if (hour >= 14 && hour < 18) return `${name}下午好，我会安静陪你`
-    if (hour >= 18 && hour < 23) return `${name}晚上好，别太累啦`
-    return `${name}这么晚还在忙？我陪你，但早点休息哦`
+    const lang = settings.language
+    if (hour >= 5 && hour < 11) return t(lang, 'greeting.morning', { name })
+    if (hour >= 11 && hour < 14) return t(lang, 'greeting.noon', { name })
+    if (hour >= 14 && hour < 18) return t(lang, 'greeting.afternoon', { name })
+    if (hour >= 18 && hour < 23) return t(lang, 'greeting.evening', { name })
+    return t(lang, 'greeting.night', { name })
   }
 
   const ambienceDelay = (): number => AMBIENCE_MIN_DELAY_MS + Math.random() * AMBIENCE_DELAY_SPREAD_MS
@@ -353,7 +338,7 @@ export function createRuntime(storage: Storage): Runtime {
     storage.setSetting('growthEnergy', growthEnergy)
     const level = growthLevelOf(growthEnergy)
     if (level > previousLevel) {
-      visualOverride = { id: 'transform', until: at + TRANSFORM_OVERRIDE_MS, message: `我长大啦！现在是${GROWTH_LEVELS[level - 1].name}了！` }
+      visualOverride = { id: 'transform', until: at + TRANSFORM_OVERRIDE_MS, message: t(settings.language, 'msg.growthUp', { level: growthLevelName(settings.language, level) }) }
     }
   }
 
@@ -363,7 +348,7 @@ export function createRuntime(storage: Storage): Runtime {
     lastGreetedDay = dateKey(now)
     const days = companionDays()
     visualOverride = isMilestoneDay(days)
-      ? { id: 'dance', until: now + DANCE_OVERRIDE_MS, message: `我们互相陪伴 ${days} 天啦！以后也要一起哦` }
+      ? { id: 'dance', until: now + DANCE_OVERRIDE_MS, message: t(settings.language, 'msg.milestone', { days }) }
       : { id: 'greeting', until: now + GREETING_OVERRIDE_MS, message: greetingMessage(now) }
   }
 
@@ -462,25 +447,26 @@ export function createRuntime(storage: Storage): Runtime {
   const currentVisual = (): { id: string; message: string } => {
     const h = health.snapshot()
     const p = pomodoro.snapshot()
+    const lang = settings.language
     if (visualOverride?.id === 'exploding' && visualOverride.until > lastTickAt) return visualOverride
     if (h.mode === 'deflated') {
       return recoveryRestStartedAt === null
-        ? { id: 'deflated', message: `${callName()}我瘪掉了……点我并离开电脑休息 5 分钟` }
-        : { id: 'deflated', message: '正在恢复，离开电脑休息满 5 分钟吧' }
+        ? { id: 'deflated', message: t(lang, 'visual.deflatedAsk', { name: callName() }) }
+        : { id: 'deflated', message: t(lang, 'visual.deflatedRecovering') }
     }
     const session = restSession?.snapshot()
-    if (session?.current) return { id: restVisual[session.current], message: callName() + reminderCopy[session.current] }
+    if (session?.current) return { id: restVisual[session.current], message: callName() + reminderCopy(lang, session.current) }
     if (session?.allCompleted && (p.phase === 'break' || (p.phase === 'paused' && p.pausedPhase === 'break'))) {
       return session.longBreak
-        ? { id: 'sleep', message: '四项都完成啦，安心睡一会儿' }
-        : { id: 'rest', message: '四项都完成啦，安静休息一下' }
+        ? { id: 'sleep', message: t(lang, 'visual.allDoneSleep') }
+        : { id: 'rest', message: t(lang, 'visual.allDoneRest') }
     }
-    if (p.phase === 'awaiting_rest_confirmation') return { id: 'stretch', message: '番茄结束啦，点我开始休息' }
-    if (p.phase === 'break' && p.breakKind === 'long') return { id: 'sleep', message: '长休息中，好好放松吧' }
+    if (p.phase === 'awaiting_rest_confirmation') return { id: 'stretch', message: t(lang, 'visual.awaitingRest') }
+    if (p.phase === 'break' && p.breakKind === 'long') return { id: 'sleep', message: t(lang, 'visual.longBreak') }
     if (reminder) {
-      if (reminder.kind === 'water' && lastTickAt - reminder.dueAt >= 15 * 60_000) return { id: 'dry', message: `${callName()}我都渴得干裂啦，快喝口水吧` }
-      if (reminder.kind === 'eyes' && lastTickAt - reminder.dueAt >= 10 * 60_000) return { id: 'eye-strain', message: `${callName()}眼睛又红又干啦，看看远处吧` }
-      return { id: reminderVisual[reminder.kind], message: callName() + reminderCopy[reminder.kind] }
+      if (reminder.kind === 'water' && lastTickAt - reminder.dueAt >= 15 * 60_000) return { id: 'dry', message: t(lang, 'visual.dryCracked', { name: callName() }) }
+      if (reminder.kind === 'eyes' && lastTickAt - reminder.dueAt >= 10 * 60_000) return { id: 'eye-strain', message: t(lang, 'visual.eyeStrained', { name: callName() }) }
+      return { id: reminderVisual[reminder.kind], message: callName() + reminderCopy(lang, reminder.kind) }
     }
     if (visualOverride?.id === 'transform' && visualOverride.until > lastTickAt) return visualOverride
     const selected = selectPetVisual({
@@ -488,9 +474,9 @@ export function createRuntime(storage: Storage): Runtime {
       pressure: h.pressure,
       greeting: visualOverride?.id === 'greeting' && visualOverride.until > lastTickAt
     })
-    if (selected === 'pressure') return { id: selected, message: h.pressure >= 80 ? `${callName()}快要爆炸了！现在就起来活动` : '坐得太久，我越来越红啦' }
+    if (selected === 'pressure') return { id: selected, message: h.pressure >= 80 ? t(lang, 'visual.pressureNearBoom', { name: callName() }) : t(lang, 'visual.pressureRed') }
     if (selected === 'focus') {
-      const message = visualOverride?.id === 'focus' && visualOverride.until > lastTickAt ? visualOverride.message : '专注中，我也在认真工作'
+      const message = visualOverride?.id === 'focus' && visualOverride.until > lastTickAt ? visualOverride.message : t(lang, 'visual.focusWorking')
       return { id: selected, message }
     }
     if (selected === 'greeting' && visualOverride) return visualOverride
@@ -499,10 +485,10 @@ export function createRuntime(storage: Storage): Runtime {
     // 深夜陪伴模式：23:00–6:00 待机改为打瞌睡；用户最近还在操作时改用揉眼劝睡文案
     if (isLateNight(lastTickAt)) {
       return lastTickAt - lastInteractionAt < LATE_NIGHT_ACTIVE_MS
-        ? { id: 'eye-strain', message: '这么晚还在忙？揉揉眼睛，早点睡吧' }
-        : { id: 'sleep', message: '早点睡啦，我陪你，但不鼓励熬夜' }
+        ? { id: 'eye-strain', message: t(lang, 'visual.lateNightActive') }
+        : { id: 'sleep', message: t(lang, 'visual.lateNightSleep') }
     }
-    return { id: 'idle', message: '点我互动，右键可以开始专注' }
+    return { id: 'idle', message: t(lang, 'visual.idleHint') }
   }
 
   const recoveryElapsedSeconds = (): number => {
@@ -533,7 +519,7 @@ visual: visual.id,
     takeover: activeTakeover,
     growth: {
         level: growthLevelOf(growthEnergy),
-        name: GROWTH_LEVELS[growthLevelOf(growthEnergy) - 1].name,
+        name: growthLevelName(settings.language, growthLevelOf(growthEnergy)),
         energy: growthEnergy,
         days: companionDays()
       },
@@ -555,13 +541,14 @@ visual: visual.id,
     if (inWork) return
     const ignoredMinutes = reminder ? (at - reminder.dueAt) / 60_000 : 0
     if (reminder && ignoredMinutes >= 5) {
-      const copy = takeoverCopy(reminder.kind as TakeoverSnapshot['kind'])
+      const kind = reminder.kind as TakeoverSnapshot['kind']
+      const copy = takeoverCopy(kind, settings.language)
       activeTakeover = {
-        kind: reminder.kind as TakeoverSnapshot['kind'],
+        kind,
         title: copy.title,
         subtitle: copy.subtitle,
         since: at,
-        reason: takeoverReason(reminder.kind as TakeoverSnapshot['kind'], ignoredMinutes, 0)
+        reason: takeoverReason(kind, settings.language, ignoredMinutes, 0)
       }
       takeoverSince = at
       return
@@ -569,13 +556,13 @@ visual: visual.id,
     const continuousMinutes = continuousWorkStartedAt ? (at - continuousWorkStartedAt) / 60_000 : 0
     const swell = computeSwellLevel(continuousWorkStartedAt, settings.continuousWorkLimitMinutes, at)
     if (swell === 3 && continuousWorkStartedAt !== null) {
-      const copy = takeoverCopy('anti-sedentary')
+      const copy = takeoverCopy('anti-sedentary', settings.language)
       activeTakeover = {
         kind: 'anti-sedentary',
         title: copy.title,
         subtitle: copy.subtitle,
         since: at,
-        reason: takeoverReason('anti-sedentary', 0, continuousMinutes)
+        reason: takeoverReason('anti-sedentary', settings.language, 0, continuousMinutes)
       }
       takeoverSince = at
     }
@@ -595,8 +582,8 @@ visual: visual.id,
     restSession = null
     restRotationAt = null
     reminder = null
-    visualOverride = { id: 'exploding', until: at + 3000, message: '快去休息啦！' }
-    publishOverlay('explosion', ['快去休息啦！'])
+    visualOverride = { id: 'exploding', until: at + 3000, message: t(settings.language, 'msg.explode') }
+    publishOverlay('explosion', [t(settings.language, 'msg.explode')])
   }
 
   // 和好奖励：爆炸恢复当天（reconciliationDay）的第一次打卡额外 +5 分，只发一次
@@ -625,8 +612,8 @@ visual: visual.id,
         restSession = null
         restRotationAt = null
         visualOverride = null
-        publishOverlay('rest-reminder', restOverlayMessages)
-        if (Notification.isSupported()) new Notification({ title: '桃屁屁', body: '这一轮结束啦，点我开始休息' }).show()
+        publishOverlay('rest-reminder', restOverlayCopy(settings.language))
+        if (Notification.isSupported()) new Notification({ title: t(settings.language, 'notification.title'), body: t(settings.language, 'notification.workDone') }).show()
       }
       if (event.type === 'break_completed') {
         healthEvents.push(...health.completeHabit('pomodoro_break', effectiveNow))
@@ -667,7 +654,7 @@ visual: visual.id,
     const due = reminder || restSession ? [] : reminders.tick(effectiveNow, wasFocusing)
     if (due[0] && health.snapshot().mode !== 'deflated') {
       reminder = { kind: due[0].kind, dueAt: effectiveNow }
-      if (Notification.isSupported()) new Notification({ title: '桃屁屁提醒', body: reminderCopy[due[0].kind] }).show()
+      if (Notification.isSupported()) new Notification({ title: t(settings.language, 'notification.reminderTitle'), body: reminderCopy(settings.language, due[0].kind) }).show()
     }
     // 冷落求关注：idle 状态下超过 10 分钟没有任何用户交互，插播一次无聊动作
     // （currentVisual() 会顺带清理已过期的 override，放在条件最前面）
@@ -675,16 +662,20 @@ visual: visual.id,
       effectiveNow - lastInteractionAt >= BORED_AFTER_IDLE_MS &&
       currentVisual().id === 'idle'
     ) {
-      visualOverride = { id: 'bored', until: effectiveNow + BORED_OVERRIDE_MS, message: `${callName()}好无聊呀……理理我嘛` }
+      visualOverride = { id: 'bored', until: effectiveNow + BORED_OVERRIDE_MS, message: t(settings.language, 'msg.bored', { name: callName() }) }
       lastInteractionAt = effectiveNow
       nextAmbienceAt = effectiveNow + ambienceDelay()
     }
-    // 待机随机小动作：每 1–2 分钟插播一次开心/伸懒腰，让宠物有「活着」的感觉
+    // 待机随机小动作：每 1–2 分钟插播一次开心/伸懒腰/托腮发呆，让宠物有「活着」的感觉
     if (effectiveNow >= nextAmbienceAt) {
       if (currentVisual().id === 'idle' && !visualOverride) {
-        visualOverride = Math.random() < 0.5
-          ? { id: 'happy', until: effectiveNow + 2_000, message: '嘿嘿，活动一下筋骨～' }
-          : { id: 'rest', until: effectiveNow + 4_200, message: '伸个懒腰，你也一起？' }
+        const roll = Math.random()
+        // 40% 开心跳跳 / 30% 伸懒腰 / 30% 无所事事托腮晃脚
+        visualOverride = roll < 0.4
+          ? { id: 'happy', until: effectiveNow + 2_000, message: t(settings.language, 'msg.ambienceHappy') }
+          : roll < 0.7
+            ? { id: 'rest', until: effectiveNow + 4_200, message: t(settings.language, 'msg.ambienceStretch') }
+            : { id: 'bored', until: effectiveNow + BORED_OVERRIDE_MS, message: t(settings.language, 'msg.ambienceLounge') }
         nextAmbienceAt = effectiveNow + ambienceDelay()
       } else {
         nextAmbienceAt = effectiveNow + AMBIENCE_RETRY_MS
@@ -726,7 +717,7 @@ visual: visual.id,
         restSession = null
         restRotationAt = null
         continuousWorkStartedAt ??= actionNow
-        visualOverride = { id: 'transform', until: actionNow + TRANSFORM_OVERRIDE_MS, message: '变身专注搭子，开始啦' }
+        visualOverride = { id: 'transform', until: actionNow + TRANSFORM_OVERRIDE_MS, message: t(settings.language, 'msg.transformFocus') }
       }
       if (action.type === 'pomodoro:configure-and-start' && !locked) {
         const previous = pomodoro.snapshot()
@@ -747,7 +738,7 @@ visual: visual.id,
         restSession = null
         restRotationAt = null
         continuousWorkStartedAt ??= actionNow
-        visualOverride = { id: 'transform', until: actionNow + TRANSFORM_OVERRIDE_MS, message: '变身专注搭子，开始啦' }
+        visualOverride = { id: 'transform', until: actionNow + TRANSFORM_OVERRIDE_MS, message: t(settings.language, 'msg.transformFocus') }
       }
       if (action.type === 'pomodoro:reset') {
         pomodoro.reset()
@@ -759,7 +750,7 @@ visual: visual.id,
         continuousWorkStartedAt = null
         restSession = null
         restRotationAt = null
-        visualOverride = { id: 'transform', until: actionNow + TRANSFORM_OVERRIDE_MS, message: '专注结束，变回陪伴模式' }
+        visualOverride = { id: 'transform', until: actionNow + TRANSFORM_OVERRIDE_MS, message: t(settings.language, 'msg.transformBack') }
       }
       if (action.type === 'pomodoro:toggle-pause') pomodoro.snapshot().phase === 'paused' ? pomodoro.resume(actionNow) : pomodoro.pause(actionNow)
       if (action.type === 'pet:click') {
@@ -768,7 +759,7 @@ visual: visual.id,
           if (recoveryRestStartedAt === null) recoveryRestStartedAt = actionNow
           visualOverride = null
         } else if (phase === 'work' || (phase === 'paused' && pomodoro.snapshot().pausedPhase === 'work')) {
-          visualOverride = { id: 'focus', until: actionNow + 1800, message: '保持专注' }
+          visualOverride = { id: 'focus', until: actionNow + 1800, message: t(settings.language, 'msg.focusKeep') }
         } else if (phase === 'awaiting_rest_confirmation') {
           restSession = createRestSession({ startedAt: actionNow, longBreak: pomodoro.snapshot().breakKind === 'long' })
           restRotationAt = actionNow
@@ -784,18 +775,18 @@ visual: visual.id,
           reminders.complete(kind, actionNow)
           reminder = null
           visualOverride = mended
-            ? { id: 'happy', until: actionNow + 3600, message: '拼回来啦！我又水水润润的了' }
+            ? { id: 'happy', until: actionNow + 3600, message: t(settings.language, 'msg.mended') }
             : wasDry
-            ? { id: 'hydrating', until: actionNow + WATER_PROMPT_DURATION_MS, message: '喝到了！我正在慢慢恢复水润' }
-            : { id: 'happy', until: actionNow + 1800, message: '做得好！健康分正在恢复' }
+            ? { id: 'hydrating', until: actionNow + WATER_PROMPT_DURATION_MS, message: t(settings.language, 'msg.hydrating') }
+            : { id: 'happy', until: actionNow + 1800, message: t(settings.language, 'msg.goodJob') }
         } else {
           events.push(...health.poke(actionNow))
           // 10 秒内连点 3 次以上：从开心升级为害羞
           clickCombo = actionNow - lastClickAt <= SHY_COMBO_WINDOW_MS ? clickCombo + 1 : 1
           lastClickAt = actionNow
           visualOverride = clickCombo >= 3
-            ? { id: 'shy', until: actionNow + SHY_OVERRIDE_MS, message: '别、别一直戳啦…' }
-            : { id: 'happy', until: actionNow + 1200, message: '嘿嘿，被你发现啦' }
+            ? { id: 'shy', until: actionNow + SHY_OVERRIDE_MS, message: t(settings.language, 'msg.shyPoke') }
+            : { id: 'happy', until: actionNow + 1200, message: t(settings.language, 'msg.pokeHappy') }
         }
       }
       if (action.type === 'pet:greet') {
@@ -806,7 +797,7 @@ visual: visual.id,
       if (action.type === 'pet:pat' && !locked) {
         const phase = pomodoro.snapshot().phase
         if (!reminder && !restSession && phase !== 'work' && phase !== 'awaiting_rest_confirmation') {
-          visualOverride = { id: 'pet', until: actionNow + PET_PAT_OVERRIDE_MS, message: '好舒服呀……再摸摸' }
+          visualOverride = { id: 'pet', until: actionNow + PET_PAT_OVERRIDE_MS, message: t(settings.language, 'msg.patEnjoy') }
         }
       }
       if (action.type === 'pet:size') {
@@ -820,10 +811,10 @@ visual: visual.id,
         reminders.complete(action.kind, actionNow)
         reminder = null
         visualOverride = mended
-          ? { id: 'happy', until: actionNow + 3600, message: '拼回来啦！我又水水润润的了' }
+          ? { id: 'happy', until: actionNow + 3600, message: t(settings.language, 'msg.mended') }
           : wasDry
-          ? { id: 'hydrating', until: actionNow + WATER_PROMPT_DURATION_MS, message: '喝到了！我正在慢慢恢复水润' }
-          : { id: 'happy', until: actionNow + 1800, message: '做得好！继续保持' }
+          ? { id: 'hydrating', until: actionNow + WATER_PROMPT_DURATION_MS, message: t(settings.language, 'msg.hydrating') }
+          : { id: 'happy', until: actionNow + 1800, message: t(settings.language, 'msg.goodKeep') }
       }
       if (action.type === 'rest:complete' && restSession) {
         const completedCurrent = restSession.snapshot().current === action.kind
@@ -848,22 +839,22 @@ visual: visual.id,
             reminders.complete('water', actionNow)
             reminder = null
             visualOverride = mended
-              ? { id: 'happy', until: actionNow + 3600, message: '拼回来啦！我又水水润润的了' }
-              : { id: 'hydrating', until: actionNow + WATER_PROMPT_DURATION_MS, message: '喝到了！我正在慢慢恢复水润' }
+              ? { id: 'happy', until: actionNow + 3600, message: t(settings.language, 'msg.mended') }
+              : { id: 'hydrating', until: actionNow + WATER_PROMPT_DURATION_MS, message: t(settings.language, 'msg.hydrating') }
           }
           // 反久坐接管确认：清空连续专注起点（主动认错休息），并记一次活动打卡泄压
           if (action.kind === 'anti-sedentary') {
             continuousWorkStartedAt = null
             events.push(...health.completeHabit('stand', actionNow))
             reminders.complete('stand', actionNow)
-            visualOverride = { id: 'happy', until: actionNow + 1800, message: '呼…终于喘过来了，谢谢你听我说话' }
+            visualOverride = { id: 'happy', until: actionNow + 1800, message: t(settings.language, 'msg.antiSedentaryThanks') }
           }
           // 护眼/活动/如厕接管确认：记一次打卡 + 撒花式 happy
           if (action.kind === 'stand' || action.kind === 'eyes' || action.kind === 'toilet') {
             events.push(...health.completeHabit(action.kind, actionNow))
             reminders.complete(action.kind, actionNow)
             reminder = null
-            visualOverride = { id: 'happy', until: actionNow + 1800, message: '感觉好多了，谢谢你～' }
+            visualOverride = { id: 'happy', until: actionNow + 1800, message: t(settings.language, 'msg.ackThanks') }
           }
         }
       }
@@ -875,7 +866,7 @@ visual: visual.id,
       if (action.type === 'reminder:undo') {
         if (lastCompletedHabit && actionNow - lastCompletedHabit.at <= 20_000) {
           events.push(...health.undoHabit(lastCompletedHabit.completion, actionNow))
-          visualOverride = { id: 'idle', until: actionNow + 1500, message: '已撤销刚刚的记录，没关系' }
+          visualOverride = { id: 'idle', until: actionNow + 1500, message: t(settings.language, 'msg.undoDone') }
           lastCompletedHabit = null
         }
       }
@@ -980,7 +971,8 @@ function sanitizeSettings(candidate: unknown, fallback: AppSettings): AppSetting
       ? source.reminderIntensity
       : fallback.reminderIntensity,
     launchAtLogin: typeof source.launchAtLogin === 'boolean' ? source.launchAtLogin : fallback.launchAtLogin,
-    soundEnabled: typeof source.soundEnabled === 'boolean' ? source.soundEnabled : fallback.soundEnabled
+    soundEnabled: typeof source.soundEnabled === 'boolean' ? source.soundEnabled : fallback.soundEnabled,
+    language: source.language === 'en' || source.language === 'zh' ? source.language : fallback.language
   }
 }
 

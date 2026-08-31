@@ -30,7 +30,7 @@ describe('dashboard responsive layout contract', () => {
     expect(rule('.hero-metrics')).toContain('grid-template-columns: repeat(3')
     expect(renderer).toContain('role="progressbar"')
     expect(renderer).toContain('aria-valuenow={energyPercent}')
-    expect(renderer).toContain('aria-valuetext={`今日 ${energyScore} 点能量`}')
+    expect(renderer).toContain("aria-valuetext={t(lang, 'energy.ariaValue', { score: energyScore })}")
     expect(renderer).toContain('Math.min(100, Math.max(0, energyScore))')
     expect(renderer).toContain('<span style={{ width: `${energyPercent}%` }}><i')
     expect(renderer).not.toContain('energyArc')
@@ -42,9 +42,9 @@ describe('dashboard responsive layout contract', () => {
     expect(styles).toContain('animation: reduced-alert 2.05s')
   })
 
-  it('reserves a fixed label row inside every habit button', () => {
+  it('reserves a fixed label row inside every habit stat tile (后台已去交互化：button 改为纯展示 div)', () => {
     expect(rule('.habit-dock')).toContain('overflow: hidden')
-    expect(rule('.habit-dock button')).toContain('grid-template-rows: minmax(0, 1fr) 24px')
+    expect(rule('.habit-dock .habit-stat')).toContain('grid-template-rows: minmax(0, 1fr) 24px')
   })
 
   it('centers the growth title and adapts a four-item behavior dock', () => {

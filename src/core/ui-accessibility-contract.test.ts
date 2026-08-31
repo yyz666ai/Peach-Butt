@@ -7,7 +7,7 @@ const motion = readFileSync(new URL('../renderer/src/components/PetMotion.tsx', 
 describe('UI accessibility and cutout contract', () => {
   it('clamps the progressbar machine value while preserving the real score in its text', () => {
     expect(renderer).toContain('aria-valuenow={energyPercent}')
-    expect(renderer).toContain('aria-valuetext={`今日 ${energyScore} 点能量`}')
+    expect(renderer).toContain("aria-valuetext={t(lang, 'energy.ariaValue', { score: energyScore })}")
   })
 
   it('keeps keyboard focus inside the settings dialog', () => {

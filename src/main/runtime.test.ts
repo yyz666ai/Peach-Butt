@@ -790,9 +790,9 @@ describe('runtime data integrity', () => {
     runtime.dispatch({ type: 'reminder:complete', kind: 'water' })
 
     expect(runtime.snapshot()).toMatchObject({ reminder: null, visual: 'hydrating' })
-    runtime.tick(start + 60 * 60_000 + 8_349, 0)
+    runtime.tick(start + 60 * 60_000 + 4_229, 0)
     expect(runtime.snapshot().visual).toBe('hydrating')
-    runtime.tick(start + 60 * 60_000 + 8_350, 0)
+    runtime.tick(start + 60 * 60_000 + 4_230, 0)
     expect(runtime.snapshot().visual).not.toBe('hydrating')
   })
 
@@ -880,21 +880,21 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot()).toMatchObject({
       visual: 'water-prompt', message: '该喝水啦，看看我怎么补充水分', restSession: { current: 'water' }
     })
-    runtime.tick(start + 72_349, 0)
+    runtime.tick(start + 68_229, 0)
     expect(runtime.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
-    runtime.tick(start + 72_350, 0)
+    runtime.tick(start + 68_230, 0)
     expect(runtime.snapshot()).toMatchObject({
       visual: 'toilet', message: '别憋着，该去上厕所啦', restSession: { current: 'toilet' }
     })
-    runtime.tick(start + 78_149, 0)
+    runtime.tick(start + 74_029, 0)
     expect(runtime.snapshot()).toMatchObject({ visual: 'toilet', restSession: { current: 'toilet' } })
-    runtime.tick(start + 78_150, 0)
+    runtime.tick(start + 74_030, 0)
     expect(runtime.snapshot()).toMatchObject({
       visual: 'eye-strain', message: '看看远处，让眼睛休息一下', restSession: { current: 'eyes' }
     })
-    runtime.tick(start + 83_149, 0)
+    runtime.tick(start + 79_029, 0)
     expect(runtime.snapshot()).toMatchObject({ visual: 'eye-strain', restSession: { current: 'eyes' } })
-    runtime.tick(start + 83_150, 0)
+    runtime.tick(start + 79_030, 0)
     expect(runtime.snapshot()).toMatchObject({
       visual: 'activity',
       restSession: { current: 'stand' },
@@ -917,9 +917,9 @@ describe('runtime data integrity', () => {
       visual: 'water-prompt',
       restSession: { pending: ['water', 'toilet', 'eyes'], current: 'water' }
     })
-    runtime.tick(start + 69_349, 0)
+    runtime.tick(start + 65_229, 0)
     expect(runtime.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
-    runtime.tick(start + 69_350, 0)
+    runtime.tick(start + 65_230, 0)
     expect(runtime.snapshot()).toMatchObject({ visual: 'toilet', restSession: { current: 'toilet' } })
   })
 
@@ -979,9 +979,9 @@ describe('runtime data integrity', () => {
     runtimes.push(restored)
     expect(restored.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
 
-    restored.tick(start + 78_349, 0)
+    restored.tick(start + 74_229, 0)
     expect(restored.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
-    restored.tick(start + 78_350, 0)
+    restored.tick(start + 74_230, 0)
     expect(restored.snapshot()).toMatchObject({ visual: 'toilet', restSession: { current: 'toilet' } })
   })
 

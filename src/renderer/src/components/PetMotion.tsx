@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 
-import focus from '../../../../assets/video/generated/focus.webm'
+import focus from '../../../../assets/video/generated/focus-v2.webm'
 import greeting from '../../../../assets/video/generated/greeting.webm'
 import pressure from '../../../../assets/video/generated/pressure.webm'
 import sleep from '../../../../assets/video/generated/sleep.webm'
 import toilet from '../../../../assets/video/generated/toilet.webm'
 import transform from '../../../../assets/video/generated/transform.webm'
-import dry from '../../../../assets/video/generated/dry.webm'
-import idleMotion from '../../../../assets/video/generated/idle.webm'
+import dry from '../../../../assets/video/generated/dry-v2.webm'
+import hydrate from '../../../../assets/video/generated/hydrate-v2.webm'
+import idleMotion from '../../../../assets/video/generated/idle-lounge.webm'
 import eyeStrainMotion from '../../../../assets/video/generated/eye-strain.webm'
 import activityMotion from '../../../../assets/video/generated/activity.webm'
 import happyMotion from '../../../../assets/video/generated/happy.webm'
@@ -45,8 +46,8 @@ const clips = {
   happy: { src: happyMotion, ...clipTimelines.happy },
   rest: { src: restMotion, ...clipTimelines.rest },
   dry: { src: dry, ...clipTimelines.dry },
-  hydrating: { src: dry, ...clipTimelines.hydrating },
-  'water-prompt': { src: dry, ...clipTimelines['water-prompt'] },
+  hydrating: { src: hydrate, ...clipTimelines.hydrating },
+  'water-prompt': { src: hydrate, ...clipTimelines['water-prompt'] },
   bored: { src: boredMotion, ...clipTimelines.bored },
   pet: { src: petMotion, ...clipTimelines.pet },
   shy: { src: shyMotion, ...clipTimelines.shy },
@@ -104,6 +105,9 @@ export function PetMotion({ visual, pressureValue, recovery = 100, swellLevel = 
     return <img className="pet-media swell-media" src={swellMap[swellLevel]} alt="桃屁屁桌宠" draggable={false} style={{ transform: `scale(${1 + swellLevel * 0.13})`, ...(drynessFilter ? { filter: drynessFilter } : {}) }}/>
   }
 
+  // 体型归一化：per-clip scale 拉齐不同素材的取景差异（专注素材含椅子显得瘦小）
+  const clipScale = (clip as { scale?: number } | undefined)?.scale ?? 1
+
   return <video
     ref={video}
     key={visual}
@@ -113,8 +117,8 @@ export function PetMotion({ visual, pressureValue, recovery = 100, swellLevel = 
     autoPlay={clip.playMode !== 'scrub'}
     playsInline
     style={{
-      ...(visual === 'pressure' ? { transform: `scale(${1.45 - Math.min(1, Math.max(0, (pressureValue - 55) / 45)) * 0.37})` } : {}),
-      ...(visual === 'deflated' ? { transform: `scale(${0.72 + recovery * 0.0028})` } : {}),
+      ...(visual === 'pressure' ? { transform: `scale(${(1.45 - Math.min(1, Math.max(0, (pressureValue - 55) / 45)) * 0.37) * clipScale})` } : clipScale !== 1 ? { transform: `scale(${clipScale})` } : {}),
+      ...(visual === 'deflated' ? { transform: `scale(${(0.72 + recovery * 0.0028) * clipScale})` } : {}),
       ...(drynessFilter ? { filter: drynessFilter } : {})
     }}
     onError={() => setFailed(true)}

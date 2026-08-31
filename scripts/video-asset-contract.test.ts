@@ -49,8 +49,9 @@ describe('video asset contract', () => {
   })
 
   it('splits the dry warning from the hydrating recovery in the manifest', () => {
-    expect(byId('dry')).toMatchObject({ start: 0.08, end: 1.45, playMode: 'once' })
-    expect(byId('hydrating')).toMatchObject({ file: 'generated/dry.webm', start: 1.45, end: 9.8, playMode: 'once' })
+    // 2026-08-31 v2：dry 用亮白底干裂抱瓶素材，hydrating 用喝水恢复素材
+    expect(byId('dry')).toMatchObject({ file: 'generated/dry-v2.webm', start: 0.05, end: 4.28, playMode: 'once' })
+    expect(byId('hydrating')).toMatchObject({ file: 'generated/hydrate-v2.webm', start: 1.0, end: 4.28, playMode: 'once' })
   })
 
   it('uses the shared 8.35-second water prompt contract for the authored clip', () => {

@@ -26,13 +26,29 @@ except ModuleNotFoundError as error:
 CANVAS = (480, 500)
 BOTTOM_SAFE_MARGIN = 8
 MOTION_NAMES = ("greeting", "focus", "sleep", "toilet", "pressure", "transform", "dry")
-BRIGHTNESS = {"greeting": 1.16, "focus": 1.28, "sleep": 1.15, "toilet": 1.15, "pressure": 1.18, "transform": 1.16, "dry": 1.16, "happy": 1.16, "rest": 1.16}
+BRIGHTNESS = {"greeting": 1.16, "focus": 1.28, "sleep": 1.15, "toilet": 1.15, "pressure": 1.18, "transform": 1.16, "dry": 1.16, "happy": 1.16, "rest": 1.16, "focus-v2": 1.0, "dry-v2": 1.0, "idle-lounge": 1.0, "hydrate-v2": 1.0}
+# MiniMax-H3 v2 remakes keep their original file names in the source folder and
+# already ship on a bright white studio background, so they bypass the legacy
+# chair-residue surgery and the per-name brightness lifts.
+SOURCE_ALIASES = {
+    "idle-lounge": "idle-lounge-h3.mp4",
+    "focus-v2": "focus-v2-h3.mp4",
+    "dry-v2": "dry-v2-h3.mp4",
+    "hydrate-v2": "hydrate-v2-h3.mp4",
+}
+GENTLE_NAMES = set(SOURCE_ALIASES)
 TRIM_RANGES = {
     # Keep the complete jump, spin and visible tornado. Playback is sped up in
     # the renderer so the transformation does not delay focus for too long.
     "transform": (0.08, 9.90),
     # Show the complete thirsty-to-recovered arc, including the final happy pose.
     "dry": (0.08, 9.90),
+    # The v2 H3 renders hold the first-frame reference image (dark board) for a
+    # few frames before the real shot starts; trim those leaders off.
+    "idle-lounge": (0.30, 5.00),
+    "focus-v2": (0.30, 5.00),
+    "dry-v2": (0.68, 5.00),
+    "hydrate-v2": (0.68, 5.00),
 }
 
 
@@ -430,7 +446,10 @@ def polish_frames(frames: list[Path], name: str) -> None:
         polished = rgb.convert("RGBA")
         polished.putalpha(alpha)
         polished = unmatte_white_edges(polished)
-        clear_floor_residue(polished)
+        # v2 H3 renders carry real props (stool, laptop, water bottle) next to
+        # the peach; the warm-pixel floor sweep would erase those neutrals.
+        if name not in GENTLE_NAMES:
+            clear_floor_residue(polished)
         if name == "pressure":
             clear_pressure_chair(polished)
         if name == "focus":
@@ -545,9 +564,11 @@ def main() -> None:
                 destination.write_bytes(Path(output.name).read_bytes())
         else:
             assert session is not None
-            convert(args.sources / f"{name}.mp4", destination, args.fps, args.width, session, TRIM_RANGES.get(name))
-    build_explosion(args.destination / "pressure.webm", args.destination / "explosion.webm", args.fps)
-    build_activity(Path("assets/generated/final/stretch.png"), args.destination / "activity.webm", args.fps)
+            source_name = SOURCE_ALIASES.get(name, f"{name}.mp4")
+            convert(args.sources / source_name, destination, args.fps, args.width, session, TRIM_RANGES.get(name))
+    if not args.only:
+        build_explosion(args.destination / "pressure.webm", args.destination / "explosion.webm", args.fps)
+        build_activity(Path("assets/generated/final/stretch.png"), args.destination / "activity.webm", args.fps)
 
 
 if __name__ == "__main__":

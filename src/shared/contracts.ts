@@ -94,6 +94,8 @@ export interface AppSettings {
   nickname: string
   /** 到点提醒的接管强度：standard=大屏接管，gentle=只气泡 */
   reminderIntensity: 'standard' | 'gentle'
+  /** 界面语言：zh=中文，en=英文 */
+  language: 'zh' | 'en'
   reminders: Record<ReminderKind, { enabled: boolean; intervalMinutes: number }>
   launchAtLogin: boolean
   soundEnabled: boolean

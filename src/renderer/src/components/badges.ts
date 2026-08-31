@@ -1,4 +1,6 @@
 // 小屋徽章：陪伴里程碑 + 成长等级两条线的成就展示（纯逻辑，UI 在小屋 Dashboard）
+import { t, type Language } from '../../../shared/i18n'
+
 export interface Badge {
   id: string
   label: string
@@ -13,29 +15,32 @@ export interface BadgeInput {
 
 // 与主进程 runtime.ts 的 GROWTH_LEVELS / 陪伴里程碑保持一致
 const GROWTH_BADGES = [
-  { level: 2, name: '小桃' },
-  { level: 3, name: '圆桃' },
-  { level: 4, name: '蜜桃' },
-  { level: 5, name: '仙桃' }
+  { level: 2 },
+  { level: 3 },
+  { level: 4 },
+  { level: 5 }
 ] as const
 
 const COMPANION_BADGES = [
-  { days: 7, name: '一周之约' },
-  { days: 30, name: '满月陪伴' },
-  { days: 100, name: '百日相守' }
+  { days: 7 },
+  { days: 30 },
+  { days: 100 }
 ] as const
 
-export function computeBadges(input: BadgeInput): Badge[] {
-  const growth = GROWTH_BADGES.map((badge) => ({
-    id: `growth-${badge.level}`,
-    label: badge.name,
-    detail: `成长到${badge.name}`,
-    earned: input.level >= badge.level
-  }))
+export function computeBadges(input: BadgeInput, lang: Language = 'zh'): Badge[] {
+  const growth = GROWTH_BADGES.map((badge) => {
+    const name = t(lang, `badge.growth.${badge.level}`)
+    return {
+      id: `growth-${badge.level}`,
+      label: name,
+      detail: t(lang, 'badge.growthDetail', { name }),
+      earned: input.level >= badge.level
+    }
+  })
   const companion = COMPANION_BADGES.map((badge) => ({
     id: `companion-${badge.days}`,
-    label: badge.name,
-    detail: `互相陪伴 ${badge.days} 天`,
+    label: t(lang, `badge.companion.${badge.days}`),
+    detail: t(lang, 'badge.companionDetail', { days: badge.days }),
     earned: input.days >= badge.days
   }))
   return [...growth, ...companion]

@@ -134,10 +134,13 @@ function showOverlay(snapshot: AppSnapshot): void {
 }
 
 function openDashboard(): void {
+  // 用户反馈：打开后台后桌宠经常不见了——每次打开小屋都确保桌宠窗口可见
+  if (!petWindow?.isDestroyed() && !petWindow?.isVisible()) petWindow?.showInactive()
   if (dashboardWindow) { dashboardWindow.show(); dashboardWindow.focus(); return }
+  const language = runtime?.snapshot().settings.language ?? 'zh'
   dashboardWindow = new BrowserWindow({
     width: 1050, height: 760, minWidth: 960, minHeight: 650,
-    title: 'Peach Butt · 健康小屋', backgroundColor: '#fff8f3',
+    title: `Peach Butt · ${language === 'en' ? 'Health Cottage' : '健康小屋'}`, backgroundColor: '#fff8f3',
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: true }
   })
   load(dashboardWindow, 'dashboard')
@@ -148,11 +151,12 @@ function createTray(): void {
   const icon = nativeImage.createFromPath(join(app.getAppPath(), 'assets/generated/final/idle.png')).resize({ width: 20, height: 20 })
   tray = new Tray(icon)
   tray.setToolTip('Peach Butt')
+  const language = (): 'zh' | 'en' => runtime?.snapshot().settings.language ?? 'zh'
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Show Peach Butt', click: () => petWindow?.show() },
-    { label: '健康小屋', click: openDashboard },
+    { label: language() === 'en' ? 'Show Peach Butt' : '显示桃屁屁', click: () => petWindow?.show() },
+    { label: language() === 'en' ? 'Health Cottage' : '健康小屋', click: openDashboard },
     { type: 'separator' },
-    { label: '退出', click: () => app.quit() }
+    { label: language() === 'en' ? 'Quit' : '退出', click: () => app.quit() }
   ]))
   tray.on('click', () => petWindow?.isVisible() ? petWindow.hide() : petWindow?.show())
 }
@@ -160,34 +164,37 @@ function createTray(): void {
 function showPetMenu(): void {
   if (!runtime || !petWindow) return
   const snapshot = runtime.snapshot()
+  const lang = snapshot.settings.language
   const dispatch = (action: AppAction): void => { runtime?.dispatch(action) }
   const running = snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused'
   const menu = Menu.buildFromTemplate([
     {
-      label: '专注计时',
+      label: lang === 'en' ? 'Focus Timer' : '专注计时',
       submenu: [
-        ...[25, 45, 60].map((minutes) => ({ label: `${minutes} 分钟`, click: () => dispatch({ type: 'pomodoro:configure-and-start', workMinutes: minutes }) })),
+        ...[25, 45, 60].map((minutes) => ({ label: lang === 'en' ? `${minutes} minutes` : `${minutes} 分钟`, click: () => dispatch({ type: 'pomodoro:configure-and-start', workMinutes: minutes }) })),
         { type: 'separator' as const },
-        { label: snapshot.pomodoro.phase === 'work' ? '暂停' : running ? '继续' : '开始', click: () => dispatch(running ? { type: 'pomodoro:toggle-pause' } : { type: 'pomodoro:start' }) },
-        ...(running ? [{ label: '取消专注，回到初始', click: () => dispatch({ type: 'pomodoro:cancel' as const }) }] : [])
+        { label: snapshot.pomodoro.phase === 'work' ? (lang === 'en' ? 'Pause' : '暂停') : running ? (lang === 'en' ? 'Resume' : '继续') : (lang === 'en' ? 'Start' : '开始'), click: () => dispatch(running ? { type: 'pomodoro:toggle-pause' } : { type: 'pomodoro:start' }) },
+        ...(running ? [{ label: lang === 'en' ? 'Cancel focus' : '取消专注，回到初始', click: () => dispatch({ type: 'pomodoro:cancel' as const }) }] : [])
       ]
     },
     {
       // 只保留喝水打卡：活动/护眼/如厕靠桃屁屁的视觉状态提醒，用户看见跟着做即可
-      label: '喝水打卡',
+      label: lang === 'en' ? 'Log a sip of water' : '喝水打卡',
       submenu: [
-        { label: '喝了一口水', click: () => dispatch({ type: 'reminder:complete', kind: 'water' }) }
+        { label: lang === 'en' ? 'I drank some water' : '喝了一口水', click: () => dispatch({ type: 'reminder:complete', kind: 'water' }) }
       ]
     },
-    { label: '打招呼', click: () => dispatch({ type: 'pet:greet' }) },
-    { type: 'separator' },
-    { label: '打开桃桃小屋与设置', click: openDashboard }
+    { label: lang === 'en' ? 'Say hi' : '打招呼', click: () => dispatch({ type: 'pet:greet' }) },
+    { type: 'separator' as const },
+    { label: lang === 'en' ? 'Open Health Cottage & Settings' : '打开桃桃小屋与设置', click: openDashboard }
   ])
   menu.popup({ window: petWindow })
 }
 
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return
+  // 确保应用出现在 macOS Dock（用户反馈：底下看不见 Peach Butt）
+  if (process.platform === 'darwin' && app.dock && !app.dock.isVisible()) app.dock.show()
   runtime = createRuntime(createStorage(usesEphemeralPreviewStore ? ':memory:' : join(app.getPath('userData'), 'pipeach.sqlite')))
   petWindow = createPetWindow()
   createTray()
@@ -289,6 +296,7 @@ function isSafeSettings(value: unknown): value is AppSettings {
       !inRange(settings.longBreakMinutes, 1, 120) || !inRange(settings.longBreakEvery, 1, 12) ||
       !inRange(settings.pressurePerMinute, 0, 20) || typeof settings.launchAtLogin !== 'boolean' ||
       typeof settings.soundEnabled !== 'boolean' || !settings.reminders || typeof settings.reminders !== 'object') return false
+  if (settings.language !== undefined && settings.language !== 'zh' && settings.language !== 'en') return false
   return (['water', 'stand', 'toilet', 'eyes'] as const).every((kind) => {
     const reminder = settings.reminders?.[kind]
     return Boolean(reminder) && typeof reminder?.enabled === 'boolean' && inRange(reminder.intervalMinutes, 5, 240)
