@@ -61,7 +61,6 @@ import toiletAsset from '../../../assets/dashboard/toilet.png'
 import milestoneAsset from '../../../assets/dashboard/milestone.png'
 import motivationNoteAsset from '../../../assets/dashboard/motivation-note.png'
 import explosionVideo from '../../../assets/video/generated/explosion.webm'
-import focusVideo from '../../../assets/video/generated/focus-v2.webm'
 
 function useSnapshot(): [AppSnapshot | null, (action: AppAction) => Promise<void>] {
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null)
@@ -121,6 +120,7 @@ function PetView(): React.JSX.Element {
   const [snapshot, act] = useSnapshot()
   const preview = getVisualPreview()
   const [bubbleVisible, setBubbleVisible] = useState(false)
+  const [askFocusVisible, setAskFocusVisible] = useState(false)
   const [petHovered, setPetHovered] = useState(false)
   const bubbleTimer = useRef<number | null>(null)
   const lastBubbleKey = useRef('')
@@ -183,6 +183,18 @@ function PetView(): React.JSX.Element {
     lastHoverGreetAt.current = Date.now()
     void act({ type: 'pet:greet' })
   }, [petHovered, preview, focusingNow, snapshot?.takeover, snapshot?.reminder])
+  // 时不时冒个气泡问问要不要专注：非专注、无提醒、不悬停时低频出现（3 分钟一次），可一键开始
+  useEffect(() => {
+    if (preview || !snapshot || focusingNow || snapshot.takeover || snapshot.reminder) return
+    const timer = window.setTimeout(() => {
+      setAskFocusVisible(true)
+      window.setTimeout(() => setAskFocusVisible(false), BUBBLE_VISIBLE_MS + 2_800)
+    }, 180_000)
+    return () => window.clearTimeout(timer)
+  }, [preview, focusingNow, snapshot?.takeover, snapshot?.reminder, snapshot?.pomodoro.phase])
+  useEffect(() => {
+    if (focusingNow || snapshot?.takeover || snapshot?.reminder) setAskFocusVisible(false)
+  }, [focusingNow, snapshot?.takeover, snapshot?.reminder])
   useEffect(() => {
     if (preview) return
     if (!snapshot) return
@@ -227,7 +239,17 @@ function PetView(): React.JSX.Element {
         </section>
       : preview?.recoveryRemainingSeconds !== undefined
         ? <section className="hover-status" aria-live="polite"><strong>恢复 {formatTime(preview.recoveryRemainingSeconds)}</strong></section>
-        : bubbleVisible && !preview && <section className="hover-status" aria-live="polite"><strong>{bubbleCopy}</strong></section>}
+        : bubbleVisible && !preview
+          ? <section className="hover-status" aria-live="polite"><strong>{bubbleCopy}</strong></section>
+          : askFocusVisible && !preview && !petHovered
+            ? <section className="hover-status ask-focus" aria-live="polite">
+                <strong>{t(lang, 'bubble.askFocus')}</strong>
+                <button
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => { event.stopPropagation(); setAskFocusVisible(false); void act({ type: 'pomodoro:start' }) }}
+                >{t(lang, 'bubble.askFocusYes')}</button>
+              </section>
+            : null}
     <div className="pet-stage" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
       <PetMotion visual={preview?.visual ?? snapshot.visual} pressureValue={preview?.pressure ?? snapshot.health.pressure} recovery={preview?.recovery ?? snapshot.health.recovery} swellLevel={preview ? 0 : snapshot.swellLevel} hydrationStage={preview ? 0 : snapshot.hydrationStage}/>
     </div>
@@ -394,9 +416,7 @@ function Dashboard(): React.JSX.Element {
       </footer>
     </section>
 
-    <section className="working-friend"><DashboardFriend/><p>{focusActive ? t(lang, 'friend.focusing') : t(lang, 'friend.idle')}</p></section>
-
-    {/* 纯统计展示：打卡在桌宠身上完成，这里只回看今日记录（不做任何交互） */}
+    {/* 后台只做统计展示：打卡在桌宠身上完成，这里只回看今日记录（不做任何交互） */}
     <nav className="habit-dock" aria-label={t(lang, 'habitDock.aria')}>
       {habitItems.map((item) => <div key={item.kind} className="habit-stat"><img src={item.asset} alt=""/><span>{habitLabel(lang, item.kind)}</span><small>{habitCount(today, item.kind)}</small></div>)}
     </nav>
@@ -407,17 +427,6 @@ function Dashboard(): React.JSX.Element {
       save={() => { void act({ type: 'settings:update', settings: draft }); setSettingsOpen(false); settingsTrigger.current?.focus() }}
     />}
   </main>
-}
-
-function DashboardFriend(): React.JSX.Element {
-  return <video
-    className="dashboard-friend-video"
-    src={focusVideo}
-    muted
-    autoPlay
-    loop
-    playsInline
-  />
 }
 
 function PeachDot(props: { cx?: number; cy?: number; value?: number }): React.JSX.Element {

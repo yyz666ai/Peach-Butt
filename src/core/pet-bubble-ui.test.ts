@@ -17,7 +17,8 @@ describe('desktop pet speech bubble contract', () => {
     expect(renderer).toContain("snapshot.restSession?.pending")
     expect(renderer).toContain("type: 'rest:complete'")
     expect(renderer).toContain('event.stopPropagation()')
-    expect(styles).toContain('top: 4%')
+    // 2026-08-31：气泡/打卡面板从 top 4% 下移到 11%，贴紧宠物头顶且距离固定
+    expect(styles).toContain('top: 11%')
   })
 
   it('starts greeting from hover with a throttle guard (2026-08-31 需求变更：悬停即打招呼)', () => {

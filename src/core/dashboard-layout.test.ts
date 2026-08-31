@@ -14,7 +14,7 @@ describe('dashboard responsive layout contract', () => {
     expect(rule('.cottage')).toContain('display: grid')
     expect(rule('.cottage')).toContain('min-height: 0')
     expect(rule('.cottage')).not.toContain('min-height: 650px')
-    for (const selector of ['.energy-hero', '.motivation-note', '.growth-card', '.working-friend', '.habit-dock']) {
+    for (const selector of ['.energy-hero', '.motivation-note', '.growth-card', '.habit-dock']) {
       expect(rule(selector), selector).toContain('grid-area:')
       expect(rule(selector), selector).not.toContain('position: absolute')
     }

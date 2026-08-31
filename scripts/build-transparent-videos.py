@@ -15,26 +15,48 @@ from pathlib import Path
 
 try:
     from PIL import Image, ImageEnhance, ImageFilter
-    from rembg import new_session, remove
 except ModuleNotFoundError as error:
     raise SystemExit(
         "Missing video build dependencies. Run: python3 -m pip install "
         "-r scripts/requirements-video.txt"
     ) from error
 
+# rembg（连带 pymatting/numba）只在真正需要抠图时懒加载；v3 专用脚本会直接用
+# onnxruntime 跑 u2net 绕开这层，模块导入时不应触发 pymatting 的 numba JIT
+# 临时目录清理（曾经一次删 50 个文件触发 safe-delete 钩子）。
+
 
 CANVAS = (480, 500)
 BOTTOM_SAFE_MARGIN = 8
 MOTION_NAMES = ("greeting", "focus", "sleep", "toilet", "pressure", "transform", "dry")
-BRIGHTNESS = {"greeting": 1.16, "focus": 1.28, "sleep": 1.15, "toilet": 1.15, "pressure": 1.18, "transform": 1.16, "dry": 1.16, "happy": 1.16, "rest": 1.16, "focus-v2": 1.0, "dry-v2": 1.0, "idle-lounge": 1.0, "hydrate-v2": 1.0}
-# MiniMax-H3 v2 remakes keep their original file names in the source folder and
-# already ship on a bright white studio background, so they bypass the legacy
-# chair-residue surgery and the per-name brightness lifts.
+BRIGHTNESS = {"greeting": 1.16, "focus": 1.28, "sleep": 1.15, "toilet": 1.15, "pressure": 1.18, "transform": 1.16, "dry": 1.16, "happy": 1.16, "rest": 1.16, "focus-v2": 1.0, "dry-v2": 1.0, "idle-lounge": 1.0, "hydrate-v2": 1.0, "idle-lounge-v3": 1.0, "focus-v3": 1.0, "dry-v3": 1.0, "hydrate-v3": 1.0, "greeting-v3": 1.0, "bored-v3": 1.0, "happy-v3": 1.0, "toilet-v3": 1.0, "pet-v3": 1.0, "shy-v3": 1.0, "dance-v3": 1.0, "eye-strain-v3": 1.0}
+# MiniMax-H3 v2/v3 remakes keep their original file names in the source folder
+# and already ship on a bright white studio background, so they bypass the
+# legacy chair-residue surgery and the per-name brightness lifts.
+# 2026-08-31 v3 批次：isnet 在亮白底素材上会咬掉道具旁的身体块，改用 u2net
+# （laptop/stool/bottle/hand 帧实测完整），并叠加封闭洞填充兜底。
+V3_MODEL_NAMES = {
+    "idle-lounge-v3", "focus-v3", "dry-v3", "hydrate-v3",
+    "greeting-v3", "bored-v3", "happy-v3", "toilet-v3",
+    "pet-v3", "shy-v3", "dance-v3", "eye-strain-v3",
+}
 SOURCE_ALIASES = {
     "idle-lounge": "idle-lounge-h3.mp4",
     "focus-v2": "focus-v2-h3.mp4",
     "dry-v2": "dry-v2-h3.mp4",
     "hydrate-v2": "hydrate-v2-h3.mp4",
+    "idle-lounge-v3": "idle-lounge-v3.mp4",
+    "focus-v3": "focus-v3.mp4",
+    "dry-v3": "dry-v3.mp4",
+    "hydrate-v3": "hydrate-v3.mp4",
+    "greeting-v3": "greeting-v3.mp4",
+    "bored-v3": "bored-v3.mp4",
+    "happy-v3": "happy-v3.mp4",
+    "toilet-v3": "toilet-v3.mp4",
+    "pet-v3": "pet-v3.mp4",
+    "shy-v3": "shy-v3.mp4",
+    "dance-v3": "dance-v3.mp4",
+    "eye-strain-v3": "eye-strain-v3.mp4",
 }
 GENTLE_NAMES = set(SOURCE_ALIASES)
 TRIM_RANGES = {
@@ -49,6 +71,20 @@ TRIM_RANGES = {
     "focus-v2": (0.30, 5.00),
     "dry-v2": (0.68, 5.00),
     "hydrate-v2": (0.68, 5.00),
+    # v3 (2026-08-31 参考图重生成)：first_frame 是站立参考图，开场有 0.8-1.2s
+    # 从参考图过渡到目标动作的过程，trim 到动作开始后
+    "idle-lounge-v3": (0.90, 5.00),
+    "focus-v3": (1.30, 5.00),
+    "dry-v3": (0.90, 5.00),
+    "hydrate-v3": (0.90, 5.00),
+    "greeting-v3": (0.30, 5.00),
+    "bored-v3": (0.30, 5.00),
+    "happy-v3": (0.30, 5.00),
+    "toilet-v3": (0.30, 5.00),
+    "pet-v3": (0.30, 5.00),
+    "shy-v3": (0.30, 5.00),
+    "dance-v3": (0.30, 5.00),
+    "eye-strain-v3": (0.30, 5.00),
 }
 
 
@@ -265,7 +301,41 @@ def clear_explosion_canvas_residue(frames: list[Path]) -> None:
         image.save(frame, optimize=True)
 
 
+def fill_enclosed_holes(result: Image.Image, original: Image.Image) -> Image.Image:
+    """rembg alpha matting sometimes erodes fully enclosed interior regions
+    (e.g. the body hidden behind a laptop or bottle). Fill them back using the
+    original frame pixels, but only where the original colour belongs to the
+    character (warm body, green leaf, dark wire limbs) so genuine enclosed
+    background gaps — loop-hand centres, gaps between legs — stay transparent.
+    """
+    import numpy as np
+
+    from scipy.ndimage import binary_fill_holes
+
+    alpha = np.asarray(result.getchannel("A"))
+    filled = binary_fill_holes(alpha > 10)
+    holes = filled & (alpha < 250)
+    if not holes.any():
+        return result
+    # rembg 返回的 PIL 图可能挂在只读 numpy 缓冲上，填充前先复制
+    result = result.copy()
+    result_pixels = result.load()
+    original_pixels = original.convert("RGBA").load()
+    rows, cols = np.nonzero(holes)
+    for y, x in zip(rows.tolist(), cols.tolist()):
+        red, green, blue, _ = original_pixels[x, y]
+        warm = red > 125 and red - green > 18 and red - blue > 24
+        leafy = green > 78 and green - blue > 18 and green > red * .72
+        dark = max(red, green, blue) < 110
+        if warm or leafy or dark:
+            result_pixels[x, y] = (red, green, blue, 255)
+    return result
+
+
 def convert(source: Path, destination: Path, fps: int, width: int, session: object, trim: tuple[float, float] | None = None) -> None:
+    # 懒加载 rembg：仅在非 v3 路径上才需要 pymatting 的 alpha matting
+    from rembg import remove
+
     with tempfile.TemporaryDirectory(prefix="pipeach-video-") as temp:
         work = Path(temp)
         frames = work / "frames"
@@ -279,14 +349,20 @@ def convert(source: Path, destination: Path, fps: int, width: int, session: obje
         run(*command)
         for frame in sorted(frames.glob("*.png")):
             with Image.open(frame) as image:
-                result = remove(
-                    image.convert("RGB"), session=session,
-                    alpha_matting=True,
-                    alpha_matting_foreground_threshold=240,
-                    alpha_matting_background_threshold=15,
-                    alpha_matting_erode_size=8,
-                    post_process_mask=True,
-                )
+                # v3 用 u2net 抠图已足够干净；跳掉 pymatting 的 alpha_matting，
+                # 否则它会在 util/__pycache__/ 临时生成大量文件触发 safe-delete 钩子。
+                if destination.stem in V3_MODEL_NAMES:
+                    result = remove(image.convert("RGB"), session=session, post_process_mask=True)
+                else:
+                    result = remove(
+                        image.convert("RGB"), session=session,
+                        alpha_matting=True,
+                        alpha_matting_foreground_threshold=240,
+                        alpha_matting_background_threshold=15,
+                        alpha_matting_erode_size=8,
+                        post_process_mask=True,
+                    )
+                result = fill_enclosed_holes(result, image)
                 result.save(keyed / frame.name, optimize=True)
         selected = sorted(keyed.glob("*.png"))
         polish_frames(selected, destination.stem)
@@ -554,7 +630,20 @@ def main() -> None:
     # isnet-general-use with alpha matting gives much cleaner edges than the
     # old u2netp fast path; keep the source resolution high (>= 960px wide)
     # before matting so the normalized 480x500 canvas stays sharp.
-    session = None if args.normalize_existing else new_session("isnet-general-use")
+    # 2026-08-31 v3: isnet bites chunks out of the body next to props on the
+    # brighter white studio footage, so the v3 remakes use u2net (verified
+    # complete on laptop/stool/bottle/hand frames) plus the enclosed-hole fill.
+    # rembg/new_session 在这里懒加载，v3 专用脚本完全绕开 pymatting。
+    from rembg import new_session
+
+    sessions: dict[str, object] = {}
+
+    def session_for(name: str) -> object:
+        model = "u2net" if name in V3_MODEL_NAMES else "isnet-general-use"
+        if model not in sessions:
+            sessions[model] = None if args.normalize_existing else new_session(model)
+        return sessions[model]
+
     for name in names:
         print(f"Processing {name}", flush=True)
         destination = args.destination / f"{name}.webm"
@@ -563,6 +652,7 @@ def main() -> None:
                 normalize_existing(destination, Path(output.name), args.fps, name)
                 destination.write_bytes(Path(output.name).read_bytes())
         else:
+            session = session_for(name)
             assert session is not None
             source_name = SOURCE_ALIASES.get(name, f"{name}.mp4")
             convert(args.sources / source_name, destination, args.fps, args.width, session, TRIM_RANGES.get(name))
