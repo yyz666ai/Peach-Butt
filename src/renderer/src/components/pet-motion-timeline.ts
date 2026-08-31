@@ -10,11 +10,11 @@ export interface ClipTimeline {
 }
 
 export const clipTimelines = {
-  // 2026-08-31 v3 素材：H3 亮白底 chroma key，循环窗口取帧差扫描的无缝段
-  // idle：坐在小凳子上无聊发呆（2.0-4.0，diff 2.26）
-  idle: { start: 2.0, end: 4.0, playMode: 'loop' },
+  // 2026-08-31：idle 改用立着的 bored-v7.webm 素材
+  // （看 bored-v7 第 30/60/90/110 帧对比，4 帧姿态非常接近，立着状态循环看不出跳跃）
+  idle: { start: 0, end: 5, playMode: 'loop' },
   activity: { start: 0, end: 4, playMode: 'loop' },
-  // eye-strain：v7 原图首帧，正面朝向（5s）
+  // eye-strain：v7 原图首帧，正面朝向（5s 一次性，跟做模式由 Takeover 渲染循环）
   'eye-strain': { start: 0, end: 5, playMode: 'once' },
   // focus v3：完整小凳子+银色笔记本（1.8-3.5，diff 7.77）
   // 含椅子取景让桃屁屁偏小，scale 1.10 拉齐体型。

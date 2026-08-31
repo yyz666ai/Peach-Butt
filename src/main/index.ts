@@ -191,6 +191,9 @@ function showPetMenu(): void {
   const lang = snapshot.settings.language
   const dispatch = (action: AppAction): void => { runtime?.dispatch(action) }
   const running = snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused'
+  // 2026-08-31：右键菜单瘦身
+  //   1) 删掉「打招呼」：悬停自动打招呼已覆盖（2 分钟节流），不需要右键触发
+  //   2) 喝水打卡直出，不要子菜单再点一次
   const menu = Menu.buildFromTemplate([
     {
       label: lang === 'en' ? 'Focus Timer' : '专注计时',
@@ -201,14 +204,7 @@ function showPetMenu(): void {
         ...(running ? [{ label: lang === 'en' ? 'Cancel focus' : '取消专注，回到初始', click: () => dispatch({ type: 'pomodoro:cancel' as const }) }] : [])
       ]
     },
-    {
-      // 只保留喝水打卡：活动/护眼/如厕靠桃屁屁的视觉状态提醒，用户看见跟着做即可
-      label: lang === 'en' ? 'Log a sip of water' : '喝水打卡',
-      submenu: [
-        { label: lang === 'en' ? 'I drank some water' : '喝了一口水', click: () => dispatch({ type: 'reminder:complete', kind: 'water' }) }
-      ]
-    },
-    { label: lang === 'en' ? 'Say hi' : '打招呼', click: () => dispatch({ type: 'pet:greet' }) },
+    { label: lang === 'en' ? 'Log a sip of water' : '喝水打卡', click: () => dispatch({ type: 'reminder:complete', kind: 'water' }) },
     { type: 'separator' as const },
     { label: lang === 'en' ? 'Open Health Cottage & Settings' : '打开桃桃小屋与设置', click: openDashboard }
   ])

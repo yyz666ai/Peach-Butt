@@ -8,7 +8,6 @@ import toilet from '../../../../assets/video/generated/toilet-v3.webm'
 import transform from '../../../../assets/video/generated/transform.webm'
 import dry from '../../../../assets/video/generated/dry-v3.webm'
 import hydrate from '../../../../assets/video/generated/hydrate-v3.webm'
-import idleMotion from '../../../../assets/video/generated/idle-lounge-v3.webm'
 import eyeStrainMotion from '../../../../assets/video/generated/eye-strain-v7.webm'
 import activityMotion from '../../../../assets/video/generated/activity.webm'
 import happyMotion from '../../../../assets/video/generated/happy-v7.webm'
@@ -28,13 +27,20 @@ import deflated from '../../../../assets/generated/final/deflated.png'
 import drink from '../../../../assets/generated/final/drink.png'
 import stretch from '../../../../assets/generated/final/stretch.png'
 import eyeRest from '../../../../assets/generated/final/eye-rest.png'
-import swell1 from '../../../../assets/generated/final/swell-1.png'
-import swell2 from '../../../../assets/generated/final/swell-2.png'
-import swell3 from '../../../../assets/generated/final/swell-3.png'
-import { clipTimelines, nextPlaybackAction } from './pet-motion-timeline'
+import { clipTimelines, nextPlaybackAction, type ClipTimeline, type PlaybackMode } from './pet-motion-timeline'
 
-const clips = {
-  idle: { src: idleMotion, ...clipTimelines.idle },
+interface ClipEntry {
+  src: string
+  start: number
+  end: number
+  playMode: PlaybackMode
+  rate?: number
+  scale?: number
+}
+
+const clips: Record<string, ClipEntry> = {
+  // 2026-08-31：idle 改用立着的 bored-v7.webm 素材
+  idle: { src: boredMotion, ...clipTimelines.idle },
   activity: { src: activityMotion, ...clipTimelines.activity },
   stretch: { src: activityMotion, ...clipTimelines.activity },
   'eye-strain': { src: eyeStrainMotion, ...clipTimelines['eye-strain'] },
@@ -59,30 +65,37 @@ const clips = {
   'thumbs-up': { src: thumbsUpMotion, ...clipTimelines['thumbs-up'] },
   kiss: { src: kissMotion, ...clipTimelines.kiss },
   deflated: { src: deflatedMotion, ...clipTimelines.deflated }
-} as const
+}
 
-const stills: Record<string, string> = { idle: idleMotionStill, 'eye-strain': eyeStrain, deflated, drink, stretch, 'eye-rest': eyeRest, reminder: idle,
-  'swell-1': swell1, 'swell-2': swell2, 'swell-3': swell3 }
+const stills: Record<string, string> = { idle: idleMotionStill, 'eye-strain': eyeStrain, deflated, drink, stretch, 'eye-rest': eyeRest, reminder: idle }
 
-// 反久坐膨胀视频（已有 pressure.webm，按压力值取帧）：与 swellLevel 1/2/3 对应
-const swellMap: Record<0 | 1 | 2 | 3, string> = { 0: idleMotionStill, 1: swell1, 2: swell2, 3: swell3 }
+// 2026-08-31：反久坐 swell-1/2/3 老静图全部退役。
+// 压力状态改由 pressure.webm 在压力对应位置 ±0.45s 小窗循环播放（角色持续微动，
+// 不再出现「傻站在那的静态图片」），膨胀程度仍由 swellLevel 叠加 scale 表达。
 
-export function PetMotion({ visual, pressureValue, recovery = 100, swellLevel = 0, hydrationStage = 0 }: {
+export function PetMotion({ visual, pressureValue, recovery = 100, swellLevel = 0, hydrationStage = 0, doingFollow = false }: {
   visual: string
   pressureValue: number
   recovery?: number
   swellLevel?: 0 | 1 | 2 | 3
   hydrationStage?: 0 | 1 | 2 | 3
+  /** 2026-08-31：跟做模式时，原本 once 的视频改为 loop，让 90s/60s 倒计时期间角色一直在动 */
+  doingFollow?: boolean
 }): React.JSX.Element {
   const video = useRef<HTMLVideoElement>(null)
   const [failed, setFailed] = useState(false)
-  const clip = clips[visual as keyof typeof clips]
+  const clip = clips[visual]
   const pressurePosition = visual === 'pressure' ? pressureValue : null
+  // 压力小窗循环的锚点：scrub 模式 seek 到压力对应位置后向前播放，
+  // 超出 pos+0.45s 就跳回 pos-0.45s，形成 0.9s 的活循环
+  const scrubAnchor = useRef({ position: 0, soughtAt: -1 })
   // 渐进干裂滤镜：stage 1 轻微去饱和 / 2 明显去饱和+暖色 / 3 灰化+深褐
   const drynessFilter = hydrationStage === 1 ? 'saturate(.78) brightness(1.02)'
     : hydrationStage === 2 ? 'saturate(.5) hue-rotate(-12deg) brightness(.96)'
     : hydrationStage === 3 ? 'grayscale(.45) sepia(.4) saturate(.7) brightness(.9) contrast(1.05)'
     : undefined
+  // 跟做模式时强制把 playMode 切到 loop（保持动作循环），但保留 clip 的 start/end/scale/rate
+  const effectivePlayMode: PlaybackMode = clip && doingFollow && clip.playMode !== 'scrub' ? 'loop' : (clip?.playMode ?? 'loop')
 
   useEffect(() => {
     setFailed(false)
@@ -91,28 +104,28 @@ export function PetMotion({ visual, pressureValue, recovery = 100, swellLevel = 
     const position = pressurePosition !== null
       ? clip.start + (clip.end - clip.start) * Math.min(1, Math.max(0, (pressurePosition - 55) / 45))
       : clip.start
+    scrubAnchor.current.position = position
+    // 压力漂移小于 0.35s 不 re-seek：由小窗循环自然吸收，避免每次 tick 都跳帧
+    if (pressurePosition !== null && Math.abs(position - scrubAnchor.current.soughtAt) < 0.35) return
+    scrubAnchor.current.soughtAt = position
     const seek = (): void => {
       element.currentTime = position
-      element.playbackRate = 'rate' in clip ? clip.rate : 1
-      if (clip.playMode === 'scrub') element.pause()
-      else void element.play().catch(() => setFailed(true))
+      // scrub 小窗循环放慢到 0.55 倍速：渐变红润膨胀的过程更细腻，也更像「呼吸」
+      element.playbackRate = clip.rate ?? (effectivePlayMode === 'scrub' ? 0.55 : 1)
+      void element.play().catch(() => setFailed(true))
     }
     if (element.readyState >= 1) seek()
     else element.addEventListener('loadedmetadata', seek, { once: true })
-  }, [clip, pressurePosition])
+  }, [clip, pressurePosition, effectivePlayMode])
 
   if (!clip || failed) {
     return <img className="pet-media" src={stills[visual] ?? idle} alt="桃屁屁桌宠" draggable={false} style={{ ...(visual === 'deflated' ? { transform: `scale(${0.72 + recovery * 0.0028})` } : {}), ...(drynessFilter ? { filter: drynessFilter } : {}) }}/>
   }
 
-  // 反久坐膨胀：swellLevel 1/2/3 用 swell 静态图 + CSS scale，video 用 pressure.webm 红脸段
-  const isSwell = visual === 'pressure' && swellLevel > 0
-  if (isSwell) {
-    return <img className="pet-media swell-media" src={swellMap[swellLevel]} alt="桃屁屁桌宠" draggable={false} style={{ transform: `scale(${1 + swellLevel * 0.13})`, ...(drynessFilter ? { filter: drynessFilter } : {}) }}/>
-  }
-
   // 体型归一化：per-clip scale 拉齐不同素材的取景差异（专注素材含椅子显得瘦小）
-  const clipScale = (clip as { scale?: number } | undefined)?.scale ?? 1
+  const clipScale = clip.scale ?? 1
+  // 给 nextPlaybackAction 用的临时 timeline（playMode 用 effectivePlayMode 让跟做模式循环）
+  const playbackTimeline: ClipTimeline = { start: clip.start, end: clip.end, playMode: effectivePlayMode, rate: clip.rate, scale: clip.scale }
 
   return <video
     ref={video}
@@ -120,20 +133,43 @@ export function PetMotion({ visual, pressureValue, recovery = 100, swellLevel = 
     className="pet-media pet-video"
     src={clip.src}
     muted
-    autoPlay={clip.playMode !== 'scrub'}
+    autoPlay
     playsInline
     style={{
-      ...(visual === 'pressure' ? { transform: `scale(${(1.45 - Math.min(1, Math.max(0, (pressureValue - 55) / 45)) * 0.37) * clipScale})` } : clipScale !== 1 ? { transform: `scale(${clipScale})` } : {}),
+      // 反久坐：压力越高越红润紧绷（scale 收缩），swellLevel 1/2/3 叠加膨胀
+      ...(visual === 'pressure' ? { transform: `scale(${(1.45 - Math.min(1, Math.max(0, (pressureValue - 55) / 45)) * 0.37) * (1 + swellLevel * 0.13) * clipScale})` } : clipScale !== 1 ? { transform: `scale(${clipScale})` } : {}),
       ...(visual === 'deflated' ? { transform: `scale(${(0.72 + recovery * 0.0028) * clipScale})` } : {}),
       ...(drynessFilter ? { filter: drynessFilter } : {})
     }}
     onError={() => setFailed(true)}
+    // 2026-08-31：循环兜底。素材实际时长 ≤ timeline end 时（如 v7 批全部是整 5.000s），
+    // currentTime 永远走不到 end，浏览器 ended 事件会把视频暂停且 rewind 分支不触发。
+    // 这里在 ended 时直接回到 start 并显式 play()，保证 loop 素材永远在动。
+    onEnded={(event) => {
+      if (effectivePlayMode !== 'loop') return
+      const element = event.currentTarget
+      element.currentTime = clip.start
+      void element.play().catch(() => setFailed(true))
+    }}
     onTimeUpdate={(event) => {
-      const action = nextPlaybackAction(clip, event.currentTarget.currentTime)
-      if (action === 'rewind') event.currentTarget.currentTime = clip.start
+      const element = event.currentTarget
+      // 压力 scrub：小窗循环（pos±0.45s），角色持续微动而非定格静帧
+      if (effectivePlayMode === 'scrub') {
+        const anchor = scrubAnchor.current.position
+        if (element.currentTime > anchor + 0.45) element.currentTime = Math.max(clip.start, anchor - 0.45)
+        return
+      }
+      // 以 min(end, 实际时长) 为循环边界：end 四舍五入超出时长时 ended 先于 rewind 触发
+      const boundary = element.duration > 0 ? Math.min(clip.end, element.duration) : clip.end
+      const action = nextPlaybackAction({ ...playbackTimeline, end: boundary }, element.currentTime)
+      if (action === 'rewind') {
+        element.currentTime = clip.start
+        // end == 实际时长时，ended 已把元素暂停，rewind 后必须显式恢复播放
+        if (element.paused) void element.play().catch(() => setFailed(true))
+      }
       if (action === 'pause') {
-        event.currentTarget.currentTime = Math.max(clip.start, clip.end - 0.04)
-        event.currentTarget.pause()
+        element.currentTime = Math.max(clip.start, clip.end - 0.04)
+        element.pause()
       }
     }}
   />

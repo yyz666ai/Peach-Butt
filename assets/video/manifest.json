@@ -1,6 +1,6 @@
 {
   "reference": "用户提供的七段固定镜头积木动画",
-  "pipeline": "v3 批：MiniMax-H3 在亮白底上生成，src=assets/video/source/*-v3.mp4；scripts/build-v3-keyed.py 用 235 阈值 chroma key（min(R,G,B)>=235 + 边界 flood-fill）+ 最大连通前景保留（其余小岛丢弃）去背景；VP9 alpha WebM 24fps，loop 段按帧差扫描挑最优循环窗口",
+  "pipeline": "v3 批：MiniMax-H3 在亮白底上生成，src=assets/video/source/*-v3.mp4；scripts/build-v3-keyed.py 用 235 阈值 chroma key（min(R,G,B)>=235 + 边界 flood-fill）+ 最大连通前景保留（其余小岛丢弃）去背景；VP9 alpha WebM 24fps，loop 段按帧差扫描挑最优循环窗口。v7 批（2026-08-31）：scripts/fix-v7-platform.py 剔除 H3 幻觉凳子（行宽先收敛到脚再跳变即凳面，统一切割线下移补 8px 脚底基线；原始未处理版在 platform-backup/）",
   "canvas": { "width": 480, "height": 500, "fps": 12, "bottomSafeMargin": 8 },
   "clips": [
     { "id": "idle", "file": "generated/idle-lounge-v3.webm", "role": "待机时坐在小凳子上无聊发呆循环（2026-08-31 v3：H3 亮白底，循环 2.0-4.0）", "start": 2.0, "end": 4.0, "playMode": "loop", "fps": 24 },

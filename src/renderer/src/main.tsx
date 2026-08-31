@@ -135,6 +135,16 @@ function PetView(): React.JSX.Element {
   const [confettiOn, setConfettiOn] = useState(false)
   const confettiTimer = useRef<number | null>(null)
   const lastCelebrateKey = useRef('')
+  // 2026-08-31：旋风过渡。每当 snapshot.visual 切换（排除首次挂载），给 .pet-stage 加 .is-whirling 类，
+  // 触发 0.42s CSS 圆弧旋转 + video 同步 scale-out，下一次 visual 切换时再触发。
+  const [whirlKey, setWhirlKey] = useState(0)
+  const lastVisual = useRef<string | null>(null)
+  useEffect(() => {
+    const v = snapshot?.visual
+    if (!v) return
+    if (lastVisual.current !== null && lastVisual.current !== v) setWhirlKey((key) => key + 1)
+    lastVisual.current = v
+  }, [snapshot?.visual])
   const showBubble = (): void => {
     setBubbleVisible(true)
     if (bubbleTimer.current !== null) window.clearTimeout(bubbleTimer.current)
@@ -255,23 +265,25 @@ function PetView(): React.JSX.Element {
                 >{t(lang, 'bubble.askFocusYes')}</button>
               </section>
             : null}
-    <div className="pet-stage" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
+    <div key={whirlKey} className={`pet-stage${whirlKey > 0 ? ' is-whirling' : ''}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
       <PetMotion visual={preview?.visual ?? snapshot.visual} pressureValue={preview?.pressure ?? snapshot.health.pressure} recovery={preview?.recovery ?? snapshot.health.recovery} swellLevel={preview ? 0 : snapshot.swellLevel} hydrationStage={preview ? 0 : snapshot.hydrationStage}/>
     </div>
     {confettiOn && !preview && <Confetti/>}
     {!preview && snapshot.reward && <RewardOverlay reward={snapshot.reward} lang={snapshot.settings.language} onAck={() => void act({ type: 'reward:ack' })}/>}
-    {!preview && snapshot.takeover && <Takeover takeover={snapshot.takeover} hydrateCount={snapshot.hydrateCount} hydrationStage={snapshot.hydrationStage} lang={snapshot.settings.language} onAck={(kind) => void act({ type: 'takeover:acknowledge', kind })}/>}
-    {!snapshot.takeover && (() => { const t = getTakeoverPreview(); return t ? <Takeover takeover={t} onAck={() => { /* preview 模式：仅展示 UI */ }}/> : null })()}
+    {!preview && snapshot.takeover && <Takeover takeover={snapshot.takeover} hydrateCount={snapshot.hydrateCount} hydrationStage={snapshot.hydrationStage} lang={snapshot.settings.language} onAck={(kind) => void act({ type: 'takeover:acknowledge', kind })} onCancel={(kind) => { if (kind !== 'anti-sedentary') void act({ type: 'reminder:snooze', kind }); void act({ type: 'takeover:dismiss', kind }) }}/>}
+    {!snapshot.takeover && (() => { const t = getTakeoverPreview(); return t ? <Takeover takeover={t} onAck={() => { /* preview 模式：仅展示 UI */ }} onCancel={() => { /* preview 模式：不调度 */ }}/> : null })()}
   </main>
 }
 
 // 大屏接管：到点提醒、反久坐、喝水干裂时铺满屏幕，必须点「我去了我去了…」按钮才能收回。
 // 护眼/活动进入跟做模式：点击按钮后倒计时（护眼 90s / 活动 60s），做完自动确认收下。
+// 2026-08-31：取消按钮走 reminder:snooze 推到 10 分钟后再提醒，不打卡不扣分。
 const FOLLOW_ALONG_SECONDS: Partial<Record<NonNullable<AppSnapshot['takeover']>['kind'], number>> = { eyes: 90, stand: 60 }
 
-function Takeover({ takeover, onAck, hydrateCount = 0, hydrationStage = 2, lang = 'zh' }: {
+function Takeover({ takeover, onAck, onCancel, hydrateCount = 0, hydrationStage = 2, lang = 'zh' }: {
   takeover: NonNullable<AppSnapshot['takeover']>
   onAck: (kind: NonNullable<AppSnapshot['takeover']>['kind']) => void
+  onCancel: (kind: NonNullable<AppSnapshot['takeover']>['kind']) => void
   hydrateCount?: number
   hydrationStage?: 0 | 1 | 2 | 3
   lang?: Language
@@ -296,14 +308,20 @@ function Takeover({ takeover, onAck, hydrateCount = 0, hydrationStage = 2, lang 
     const timer = window.setTimeout(() => setRemaining(remaining - 1), 1_000)
     return () => window.clearTimeout(timer)
   }, [remaining, takeover.kind])
+  // 取消：跟做到一半直接中断，不打卡、10 分钟后再次提醒
+  const cancel = (): void => {
+    setRemaining(null)
+    onCancel(takeover.kind)
+  }
   return <section className={`takeover is-${takeover.kind}${doing ? ' is-doing' : ''}${takeover.kind === 'water' ? ` is-hydration-${hydrationStage}` : ''}`} aria-modal="true" role="dialog" aria-labelledby="takeover-title">
     <div className="takeover-pet">
-      <PetMotion visual={visual} pressureValue={takeover.kind === 'anti-sedentary' ? 100 : 50} recovery={100} swellLevel={takeover.kind === 'anti-sedentary' ? 3 : 0} hydrationStage={takeover.kind === 'water' ? hydrationStage : 0}/>
+      {/* 2026-08-31：接管全程（含点击跟做前）角色持续循环演示动作，不再播完一遍定格成静图 */}
+      <PetMotion visual={visual} pressureValue={takeover.kind === 'anti-sedentary' ? 100 : 50} recovery={100} swellLevel={takeover.kind === 'anti-sedentary' ? 3 : 0} hydrationStage={takeover.kind === 'water' ? hydrationStage : 0} doingFollow/>
     </div>
     <div className="takeover-copy">
       <strong id="takeover-title">{takeover.title}</strong>
       <span>{doing && followSeconds !== undefined ? t(lang, `follow.${takeover.kind}.doing` as StringKey) : takeover.subtitle}</span>
-      {takeover.kind === 'water' && <small className="takeover-mend" aria-label={t(lang, 'takeover.mendAria')}>{t(lang, 'takeover.mendLabel', { count: Math.min(3, hydrateCount) })}</small>}
+      {takeover.kind === 'water' && !doing && <small className="takeover-mend" aria-label={t(lang, 'takeover.mendAria')}>{t(lang, 'takeover.mendLabel', { count: Math.min(3, hydrateCount) })}</small>}
       <small>{doing ? t(lang, 'takeover.doingRemaining', { time: formatTime(remaining ?? 0) }) : takeover.reason}</small>
     </div>
     <button className="takeover-ack" disabled={doing} onClick={() => {
@@ -311,6 +329,8 @@ function Takeover({ takeover, onAck, hydrateCount = 0, hydrationStage = 2, lang 
       if (followSeconds !== undefined) setRemaining(followSeconds)
       else onAck(takeover.kind)
     }} autoFocus>{doing ? t(lang, 'takeover.following', { time: formatTime(remaining ?? 0) }) : t(lang, 'takeover.ackButton')}</button>
+    {/* 2026-08-31：次要「取消/稍后提醒」按钮，急事可中断；doing 跟做到一半也能用 */}
+    <button className="takeover-cancel" onClick={cancel}>{doing ? t(lang, 'takeover.cancelDoing') : t(lang, 'takeover.cancelPending')}</button>
   </section>
 }
 
@@ -329,10 +349,13 @@ function RewardOverlay({ reward, lang, onAck }: {
   lang: Language
   onAck: () => void
 }): React.JSX.Element {
+  // 2026-08-31：奖励动画循环播放（原本 once 视频播完就停），用户看到的是桃屁屁在持续卖萌，
+  // 直到点「收到夸夸」才关掉。
   return <section className={`reward-overlay is-${reward.kind}`} role="dialog" aria-modal="true" aria-label={reward.title}>
     {reward.kind === 'all-done' && <Confetti/>}
     <div className="reward-pet">
-      <PetMotion visual={reward.animation} pressureValue={0} recovery={100}/>
+      {/* 2026-08-31：奖励动画全程循环（含 all-done 庆祝），直到点「收到夸夸」才停 */}
+      <PetMotion visual={reward.animation} pressureValue={0} recovery={100} doingFollow/>
     </div>
     <div className="reward-copy">
       <strong>{reward.title}</strong>
@@ -464,6 +487,12 @@ function Dashboard(): React.JSX.Element {
         </span>)}
         <small>{earned}/{badges.length}</small>
       </footer>
+    </section>
+
+    {/* 2026-08-31：右下角卖萌视频。用户点名要「之前做过的那个捏脸的」，
+        换成 pet-v7（卡通圆手摸头享受），doingFollow 让 5s 一次性素材循环播放。 */}
+    <section className="cottage-mascot" aria-label={t(lang, 'mascot.aria')}>
+      <PetMotion visual="pet" pressureValue={0} recovery={100} doingFollow/>
     </section>
 
     {/* 后台只做统计展示：打卡在桌宠身上完成，这里只回看今日记录（不做任何交互） */}

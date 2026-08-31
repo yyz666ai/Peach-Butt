@@ -22,6 +22,7 @@ const ALL_ACTION_TYPES: AppAction['type'][] = [
   'reminder:undo',
   'rest:complete',
   'takeover:acknowledge',
+  'takeover:dismiss',
   'reward:ack',
   'dashboard:open',
   'settings:update'
@@ -38,7 +39,7 @@ describe('IPC action 白名单', () => {
     if (type === 'pet:size') payload.size = 200
     if (type === 'pomodoro:configure-and-start') payload.workMinutes = 25
     if (type === 'reminder:complete' || type === 'reminder:snooze' || type === 'rest:complete') payload.kind = 'water'
-    if (type === 'takeover:acknowledge') payload.kind = 'water'
+    if (type === 'takeover:acknowledge' || type === 'takeover:dismiss') payload.kind = 'water'
     if (type === 'settings:update') {
       payload.settings = {
         petSize: 200,

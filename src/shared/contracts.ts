@@ -108,7 +108,8 @@ export interface AppSettings {
 /** 每日达标奖励：文案与动画解耦，动画可复用现有素材池 */
 export interface RewardSnapshot {
   id: number
-  kind: 'water-half' | 'water-done' | 'activity-done' | 'all-done' | 'reward-blocked'
+  /** 2026-08-31：新增 rest-cardio（番茄钟休息后打卡轻量奖励，区别于全天达标大奖励） */
+  kind: 'water-half' | 'water-done' | 'activity-done' | 'all-done' | 'reward-blocked' | 'rest-cardio'
   /** 奖励动画（PetMotion visual id；kiss 附带屏幕大唇印，all-done 附带撒花） */
   animation: 'happy' | 'kiss' | 'thumbs-up' | 'hug' | 'dance' | 'deflated'
   /** 主标题（i18n 已本地化） */
@@ -159,6 +160,7 @@ export type AppAction =
   | { type: 'reminder:undo' }
   | { type: 'rest:complete'; kind: ReminderKind }
   | { type: 'takeover:acknowledge'; kind: TakeoverSnapshot['kind'] }
+  | { type: 'takeover:dismiss'; kind: TakeoverSnapshot['kind'] }
   | { type: 'reward:ack' }
   | { type: 'dashboard:open' }
   | { type: 'settings:update'; settings: AppSettings }

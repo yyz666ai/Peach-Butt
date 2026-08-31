@@ -925,6 +925,9 @@ visual: visual.id,
           events.push(...health.completeHabit(action.kind, actionNow, restCompletion))
           reminders.complete(action.kind, actionNow)
           reminder = null
+          // 2026-08-31：番茄钟后休息打卡发轻量奖励（happy 动画 + 夸夸池轮换），
+          // 区别于全天全达标的 hug/亲亲大奖励；既反馈"做得好"又不冲淡全天目标奖励的存在感。
+          fireReward('rest-cardio', 'happy', 'reward.restCardio.title', 'reward.restCardio.sub', {}, actionNow)
           visualOverride = null
         }
       }
@@ -963,6 +966,13 @@ visual: visual.id,
         events.push(...health.ignoreReminder(action.kind, actionNow))
         reminders.snooze(action.kind, actionNow, 10)
         reminder = null
+      }
+      // 2026-08-31：取消按钮接管：仅关闭大屏弹层、不打卡、不计 ignore；由 reminder:snooze 推到 10 分钟后。
+      if (action.type === 'takeover:dismiss') {
+        if (activeTakeover && activeTakeover.kind === action.kind) {
+          activeTakeover = null
+          takeoverSince = 0
+        }
       }
       if (action.type === 'reminder:undo') {
         if (lastCompletedHabit && actionNow - lastCompletedHabit.at <= 20_000) {

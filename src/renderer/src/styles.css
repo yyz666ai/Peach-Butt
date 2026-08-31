@@ -9,11 +9,24 @@ button { cursor: pointer; }
 .pet-loading { display: grid; height: 100vh; place-items: center; color: #7c5747; font-size: 12px; }
 .pet-stage { position: absolute; inset: 14% 2% 4% 2%; display: grid; place-items: end center; cursor: grab; touch-action: none; }
 .pet-stage:active { cursor: grabbing; }
+/* 2026-08-31：旋风过渡层。状态切换时新视频沿径向圆形 blur 揭幕，
+   旧视频同步径向 scale-out；不需要素材，纯 CSS 0.42s 即可。 */
+.pet-stage::before { content: ''; position: absolute; z-index: 4; left: 50%; bottom: 12%; width: 60%; aspect-ratio: 1; transform: translate(-50%, 0) scale(0) rotate(0deg); transform-origin: center; border-radius: 50%; background: conic-gradient(from 0deg, rgba(255, 220, 195, 0) 0deg, rgba(255, 200, 170, .45) 90deg, rgba(255, 180, 140, 0) 200deg, rgba(255, 230, 200, 0) 360deg); pointer-events: none; mix-blend-mode: screen; opacity: 0; }
+.pet-stage.is-whirling::before { animation: pet-whirl .42s cubic-bezier(.4, .8, .3, 1) both; }
+@keyframes pet-whirl { 0% { opacity: 0; transform: translate(-50%, 0) scale(0) rotate(0deg); } 30% { opacity: .9; transform: translate(-50%, 0) scale(.55) rotate(180deg); } 65% { opacity: .55; transform: translate(-50%, 0) scale(.95) rotate(420deg); } 100% { opacity: 0; transform: translate(-50%, 0) scale(1.35) rotate(540deg); } }
 .pet-media { width: 100%; height: 100%; object-fit: contain; pointer-events: none; transform-origin: center bottom; }
 .pet-video { mix-blend-mode: normal; }
-.hover-status { position: absolute; z-index: 8; top: 11%; left: 50%; width: max-content; max-width: 92%; min-height: 0; padding: 8px 13px; transform: translateX(-50%); border: 1px solid rgba(123, 74, 46, .12); border-radius: 16px 16px 16px 6px; background: rgba(255, 247, 229, .97); box-shadow: 0 7px 22px rgba(98, 57, 33, .16); color: #68422f; text-align: center; pointer-events: none; animation: status-in .18s ease-out; }
+/* 2026-08-31：状态切换径向 fade 过渡，配合 .pet-stage.is-whirling */
+.pet-stage.is-whirling .pet-media { animation: pet-swap-out .32s ease-out both; }
+@keyframes pet-swap-out { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.86); } }
+/* 旋风跟做/奖励/接管都共用同一个尺寸锚点：宽度统一 min(44vw, 640px)，
+   高度统一 44vh；video 始终 object-fit: contain 维持原始体型，避免 reward 缩小、focus 偏小。 */
+.pet-stage { --pet-max-w: min(44vw, 640px); --pet-max-h: 44vh; }
+.pet-stage > * { width: 100%; height: 100%; max-width: var(--pet-max-w); max-height: var(--pet-max-h); }
+.hover-status { position: absolute; z-index: 8; top: 11%; left: 50%; width: max-content; max-width: 96%; min-height: 0; padding: 8px 13px; transform: translateX(-50%); border: 1px solid rgba(123, 74, 46, .12); border-radius: 16px 16px 16px 6px; background: rgba(255, 247, 229, .97); box-shadow: 0 7px 22px rgba(98, 57, 33, .16); color: #68422f; text-align: center; pointer-events: none; animation: status-in .18s ease-out; }
 .hover-status::after { content: ''; position: absolute; left: 24%; bottom: -7px; width: 12px; height: 12px; transform: rotate(45deg); border-right: 1px solid rgba(123, 74, 46, .12); border-bottom: 1px solid rgba(123, 74, 46, .12); background: rgba(255, 247, 229, .97); }
-.hover-status strong { display: block; overflow: hidden; font-size: 11px; line-height: 1.25; font-weight: 750; overflow-wrap: anywhere; text-overflow: ellipsis; white-space: nowrap; }
+/* 2026-08-31：去掉 ellipsis，文案允许多行；长文本换行不省略 */
+.hover-status strong { display: block; overflow: visible; font-size: 11px; line-height: 1.4; font-weight: 750; overflow-wrap: anywhere; white-space: normal; max-width: 280px; }
 .rest-checkins { position: absolute; z-index: 12; top: 11%; left: 50%; width: min(96%, 205px); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; padding: 7px; transform: translateX(-50%); border: 1px solid rgba(123, 74, 46, .13); border-radius: 17px; background: rgba(255, 248, 232, .98); box-shadow: 0 8px 24px rgba(98, 57, 33, .18); animation: status-in .18s ease-out; }
 .rest-checkins::after { content: ''; position: absolute; left: calc(50% - 6px); bottom: -6px; width: 12px; height: 12px; transform: rotate(45deg); background: #fff8e8; }
 .rest-checkins button { position: relative; z-index: 1; min-width: 0; display: grid; grid-template-columns: 24px 1fr; align-items: center; gap: 3px; padding: 5px 6px; border: 0; border-radius: 10px; color: #714733; background: #f7e7ca; font-size: 9px; font-weight: 800; }
@@ -21,22 +34,22 @@ button { cursor: pointer; }
 .rest-checkins img { width: 24px; height: 24px; object-fit: contain; }
 @keyframes status-in { from { opacity: 0; transform: translateY(-5px) scale(.98); } }
 
-/* 接管层：暖色聚光晕，不是蒙版。
-   用户反馈「提醒背景不要大红色、要能看见桌面」——原来最高 .62 alpha + blur(26px)
-   等于把桌面糊成一片红。现在整体透明度砍半、模糊降到 6px（只柔化不遮蔽），
-   可读性靠文案的亮色描边（.takeover-copy text-shadow）保证，不靠盖住桌面。 */
-.takeover { position: absolute; inset: 0; z-index: 100; display: grid; grid-template-rows: auto auto auto; align-content: center; gap: 4vh; padding: clamp(30px, 6vh, 60px) clamp(40px, 8vw, 100px); background: radial-gradient(circle at 50% 38%, rgba(255, 224, 190, .16) 0%, rgba(255, 196, 150, .20) 38%, rgba(238, 132, 96, .24) 72%, rgba(214, 96, 60, .28) 100%); backdrop-filter: blur(6px) saturate(1.08); -webkit-backdrop-filter: blur(6px) saturate(1.08); color: #4a2614; align-items: center; justify-items: center; animation: takeover-in .22s ease-out both; pointer-events: auto; }
-.takeover.is-anti-sedentary { background: radial-gradient(circle at 50% 38%, rgba(255, 186, 168, .18) 0%, rgba(255, 150, 122, .22) 38%, rgba(224, 92, 62, .28) 72%, rgba(178, 58, 32, .32) 100%); }
-.takeover.is-water.is-hydration-1 { background: radial-gradient(circle at 50% 38%, rgba(255, 230, 196, .14) 0%, rgba(255, 205, 164, .18) 38%, rgba(238, 148, 100, .22) 72%, rgba(198, 108, 62, .26) 100%); }
-.takeover.is-water.is-hydration-2 { background: radial-gradient(circle at 50% 38%, rgba(255, 216, 168, .16) 0%, rgba(255, 178, 130, .20) 38%, rgba(228, 110, 70, .26) 72%, rgba(172, 78, 42, .30) 100%); }
-.takeover.is-water.is-hydration-3 { background: radial-gradient(circle at 50% 38%, rgba(250, 186, 140, .20) 0%, rgba(228, 132, 86, .26) 32%, rgba(160, 66, 34, .32) 68%, rgba(96, 34, 14, .38) 100%); }
+/* 接管层：2026-08-31 大改版。颜色更淡（.08→.04 区间）让桌面壁纸穿透；
+   点空白处不算命中——pointer-events: none 仅作用在背景 div，主按钮区单独拿 pointer-events。 */
+.takeover { position: absolute; inset: 0; z-index: 100; display: grid; grid-template-rows: auto auto auto auto; align-content: center; gap: 4vh; padding: clamp(30px, 6vh, 60px) clamp(40px, 8vw, 100px); background: radial-gradient(circle at 50% 35%, rgba(255, 244, 222, .22) 0%, rgba(255, 224, 195, .14) 45%, rgba(220, 140, 95, .06) 100%); backdrop-filter: blur(8px) saturate(1.05); -webkit-backdrop-filter: blur(8px) saturate(1.05); color: #4a2614; align-items: center; justify-items: center; animation: takeover-in .22s ease-out both; pointer-events: none; }
+.takeover.is-anti-sedentary { background: radial-gradient(circle at 50% 35%, rgba(255, 196, 178, .22) 0%, rgba(255, 160, 132, .14) 45%, rgba(184, 68, 38, .06) 100%); }
+.takeover.is-water.is-hydration-1 { background: radial-gradient(circle at 50% 35%, rgba(255, 236, 200, .18) 0%, rgba(255, 210, 168, .12) 45%, rgba(198, 108, 62, .04) 100%); }
+.takeover.is-water.is-hydration-2 { background: radial-gradient(circle at 50% 35%, rgba(255, 220, 178, .20) 0%, rgba(255, 184, 134, .14) 45%, rgba(172, 78, 42, .06) 100%); }
+.takeover.is-water.is-hydration-3 { background: radial-gradient(circle at 50% 35%, rgba(252, 196, 150, .24) 0%, rgba(232, 138, 92, .18) 45%, rgba(96, 34, 14, .10) 100%); }
 @keyframes takeover-in { from { opacity: 0; transform: scale(.98); } }
-.takeover-pet { width: min(44vw, 640px); max-height: 44vh; display: grid; place-items: center; }
+.takeover-pet { width: min(44vw, 640px); max-width: var(--pet-max-w); max-height: 44vh; display: grid; place-items: center; pointer-events: auto; }
 .takeover-pet .pet-media { width: 100%; height: 100%; max-height: 44vh; object-fit: contain; }
 .takeover.is-water .takeover-pet { animation: dry-shake 1.4s ease-in-out infinite; }
 @keyframes dry-shake { 0%, 100% { transform: translateX(0) rotate(0); } 25% { transform: translateX(-3px) rotate(-2deg); } 75% { transform: translateX(3px) rotate(2deg); } }
+/* 接管层可点击控件：主按钮 + 次要取消按钮都拿回指针 */
+.takeover-ack, .takeover-cancel { pointer-events: auto; }
 /* 背景变透之后，可读性全靠这层亮色描边撑住（浅色/深色桌面都能看清） */
-.takeover-copy { display: grid; gap: 8px; text-align: center; text-shadow: 0 1px 2px rgba(255, 248, 232, .95), 0 2px 14px rgba(255, 242, 220, .9), 0 0 34px rgba(255, 236, 206, .7); animation: takeover-copy-in .35s cubic-bezier(.2,.86,.26,1) both; }
+.takeover-copy { display: grid; gap: 8px; text-align: center; text-shadow: 0 1px 2px rgba(255, 248, 232, .95), 0 2px 14px rgba(255, 242, 220, .9), 0 0 34px rgba(255, 236, 206, .7); animation: takeover-copy-in .35s cubic-bezier(.2,.86,.26,1) both; pointer-events: auto; }
 @keyframes takeover-copy-in { from { opacity: 0; transform: translateY(20px) scale(.96); } }
 .takeover-copy strong { font-size: clamp(40px, 7vw, 96px); line-height: 1.06; letter-spacing: -.035em; color: #4a2614; }
 .takeover-copy span { font-size: clamp(14px, 1.8vw, 22px); color: #6a3a23; font-weight: 650; }
@@ -45,15 +58,24 @@ button { cursor: pointer; }
 .takeover-ack:hover { transform: translateY(-1px); box-shadow: 0 14px 32px rgba(220, 80, 50, .5), inset 0 1px rgba(255,255,255,.55); }
 .takeover-ack:active { transform: translateY(1px) scale(.99); }
 @keyframes ack-pulse { 0%, 100% { box-shadow: 0 10px 26px rgba(220, 80, 50, .4), inset 0 1px rgba(255,255,255,.5); } 50% { box-shadow: 0 10px 26px rgba(220, 80, 50, .65), inset 0 1px rgba(255,255,255,.5), 0 0 0 10px rgba(255, 142, 110, 0); } }
+/* 2026-08-31：次要「取消/稍后提醒我」按钮，急事可中断跟做 */
+.takeover-cancel { margin: 0 0 0; padding: 9px 22px; border: 1px solid rgba(123, 74, 46, .18); border-radius: 12px; color: #6a3a23; background: rgba(255, 248, 232, .82); font-size: clamp(11px, 1.2vw, 14px); font-weight: 700; letter-spacing: .04em; cursor: pointer; transition: background .12s ease, transform .12s ease; }
+.takeover-cancel:hover { background: rgba(255, 240, 218, .96); transform: translateY(-1px); }
+.takeover-cancel:active { transform: translateY(0); }
 /* 跟做模式：按钮变成进度态，停止脉冲 */
 .takeover.is-doing .takeover-ack { animation: none; background: linear-gradient(180deg, #a8cc45, #8bb52f); box-shadow: 0 10px 26px rgba(120, 160, 40, .4), inset 0 1px rgba(255,255,255,.5); cursor: default; }
 .takeover.is-doing .takeover-ack:hover { transform: none; }
 /* 喝水拼回进度 */
 .takeover-mend { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; color: #b34a2a !important; letter-spacing: .06em; }
 
-/* 反久坐膨胀：swellLevel 1/2/3 时桃屁屁整体放大；静图也要有呼吸感，不许呆滞 */
-.swell-media { transform-origin: center bottom; transition: transform .8s cubic-bezier(.3, .8, .4, 1); animation: swell-breath 2.6s ease-in-out infinite; }
-@keyframes swell-breath { 0%, 100% { scale: 1 1; } 50% { scale: 1.035 .965; } }
+/* 2026-08-31：「要不要专注」气泡：拿回指针（hover-status 默认 none 会让按钮点不到），
+   按钮重做成桃粉渐变胶囊，配一点悬浮/按压手感，和整体治愈系对齐。 */
+.hover-status.ask-focus { pointer-events: auto; display: grid; justify-items: center; gap: 7px; padding: 10px 15px 11px; }
+.hover-status.ask-focus strong { margin: 0; }
+.hover-status.ask-focus button { display: inline-flex; align-items: center; gap: 5px; padding: 6px 18px; border: 0; border-radius: 999px; color: #fff; background: linear-gradient(135deg, #ffb6c1 0%, #f9896b 100%); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-shadow: 0 1px 2px rgba(154, 62, 40, .25); box-shadow: 0 4px 12px rgba(233, 109, 82, .32), inset 0 1px 0 rgba(255, 255, 255, .45); transition: transform .16s ease, box-shadow .16s ease; }
+.hover-status.ask-focus button::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff 0 35%, #ffd9a8 100%); box-shadow: 0 0 0 2px rgba(255, 255, 255, .35); }
+.hover-status.ask-focus button:hover { transform: translateY(-1px) scale(1.04); box-shadow: 0 7px 18px rgba(233, 109, 82, .42), inset 0 1px 0 rgba(255, 255, 255, .45); }
+.hover-status.ask-focus button:active { transform: scale(.96); }
 /* 静图兜底（视频加载失败等）：轻微呼吸起伏，避免「傻站着一张图」 */
 img.pet-media { animation: pet-still-breath 3.4s ease-in-out infinite; transform-origin: center bottom; }
 @keyframes pet-still-breath { 0%, 100% { scale: 1 1; } 50% { scale: 1.015 .985; } }
@@ -194,11 +216,12 @@ img.pet-media { animation: pet-still-breath 3.4s ease-in-out infinite; transform
 .nudge-goal.is-activity .nudge-goal-bar > i { background: linear-gradient(90deg, #b7d76a, #8fb944); }
 .nudge-goal > small { font-size: clamp(10px, .8vw, 13px); font-weight: 750; color: #97634a; font-variant-numeric: tabular-nums; }
 
-/* ── 每日达标奖励弹层（文案×动画解耦；kiss 大唇印 / all-done 撒花）── */
+/* ── 每日达标奖励弹层（文案×动画解耦；kiss 大唇印 / all-done 撒花）──
+   2026-08-31：.reward-pet 拿全局 --pet-max-w/--pet-max-h 与接管层共用尺寸锚点 */
 .reward-overlay { position: absolute; z-index: 20; inset: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; place-items: center; gap: 6px; padding: 10px 8px; background: rgba(255, 244, 227, .62); backdrop-filter: blur(5px); animation: status-in .2s ease-out; }
-.reward-overlay .reward-pet { width: 84%; height: 62%; min-height: 0; display: grid; place-items: center; }
-.reward-overlay .reward-pet video { width: 100%; height: 100%; object-fit: contain; }
-.reward-overlay .reward-pet img { width: 100%; height: 100%; object-fit: contain; }
+.reward-overlay .reward-pet { width: 84%; height: 62%; min-height: 0; display: grid; place-items: center; max-width: var(--pet-max-w); max-height: var(--pet-max-h); }
+.reward-overlay .reward-pet video { width: 100%; height: 100%; max-width: var(--pet-max-w); max-height: var(--pet-max-h); object-fit: contain; }
+.reward-overlay .reward-pet img { width: 100%; height: 100%; max-width: var(--pet-max-w); max-height: var(--pet-max-h); object-fit: contain; }
 .reward-copy { display: grid; gap: 3px; justify-items: center; max-width: 94%; text-align: center; }
 .reward-copy strong { color: #d95a44; font-size: 13px; font-weight: 900; }
 .reward-copy span { color: #7c5747; font-size: 10px; font-weight: 650; line-height: 1.35; }
@@ -211,3 +234,8 @@ img.pet-media { animation: pet-still-breath 3.4s ease-in-out infinite; transform
 
 /* ── 设置面板：每日目标说明 ── */
 .setting-goal-note { margin: -6px 0 0; padding: 0 13px; color: #a06b4e; font-size: 11px; font-weight: 600; line-height: 1.55; }
+
+/* ── Dashboard 右下角卖萌视频（2026-08-31）：脱离 grid，用 fixed 浮在右下，
+   pointer-events:none 不挡习惯按钮。视觉上不占布局空间但存在感强。 ── */
+.cottage-mascot { position: fixed; z-index: 4; right: clamp(10px, 1vw, 22px); bottom: clamp(80px, 8vh, 110px); width: clamp(80px, 9vw, 130px); height: clamp(80px, 9vw, 130px); display: grid; place-items: center; pointer-events: none; filter: drop-shadow(0 10px 14px rgba(98, 52, 28, .16)); }
+.cottage-mascot .pet-media { width: 100%; height: 100%; object-fit: contain; }

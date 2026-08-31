@@ -26,6 +26,7 @@ const SAFE_ACTION_TYPES: Record<AppAction['type'], true> = {
   'reminder:undo': true,
   'rest:complete': true,
   'takeover:acknowledge': true,
+  'takeover:dismiss': true,
   'reward:ack': true,
   'dashboard:open': true,
   'settings:update': true
@@ -71,7 +72,7 @@ export function isSafeAction(value: unknown): value is AppAction {
   if (action.type === 'pet:size') return typeof action.size === 'number' && Number.isFinite(action.size) && action.size >= 120 && action.size <= 320
   if (action.type === 'pomodoro:configure-and-start') return typeof action.workMinutes === 'number' && Number.isFinite(action.workMinutes) && action.workMinutes >= 1 && action.workMinutes <= 120
   if (action.type === 'reminder:complete' || action.type === 'reminder:snooze' || action.type === 'rest:complete') return isReminderKind(action.kind)
-  if (action.type === 'takeover:acknowledge') return isTakeoverKind(action.kind)
+  if (action.type === 'takeover:acknowledge' || action.type === 'takeover:dismiss') return isTakeoverKind(action.kind)
   if (action.type === 'settings:update') return isSafeSettings(action.settings)
   return true
 }
