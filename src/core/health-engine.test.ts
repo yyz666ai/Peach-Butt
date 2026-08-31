@@ -182,28 +182,71 @@ describe('health engine', () => {
     )
   })
 
-  it('stays deflated across healthy habits until explicit recovery', () => {
+  it('repairs deflated through three water check-ins, completing the recovery', () => {
     const engine = createHealthEngine({ initialNow: 0, pressurePerMinute: 1 })
     engine.tick({ now: 100 * 60_000, idleSeconds: 0 })
 
-    const events = engine.completeHabit('water', 101 * 60_000)
+    const firstEvents = engine.completeHabit('water', 101 * 60_000)
 
-    expect(engine.snapshot()).toMatchObject({ score: 8, recovery: 0, pressure: 0, mode: 'deflated' })
-    engine.completeHabit('water', 102 * 60_000)
-    engine.completeHabit('water', 103 * 60_000)
-    engine.completeHabit('water', 104 * 60_000)
-    engine.completeHabit('water', 105 * 60_000)
-    expect(engine.snapshot()).toMatchObject({ score: 40, recovery: 0, mode: 'deflated' })
-    expect(events).toEqual(
+    expect(engine.snapshot()).toMatchObject({ score: 8, recovery: 34, pressure: 0, mode: 'deflated' })
+    expect(firstEvents).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'habit_completed', kind: 'water', recoveryDelta: 0 })
+        expect.objectContaining({ type: 'habit_completed', kind: 'water', recoveryDelta: 34 })
+      ])
+    )
+    // 第 2 次：recovery 34 + 34 = 68，仍 deflated
+    engine.completeHabit('water', 102 * 60_000)
+    expect(engine.snapshot()).toMatchObject({ recovery: 68, mode: 'deflated' })
+    // 第 3 次：recovery 68 + 34 = 102 → 100，自动 mode → active
+    const thirdEvents = engine.completeHabit('water', 103 * 60_000)
+    expect(engine.snapshot()).toMatchObject({ recovery: 100, mode: 'active' })
+    expect(thirdEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'recovery_progress', complete: true }),
+        expect.objectContaining({ type: 'state_changed', mode: 'active' })
+      ])
+    )
+    // 第 4 次之后已恢复，奖励仍按 HABIT_DAILY_LIMIT 发放（每天最多 5 次 water 打卡）
+    engine.completeHabit('water', 104 * 60_000)
+    expect(engine.snapshot()).toMatchObject({ score: 32, recovery: 100, mode: 'active' })
+  })
+
+  it('gradually repairs deflated through setRecovery by elapsed idle time', () => {
+    const engine = createHealthEngine({ initialNow: 0, pressurePerMinute: 1 })
+    engine.tick({ now: 100 * 60_000, idleSeconds: 0 })
+    expect(engine.snapshot().mode).toBe('deflated')
+
+    // 1 分钟 → recovery 1
+    const e1 = engine.setRecovery(1, 101 * 60_000)
+    expect(engine.snapshot()).toMatchObject({ recovery: 1, mode: 'deflated' })
+    expect(e1).toEqual([]) // 不跨阈值不发 progress
+
+    // 跳到 60（跨 50 阈值）
+    engine.setRecovery(60, 102 * 60_000)
+    expect(engine.snapshot()).toMatchObject({ recovery: 60, mode: 'deflated' })
+
+    // 跳到 100 → 触发完整恢复
+    const done = engine.setRecovery(100, 103 * 60_000)
+    expect(engine.snapshot()).toMatchObject({ recovery: 100, mode: 'active' })
+    expect(done).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'recovery_progress', recovery: 100, complete: true }),
+        expect.objectContaining({ type: 'state_changed', mode: 'active' })
       ])
     )
 
-    expect(engine.recover(106 * 60_000)).toContainEqual(
-      expect.objectContaining({ type: 'state_changed', mode: 'active' })
-    )
-    expect(engine.snapshot()).toMatchObject({ recovery: 100, mode: 'active' })
+    // active 状态后 setRecovery 不生效
+    const noop = engine.setRecovery(0, 104 * 60_000)
+    expect(noop).toEqual([])
+  })
+
+  it('ignores non-water habits during deflated (recovery stays put)', () => {
+    const engine = createHealthEngine({ initialNow: 0, pressurePerMinute: 1 })
+    engine.tick({ now: 100 * 60_000, idleSeconds: 0 })
+    engine.completeHabit('stand', 101 * 60_000)
+    expect(engine.snapshot()).toMatchObject({ recovery: 0, mode: 'deflated' })
+    engine.completeHabit('eyes', 102 * 60_000)
+    expect(engine.snapshot()).toMatchObject({ recovery: 0, mode: 'deflated' })
   })
 
   it('forces one explosion without manufacturing pressure and cannot double explode', () => {

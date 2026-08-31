@@ -94,11 +94,13 @@ img.pet-media { animation: pet-still-breath 3.4s ease-in-out infinite; transform
 
 /* Full-screen health interruption */
 /* 短提示同样只做暖色光晕：中心原来是 .9 近乎实心，桌面基本被盖住 */
-.alert-view { position: relative; width: 100vw; height: 100vh; overflow: hidden; display: grid; grid-template-columns: minmax(180px, .48fr) minmax(0, 1fr); align-items: center; gap: clamp(20px, 5vw, 90px); padding: clamp(30px, 7vw, 120px); background: radial-gradient(circle at 30% 60%, rgba(255, 231, 196, .42), rgba(244, 132, 100, .18) 55%, transparent 78%); }
-.alert-view img, .alert-view video { justify-self: end; width: min(34vw, 520px); max-height: 72vh; object-fit: contain; }
-.alert-view div { display: grid; align-content: center; color: #733820; text-shadow: 0 2px 10px #fff0d8; animation: alert-copy 2.05s cubic-bezier(.2,.86,.26,1) both; }
-.alert-view strong { max-width: 9.5em; font-size: clamp(50px, 8vw, 132px); line-height: 1.06; letter-spacing: -.04em; }
-.alert-view span { margin-top: 18px; font-size: clamp(16px, 2vw, 28px); font-weight: 700; }
+/* 2026-08-31：收紧布局让桃屁屁视觉上不显小。和主窗同样的尺寸锚点（--pet-max-w/h），
+   拉近与气泡的距离，避免切换到 alert 时宠物突然「变小变远」的跳变感。 */
+.alert-view { position: relative; width: 100vw; height: 100vh; overflow: hidden; display: grid; grid-template-columns: minmax(220px, .6fr) minmax(0, 1fr); align-items: center; gap: clamp(8px, 2vw, 30px); padding: clamp(24px, 5vw, 80px) clamp(24px, 4vw, 70px); background: radial-gradient(circle at 30% 60%, rgba(255, 231, 196, .42), rgba(244, 132, 100, .18) 55%, transparent 78%); }
+.alert-view img, .alert-view video { justify-self: center; width: min(46vw, 620px); max-width: var(--pet-max-w, 640px); max-height: 64vh; object-fit: contain; }
+.alert-view div { display: grid; align-content: center; justify-self: start; color: #733820; text-shadow: 0 2px 10px #fff0d8; animation: alert-copy 2.05s cubic-bezier(.2,.86,.26,1) both; }
+.alert-view strong { max-width: 9.5em; font-size: clamp(48px, 7.2vw, 122px); line-height: 1.06; letter-spacing: -.04em; }
+.alert-view span { margin-top: 14px; font-size: clamp(15px, 1.9vw, 26px); font-weight: 700; }
 .alert-view.is-explosion { grid-template-columns: 1fr; place-items: center; text-align: center; }
 .alert-view.is-explosion video { grid-area: 1 / 1; justify-self: center; width: min(92vw, 1100px); height: min(86vh, 820px); }
 .alert-view.is-explosion div { position: absolute; inset: auto 0 8%; place-items: center; }

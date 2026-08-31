@@ -105,14 +105,24 @@ const inspectFrame = (png, clip, sampleLabel) => {
 }
 
 const frameDifference = (first, last) => {
-  let total = 0
-  for (let offset = 0; offset < first.data.length; offset += 4) {
-    total += Math.abs(first.data[offset] - last.data[offset])
-    total += Math.abs(first.data[offset + 1] - last.data[offset + 1])
-    total += Math.abs(first.data[offset + 2] - last.data[offset + 2])
-    total += Math.abs(first.data[offset + 3] - last.data[offset + 3])
+  // 2026-08-31：素材改为硬切 alpha + 透明区 RGB 内插填充后，透明像素的 RGB
+  // 会随身体移动而大幅变化（不可见），直接比 RGBA 会污染指标。
+  // 先各自按 alpha 合成到中性灰背景，只量真实可见差异。
+  const composited = (png) => {
+    const out = Buffer.alloc(png.width * png.height * 3)
+    for (let i = 0, j = 0; i < png.data.length; i += 4, j += 3) {
+      const a = png.data[i + 3] / 255
+      out[j] = Math.round(png.data[i] * a + 128 * (1 - a))
+      out[j + 1] = Math.round(png.data[i + 1] * a + 128 * (1 - a))
+      out[j + 2] = Math.round(png.data[i + 2] * a + 128 * (1 - a))
+    }
+    return out
   }
-  return total / (first.width * first.height * 4)
+  const fa = composited(first)
+  const lb = composited(last)
+  let total = 0
+  for (let i = 0; i < fa.length; i += 1) total += Math.abs(fa[i] - lb[i])
+  return total / (first.width * first.height * 3)
 }
 
 for (const clip of manifest.clips) {

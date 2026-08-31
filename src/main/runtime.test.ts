@@ -923,7 +923,7 @@ describe('runtime data integrity', () => {
     expect(runtime.snapshot()).toMatchObject({ visual: 'toilet', restSession: { current: 'toilet' } })
   })
 
-  it('rotates the fourth-pomodoro queue before sleeping, while short breaks finish in rest', () => {
+  it('lets the long break sleep right away while the four-pomodoro queue still rotates internally', () => {
     const shortRuntime = createRuntime(memoryStorage())
     runtimes.push(shortRuntime)
     shortRuntime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 1 })
@@ -950,11 +950,15 @@ describe('runtime data integrity', () => {
     longRuntime.tick(start + 120_000, 0)
     vi.setSystemTime(start + 120_000)
     longRuntime.dispatch({ type: 'pet:click' })
-    expect(longRuntime.snapshot()).toMatchObject({ visual: 'activity', restSession: { current: 'stand' } })
+    // 2026-08-31：长休息期间直接 sleep，画面不再被活动 / 喝水 / 如厕 / 护眼指导抢走。
+    // restSession 内部仍按顺序旋转（用户在 hover 打卡芯片依次完成四件事），
+    // 但视觉一直睡到四件全部完成。
+    expect(longRuntime.snapshot()).toMatchObject({ visual: 'sleep', restSession: { current: 'stand' } })
     longRuntime.tick(start + 123_999, 0)
-    expect(longRuntime.snapshot()).toMatchObject({ visual: 'activity', restSession: { current: 'stand' } })
+    expect(longRuntime.snapshot()).toMatchObject({ visual: 'sleep', restSession: { current: 'stand' } })
     longRuntime.tick(start + 124_000, 0)
-    expect(longRuntime.snapshot()).toMatchObject({ visual: 'water-prompt', restSession: { current: 'water' } })
+    // rotation cursor 仍在走（stand → water），但 visual 一直是 sleep
+    expect(longRuntime.snapshot()).toMatchObject({ visual: 'sleep', restSession: { current: 'water' } })
     for (const kind of ['stand', 'water', 'toilet', 'eyes'] as const) {
       longRuntime.dispatch({ type: 'rest:complete', kind })
     }

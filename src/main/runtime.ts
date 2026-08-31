@@ -84,6 +84,29 @@ function computeHydrationStage(reminder: AppSnapshot['reminder'], now: number): 
   return 0
 }
 
+// 2026-08-31：连续版干裂进度（0..1）。shatter=1.0 封顶（与 stage 3 一致），
+// 否则按 ignoredMinutes / SHATTER_AT_MINUTES 平滑爬升，驱动 CSS 滤镜插值。
+function computeHydrationProgress(reminder: AppSnapshot['reminder'], now: number): number {
+  if (!reminder || reminder.kind !== 'water') return 0
+  const ignoredMinutes = (now - reminder.dueAt) / 60_000
+  if (ignoredMinutes <= 0) return 0
+  return Math.max(0, Math.min(1, ignoredMinutes / HYDRATION_SHATTER_AT_MINUTES))
+}
+
+// 2026-08-31：连续版膨胀进度（0..1）。trigger 之下的专注时间也算一点点（0..trigger 映射 0..0.5），
+// 之后每 5 分钟 +0.25，封顶 1.0。swell-3 = 1.0。
+function computeSwellProgress(continuousWorkStartedAt: number | null, limitMinutes: number, now: number): number {
+  if (continuousWorkStartedAt === null) return 0
+  const continuousMinutes = (now - continuousWorkStartedAt) / 60_000
+  const triggerAt = limitMinutes * SWELL_TRIGGER_FRACTION
+  if (continuousMinutes <= 0) return 0
+  if (continuousMinutes < triggerAt) return Math.max(0, Math.min(0.5, (continuousMinutes / triggerAt) * 0.5))
+  const overMinutes = continuousMinutes - triggerAt
+  const maxOver = SWELL_LEVELS[2].minutesAfterTrigger
+  if (overMinutes >= maxOver) return 1
+  return Math.max(0.5, Math.min(1, 0.5 + (overMinutes / maxOver) * 0.5))
+}
+
 function takeoverCopy(kind: TakeoverSnapshot['kind'], lang: AppSettings['language']): { title: string; subtitle: string } {
   return { title: t(lang, `takeover.${kind}.title` as StringKey), subtitle: t(lang, `takeover.${kind}.subtitle` as StringKey) }
 }
@@ -554,6 +577,11 @@ export function createRuntime(storage: Storage): Runtime {
         : { id: 'deflated', message: t(lang, 'visual.deflatedRecovering') }
     }
     const session = restSession?.snapshot()
+    // 2026-08-31：长休息期间直接睡，不再被 session.current（活动/喝水/如厕/护眼指导）抢走画面。
+    // 休息期间仍可悬停唤醒打卡芯片完成四件事，不影响；只有四件全部完成才允许滑过 sleep 显示 rest。
+    if (p.phase === 'break' && p.breakKind === 'long' && !(session?.allCompleted && (p.phase === 'break' || (p.phase === 'paused' && p.pausedPhase === 'break')))) {
+      return { id: 'sleep', message: t(lang, 'visual.longBreak') }
+    }
     if (session?.current) return { id: restVisual[session.current], message: callName() + reminderCopy(lang, session.current) }
     if (session?.allCompleted && (p.phase === 'break' || (p.phase === 'paused' && p.pausedPhase === 'break'))) {
       return session.longBreak
@@ -561,7 +589,6 @@ export function createRuntime(storage: Storage): Runtime {
         : { id: 'rest', message: t(lang, 'visual.allDoneRest') }
     }
     if (p.phase === 'awaiting_rest_confirmation') return { id: 'stretch', message: t(lang, 'visual.awaitingRest') }
-    if (p.phase === 'break' && p.breakKind === 'long') return { id: 'sleep', message: t(lang, 'visual.longBreak') }
     if (reminder) {
       if (reminder.kind === 'water' && lastTickAt - reminder.dueAt >= 15 * 60_000) return { id: 'dry', message: t(lang, 'visual.dryCracked', { name: callName() }) }
       if (reminder.kind === 'eyes' && lastTickAt - reminder.dueAt >= 10 * 60_000) return { id: 'eye-strain', message: t(lang, 'visual.eyeStrained', { name: callName() }) }
@@ -615,6 +642,8 @@ visual: visual.id,
     swellLevel: computeSwellLevel(continuousWorkStartedAt, settings.continuousWorkLimitMinutes, lastTickAt),
     hydrationStage: computeHydrationStage(reminder, lastTickAt),
     hydrateCount: hydrateCount,
+    hydrationProgress: computeHydrationProgress(reminder, lastTickAt),
+    swellProgress: computeSwellProgress(continuousWorkStartedAt, settings.continuousWorkLimitMinutes, lastTickAt),
     takeover: activeTakeover,
     reward: rewardUntil > Date.now() ? activeReward : null,
     growth: {
@@ -735,17 +764,23 @@ visual: visual.id,
       (phaseBeforeTick === 'work' || phaseBeforeTick === 'awaiting_rest_confirmation') &&
       effectiveNow - continuousWorkStartedAt >= settings.continuousWorkLimitMinutes * 60_000
     ) healthEvents.push(...health.forceExplosion(effectiveNow))
-    if (
+    // 2026-08-31：瘪了之后按休息时间逐步还原（0..100 跨 5 分钟）。
+// 喝水打卡也加分（health-engine 完成 habit 时会 +34，三次 ≈ 还原成功）。
+// health.setRecovery 到 100 时自动触发 state_changed，runtime 在此基础上叠加 transform 动画 + 和好奖励。
+if (
       health.snapshot().mode === 'deflated' &&
-      recoveryRestStartedAt !== null &&
-      effectiveNow - recoveryRestStartedAt >= RECOVERY_REST_REQUIRED_SECONDS * 1000 &&
-      lastSystemIdleSeconds >= RECOVERY_REST_REQUIRED_SECONDS
+      recoveryRestStartedAt !== null
     ) {
-      const recoveryEvents = health.recover(effectiveNow)
-      if (recoveryEvents.length) {
-        healthEvents.push(...recoveryEvents)
+      const elapsedWallSeconds = Math.max(0, (effectiveNow - recoveryRestStartedAt) / 1000)
+      const timeProgress = Math.min(1, Math.min(elapsedWallSeconds, lastSystemIdleSeconds) / RECOVERY_REST_REQUIRED_SECONDS)
+      const targetPercent = Math.round(timeProgress * 100)
+      const wasDeflated = health.snapshot().mode === 'deflated'
+      const setRecoveryEvents = health.setRecovery(targetPercent, effectiveNow)
+      if (setRecoveryEvents.length) healthEvents.push(...setRecoveryEvents)
+      // 完整恢复（mode 由 deflated → active）时再叠加变身动画与和好标记。
+      // 喝水打卡触发完整恢复时也走这里（engine 同步切了 mode）。
+      if (wasDeflated && health.snapshot().mode === 'active') {
         recoveryRestStartedAt = null
-        // 情感修复：变身回来先道谢，并标记当天首次打卡可领 +5 和好奖励
         visualOverride = { id: 'transform', until: effectiveNow + TRANSFORM_OVERRIDE_MS, message: '谢谢你等我回来～' }
         reconciliationDay = dateKey(effectiveNow)
       }

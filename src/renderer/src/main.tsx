@@ -139,12 +139,21 @@ function PetView(): React.JSX.Element {
   // 触发 0.42s CSS 圆弧旋转 + video 同步 scale-out，下一次 visual 切换时再触发。
   const [whirlKey, setWhirlKey] = useState(0)
   const lastVisual = useRef<string | null>(null)
+  // 2026-08-31：focus 双变体（focus:0 标准二郎腿 v3 / focus:1 翘二郎腿 crosslegs）。
+  // 每段 work 进入时随机选一个，整段 work 期间不变（避免播放中跳变）；下次进入 focus 重新摇。
+  const [focusVariant, setFocusVariant] = useState(0)
   useEffect(() => {
     const v = snapshot?.visual
     if (!v) return
-    if (lastVisual.current !== null && lastVisual.current !== v) setWhirlKey((key) => key + 1)
+    if (lastVisual.current !== null && lastVisual.current !== v) {
+      setWhirlKey((key) => key + 1)
+      if (v === 'focus') setFocusVariant(Math.random() < 0.5 ? 1 : 0)
+    }
     lastVisual.current = v
   }, [snapshot?.visual])
+  // preview 模式（带 ?petVisual=focus）固定显示二郎腿版（focus:1），方便目测新素材；
+  // 运行时 snapshot 的 focus 由 focusVariant 状态决定。
+  const previewFocusVisual = preview?.visual === 'focus' ? 'focus:1' : null
   const showBubble = (): void => {
     setBubbleVisible(true)
     if (bubbleTimer.current !== null) window.clearTimeout(bubbleTimer.current)
@@ -243,8 +252,12 @@ function PetView(): React.JSX.Element {
   const focusing = snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused'
   const bubbleCopy = getBubbleCopy(snapshot, focusing)
   const restChoices = snapshot.restSession?.pending ?? []
-  return <main className={`pet-shell${preview ? ' visual-preview' : ''}`} onMouseEnter={enter} onMouseLeave={() => setPetHovered(false)} onContextMenu={(event) => { event.preventDefault(); if (!preview) window.pipeach.showPetMenu() }}>
-    {restChoices.length > 0 && petHovered
+  const takeoverPreview = getTakeoverPreview()
+  // 2026-08-31：接管期间整段桌宠区域（pet-stage / 气泡 / 打卡提示）都藏掉。
+  // 否则背景会露出主线 PetMotion 当前 visual（如瘪桃子），与接管角色重叠打架。
+  const takeoverVisible = snapshot.takeover ?? takeoverPreview
+  return <main className={`pet-shell${preview ? ' visual-preview' : ''}${takeoverVisible ? ' takeover-on-top' : ''}`} onMouseEnter={enter} onMouseLeave={() => setPetHovered(false)} onContextMenu={(event) => { event.preventDefault(); if (!preview) window.pipeach.showPetMenu() }}>
+    {!takeoverVisible && (restChoices.length > 0 && petHovered
       ? <section className="rest-checkins" aria-label={t(lang, 'restCheckins.aria')}>
           {habitItems.filter((item) => restChoices.includes(item.kind)).map((item) => <button
             key={item.kind}
@@ -264,14 +277,13 @@ function PetView(): React.JSX.Element {
                   onClick={(event) => { event.stopPropagation(); setAskFocusVisible(false); void act({ type: 'pomodoro:start' }) }}
                 >{t(lang, 'bubble.askFocusYes')}</button>
               </section>
-            : null}
-    <div key={whirlKey} className={`pet-stage${whirlKey > 0 ? ' is-whirling' : ''}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
-      <PetMotion visual={preview?.visual ?? snapshot.visual} pressureValue={preview?.pressure ?? snapshot.health.pressure} recovery={preview?.recovery ?? snapshot.health.recovery} swellLevel={preview ? 0 : snapshot.swellLevel} hydrationStage={preview ? 0 : snapshot.hydrationStage}/>
-    </div>
-    {confettiOn && !preview && <Confetti/>}
+            : null)}
+    {!takeoverVisible && <div key={whirlKey} className={`pet-stage${whirlKey > 0 ? ' is-whirling' : ''}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
+      <PetMotion visual={previewFocusVisual ?? (snapshot.visual === 'focus' ? `focus:${focusVariant}` : preview?.visual ?? snapshot.visual)} pressureValue={preview?.pressure ?? snapshot.health.pressure} recovery={preview?.recovery ?? snapshot.health.recovery} swellLevel={preview ? 0 : snapshot.swellLevel} hydrationStage={preview ? 0 : snapshot.hydrationStage} hydrationProgress={preview ? 0 : snapshot.hydrationProgress} swellProgress={preview ? 0 : snapshot.swellProgress}/>
+    </div>}
+    {confettiOn && !preview && !takeoverVisible && <Confetti/>}
     {!preview && snapshot.reward && <RewardOverlay reward={snapshot.reward} lang={snapshot.settings.language} onAck={() => void act({ type: 'reward:ack' })}/>}
-    {!preview && snapshot.takeover && <Takeover takeover={snapshot.takeover} hydrateCount={snapshot.hydrateCount} hydrationStage={snapshot.hydrationStage} lang={snapshot.settings.language} onAck={(kind) => void act({ type: 'takeover:acknowledge', kind })} onCancel={(kind) => { if (kind !== 'anti-sedentary') void act({ type: 'reminder:snooze', kind }); void act({ type: 'takeover:dismiss', kind }) }}/>}
-    {!snapshot.takeover && (() => { const t = getTakeoverPreview(); return t ? <Takeover takeover={t} onAck={() => { /* preview 模式：仅展示 UI */ }} onCancel={() => { /* preview 模式：不调度 */ }}/> : null })()}
+    {takeoverVisible && <Takeover takeover={takeoverVisible} hydrateCount={snapshot.hydrateCount} hydrationStage={snapshot.hydrationStage} lang={snapshot.settings.language} onAck={(kind) => void act({ type: 'takeover:acknowledge', kind })} onCancel={(kind) => { if (kind !== 'anti-sedentary') void act({ type: 'reminder:snooze', kind }); void act({ type: 'takeover:dismiss', kind }) }}/>}
   </main>
 }
 
@@ -316,7 +328,7 @@ function Takeover({ takeover, onAck, onCancel, hydrateCount = 0, hydrationStage 
   return <section className={`takeover is-${takeover.kind}${doing ? ' is-doing' : ''}${takeover.kind === 'water' ? ` is-hydration-${hydrationStage}` : ''}`} aria-modal="true" role="dialog" aria-labelledby="takeover-title">
     <div className="takeover-pet">
       {/* 2026-08-31：接管全程（含点击跟做前）角色持续循环演示动作，不再播完一遍定格成静图 */}
-      <PetMotion visual={visual} pressureValue={takeover.kind === 'anti-sedentary' ? 100 : 50} recovery={100} swellLevel={takeover.kind === 'anti-sedentary' ? 3 : 0} hydrationStage={takeover.kind === 'water' ? hydrationStage : 0} doingFollow/>
+      <PetMotion visual={visual} pressureValue={takeover.kind === 'anti-sedentary' ? 100 : 50} recovery={100} swellLevel={takeover.kind === 'anti-sedentary' ? 3 : 0} hydrationStage={takeover.kind === 'water' ? hydrationStage : 0} hydrationProgress={takeover.kind === 'water' ? hydrationStage / 3 : 0} swellProgress={takeover.kind === 'anti-sedentary' ? 1 : 0} doingFollow/>
     </div>
     <div className="takeover-copy">
       <strong id="takeover-title">{takeover.title}</strong>
@@ -329,8 +341,9 @@ function Takeover({ takeover, onAck, onCancel, hydrateCount = 0, hydrationStage 
       if (followSeconds !== undefined) setRemaining(followSeconds)
       else onAck(takeover.kind)
     }} autoFocus>{doing ? t(lang, 'takeover.following', { time: formatTime(remaining ?? 0) }) : t(lang, 'takeover.ackButton')}</button>
-    {/* 2026-08-31：次要「取消/稍后提醒」按钮，急事可中断；doing 跟做到一半也能用 */}
-    <button className="takeover-cancel" onClick={cancel}>{doing ? t(lang, 'takeover.cancelDoing') : t(lang, 'takeover.cancelPending')}</button>
+    {/* 2026-08-31：次要「取消/稍后提醒」按钮，急事可中断；doing 跟做到一半也能用。
+        文案走 per-kind 阴阳语气，督促"又熬一会儿"的不自律心理。 */}
+    <button className="takeover-cancel" onClick={cancel}>{doing ? t(lang, 'takeover.cancelDoing') : t(lang, `takeover.cancelPending.${takeover.kind}` as StringKey)}</button>
   </section>
 }
 

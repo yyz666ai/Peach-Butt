@@ -29,14 +29,14 @@ except ModuleNotFoundError as error:
 CANVAS = (480, 500)
 BOTTOM_SAFE_MARGIN = 8
 MOTION_NAMES = ("greeting", "focus", "sleep", "toilet", "pressure", "transform", "dry")
-BRIGHTNESS = {"greeting": 1.16, "focus": 1.28, "sleep": 1.15, "toilet": 1.15, "pressure": 1.18, "transform": 1.16, "dry": 1.16, "happy": 1.16, "rest": 1.16, "focus-v2": 1.0, "dry-v2": 1.0, "idle-lounge": 1.0, "hydrate-v2": 1.0, "idle-lounge-v3": 1.0, "focus-v3": 1.0, "dry-v3": 1.0, "hydrate-v3": 1.0, "greeting-v3": 1.0, "bored-v3": 1.0, "happy-v3": 1.0, "toilet-v3": 1.0, "pet-v3": 1.0, "shy-v3": 1.0, "dance-v3": 1.0, "eye-strain-v3": 1.0}
+BRIGHTNESS = {"greeting": 1.16, "focus": 1.28, "sleep": 1.15, "toilet": 1.15, "pressure": 1.18, "transform": 1.16, "dry": 1.16, "happy": 1.16, "rest": 1.16, "focus-v2": 1.0, "dry-v2": 1.0, "idle-lounge": 1.0, "hydrate-v2": 1.0, "idle-lounge-v3": 1.0, "focus-v3": 1.0, "focus-crosslegs": 1.0, "dry-v3": 1.0, "hydrate-v3": 1.0, "greeting-v3": 1.0, "bored-v3": 1.0, "happy-v3": 1.0, "toilet-v3": 1.0, "pet-v3": 1.0, "shy-v3": 1.0, "dance-v3": 1.0, "eye-strain-v3": 1.0}
 # MiniMax-H3 v2/v3 remakes keep their original file names in the source folder
 # and already ship on a bright white studio background, so they bypass the
 # legacy chair-residue surgery and the per-name brightness lifts.
 # 2026-08-31 v3 批次：isnet 在亮白底素材上会咬掉道具旁的身体块，改用 u2net
 # （laptop/stool/bottle/hand 帧实测完整），并叠加封闭洞填充兜底。
 V3_MODEL_NAMES = {
-    "idle-lounge-v3", "focus-v3", "dry-v3", "hydrate-v3",
+    "idle-lounge-v3", "focus-v3", "focus-crosslegs", "dry-v3", "hydrate-v3",
     "greeting-v3", "bored-v3", "happy-v3", "toilet-v3",
     "pet-v3", "shy-v3", "dance-v3", "eye-strain-v3",
 }
@@ -47,6 +47,7 @@ SOURCE_ALIASES = {
     "hydrate-v2": "hydrate-v2-h3.mp4",
     "idle-lounge-v3": "idle-lounge-v3.mp4",
     "focus-v3": "focus-v3.mp4",
+    "focus-crosslegs": "focus-crosslegs-h3.mp4",
     "dry-v3": "dry-v3.mp4",
     "hydrate-v3": "hydrate-v3.mp4",
     "greeting-v3": "greeting-v3.mp4",
@@ -75,6 +76,9 @@ TRIM_RANGES = {
     # 从参考图过渡到目标动作的过程，trim 到动作开始后
     "idle-lounge-v3": (0.90, 5.00),
     "focus-v3": (1.30, 5.00),
+    # focus-crosslegs v1 (2026-08-31)：第 1 帧是参考图静态，第 2 帧起坐姿稳定；
+    # trim 0.5s 把开场参考图过滤掉，保留 0.5-4.5s 的 4 秒稳定坐姿段
+    "focus-crosslegs": (0.50, 4.50),
     "dry-v3": (0.90, 5.00),
     "hydrate-v3": (0.90, 5.00),
     "greeting-v3": (0.30, 5.00),
@@ -366,15 +370,15 @@ def convert(source: Path, destination: Path, fps: int, width: int, session: obje
                 result.save(keyed / frame.name, optimize=True)
         selected = sorted(keyed.glob("*.png"))
         polish_frames(selected, destination.stem)
-        focus_clip = destination.stem == "focus"
+        focus_clip = destination.stem in {"focus", "focus-crosslegs"}
         normalize_frames(
             selected,
             target_fraction=.84 if focus_clip else .93,
             bottom_margin=18 if focus_clip else BOTTOM_SAFE_MARGIN,
         )
-        if destination.stem == "focus":
-            clear_focus_canvas_residue(selected)
-            restore_focus_legs(selected, destination.parent / "greeting.webm")
+        if focus_clip:
+            btv_clear_focus_canvas_residue(selected)
+            btv_restore_focus_legs(selected, destination.parent / "greeting.webm")
         if destination.stem == "pressure":
             anchor_bottom(selected)
             clear_pressure_canvas_rails(selected)

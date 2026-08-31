@@ -18,6 +18,13 @@ const zh = {
   'takeover.reason.ignored': '已忽略 {minutes} 分钟',
   'takeover.reason.justDue': '刚刚到点',
   'takeover.ackButton': '我去了我去了…',
+  // 2026-08-31：取消按钮改成 per-kind 阴阳语气，督促自己继续不忘休息。
+  // 「稍后再提醒我」太温吞，阴阳话术更能在心里戳一下、提醒"又熬一会儿"。
+  'takeover.cancelPending.water': '我还想再渴一会儿',
+  'takeover.cancelPending.stand': '我还想再坐一会儿',
+  'takeover.cancelPending.toilet': '我还想再憋一会儿',
+  'takeover.cancelPending.eyes': '我要再用会儿眼',
+  'takeover.cancelPending.anti-sedentary': '我偏不起，再坐会儿',
   'takeover.cancelPending': '稍后再提醒我',
   'takeover.cancelDoing': '先停下来',
   'takeover.doingRemaining': '还剩 {time}',
@@ -263,6 +270,12 @@ const en: Record<StringKey, string> = {
   'takeover.reason.ignored': 'Ignored for {minutes} minutes',
   'takeover.reason.justDue': "It's due now",
   'takeover.ackButton': 'Okay okay, I\'m going…',
+  // 2026-08-31：per-kind passive-aggressive copy for the snooze button
+  'takeover.cancelPending.water': 'I want to be thirsty a little more',
+  'takeover.cancelPending.stand': 'I want to sit a little more',
+  'takeover.cancelPending.toilet': 'I want to hold it a little more',
+  'takeover.cancelPending.eyes': 'I want to use my eyes a little more',
+  'takeover.cancelPending.anti-sedentary': "Nah, I'll sit a little more",
   'takeover.cancelPending': 'Remind me later',
   'takeover.cancelDoing': 'Stop the timer',
   'takeover.doingRemaining': '{time} left',

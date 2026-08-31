@@ -29,7 +29,7 @@ _btv_spec = importlib.util.spec_from_file_location("btv", str(ROOT / "scripts" /
 btv = importlib.util.module_from_spec(_btv_spec)
 _btv_spec.loader.exec_module(btv)  # type: ignore[union-attr]
 
-V3_NAMES = ("idle-lounge-v3", "focus-v3", "dry-v3", "hydrate-v3",
+V3_NAMES = ("idle-lounge-v3", "focus-v3", "focus-crosslegs", "dry-v3", "hydrate-v3",
             "greeting-v3", "bored-v3", "happy-v3", "toilet-v3",
             "pet-v3", "shy-v3", "dance-v3", "eye-strain-v3")
 

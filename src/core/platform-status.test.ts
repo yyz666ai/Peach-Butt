@@ -44,6 +44,8 @@ function snapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
     swellLevel: 0,
     hydrationStage: 0,
     hydrateCount: 0,
+    hydrationProgress: 0,
+    swellProgress: 0,
     takeover: null,
     reward: null,
     trends: [],

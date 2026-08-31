@@ -9,18 +9,37 @@ export interface ClipTimeline {
   scale?: number
 }
 
-export const clipTimelines = {
+/** 2026-08-31：focus 支持双变体切换（focus-v3 标准坐姿二郎腿 / focus-crosslegs 翘二郎腿版）。
+   一个 visual 可以用单个 timeline，也可以用 variants 数组（多个源循环切换，让长时间专注不单调）。 */
+export interface ClipTimelineWithVariants extends ClipTimeline {
+  /** 同一 visual 的多个循环源。每个变体的 start/end/scale 可以独立，playMode 用父 timeline 的。 */
+  variants?: readonly ClipVariant[]
+}
+
+export interface ClipVariant {
+  src: string
+  start: number
+  end: number
+  scale?: number
+}
+
+export const clipTimelines: Record<string, ClipTimelineWithVariants> = {
   // 2026-08-31：idle 改用立着的 bored-v7.webm 素材
   // （看 bored-v7 第 30/60/90/110 帧对比，4 帧姿态非常接近，立着状态循环看不出跳跃）
   idle: { start: 0, end: 5, playMode: 'loop' },
   activity: { start: 0, end: 4, playMode: 'loop' },
   // eye-strain：v7 原图首帧，正面朝向（5s 一次性，跟做模式由 Takeover 渲染循环）
   'eye-strain': { start: 0, end: 5, playMode: 'once' },
-  // focus v3：完整小凳子+银色笔记本（1.8-3.5，diff 7.77）
-  // 含椅子取景让桃屁屁偏小，scale 1.10 拉齐体型。
-  // 数值来自 scripts/measure-body-scale.py 双口径实测（桃子色 1.11 / 最大连通分量 1.10），
-  // 不是手调：v2 时期的 1.22 在 v3 取景下反而会让专注状态比 idle 大 9%。
-  focus: { start: 1.8, end: 3.5, playMode: 'loop', scale: 1.10 },
+  // 2026-08-31：focus 拆双 variant。focus-v3 标准坐姿二郎腿（baseline） + focus-crosslegs 翘二郎腿。
+  // 运行时按 AppSnapshot 里的 focusVariantIndex（每段 work 开始时随机）选其中之一，避免长时间专注
+  // 只看一种姿势显得呆。详见 PetMotion.tsx 的 pickFocusVariant 实现。
+  focus: {
+    start: 1.8, end: 3.5, playMode: 'loop', scale: 1.10,
+    variants: [
+      { src: '', start: 1.8, end: 3.5, scale: 1.10 }, // focus-v3.webm
+      { src: '', start: 1.8, end: 3.5, scale: 1.10 }, // focus-crosslegs.webm
+    ]
+  },
   // v7：原图首帧正面朝向，全 5s
   greeting: { start: 0, end: 5, playMode: 'once' },
   pressure: { start: 0, end: 5.3, playMode: 'scrub' },
@@ -45,7 +64,7 @@ export const clipTimelines = {
   'thumbs-up': { start: 0, end: 5, playMode: 'once' },
   kiss: { start: 0, end: 5, playMode: 'once' },
   deflated: { start: 0, end: 5, playMode: 'loop' }
-} as const satisfies Record<string, ClipTimeline>
+}
 
 export function nextPlaybackAction(timeline: ClipTimeline, currentTime: number): 'continue' | 'pause' | 'rewind' {
   if (currentTime < timeline.end) return 'continue'

@@ -10,6 +10,8 @@ export type HealthEvent =
   | { type: 'poke_relief'; ts: number; pressureRelief: number }
   | { type: 'reminder_ignored'; ts: number; kind: ReminderKind; pressureAdded: number }
   | { type: 'daily_reset'; ts: number; day: string }
+  // 2026-08-31：瘪了之后按休息时间或喝水打卡逐步还原（0..100），不再是瞬间 0→100 跳变。
+  | { type: 'recovery_progress'; ts: number; recovery: number; complete: boolean }
 
 export type HabitKind = 'water' | 'stand' | 'toilet' | 'eyes' | 'pomodoro_break'
 export type ReminderKind = 'water' | 'stand' | 'toilet' | 'eyes'
@@ -71,6 +73,9 @@ export interface HealthEngine {
   setPressurePerMinute(rate: number): void
   forceExplosion(now: number): HealthEvent[]
   recover(now: number): HealthEvent[]
+  // 2026-08-31：runtime 直接写入 recovery（0..100），用于按休息时间或喝水打卡逐步还原。
+  // 到 100 自动调用 recover 完成状态切换。低于当前值忽略。
+  setRecovery(value: number, now: number): HealthEvent[]
   startRest(now: number): HealthEvent[]
   completeHabit(kind: HabitKind, now: number, timing?: HabitCompletionTiming): HealthEvent[]
   undoHabit(completion: HabitCompletion, now: number): HealthEvent[]
@@ -202,6 +207,33 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
       state.continuousActiveSeconds = 0
       return [{ type: 'state_changed', ts: effectiveNow, mode: 'active' }]
     },
+    // 2026-08-31：runtime 按休息时间（0..1 跨 RECOVERY_REST_REQUIRED_SECONDS）或喝水打卡
+    // 写入 recovery。仅在 deflated 模式下生效；目标值低于当前值时忽略（避免倒退）。
+    // 到 100 时自动触发完整恢复（recover 等价）。
+    setRecovery(value, now) {
+      if (state.mode !== 'deflated') return []
+      const target = Math.min(100, Math.max(0, Math.round(value)))
+      if (target <= state.recovery) return []
+      const effectiveNow = Math.max(lastTickAt, now)
+      lastTickAt = effectiveNow
+      const previous = state.recovery
+      state.recovery = target
+      if (target >= 100) {
+        restCompleted = false
+        state.mode = 'active'
+        state.continuousActiveSeconds = 0
+        return [
+          { type: 'recovery_progress', ts: effectiveNow, recovery: target, complete: true },
+          { type: 'state_changed', ts: effectiveNow, mode: 'active' }
+        ]
+      }
+      // 进度跨越 50% / 80% 时各 push 一次 progress 事件给仪表盘统计用（不需要就在订阅层过滤）
+      const crossed = (previous < 50 && target >= 50) || (previous < 80 && target >= 80)
+      if (crossed) {
+        return [{ type: 'recovery_progress', ts: effectiveNow, recovery: target, complete: false }]
+      }
+      return []
+    },
     startRest(now) {
       if (state.mode === 'deflated') return []
       state.mode = 'resting'
@@ -213,15 +245,26 @@ export function createHealthEngine(options: HealthEngineOptions): HealthEngine {
       state.pressure -= pressureRelief
       const rewarded = state.habitRewards[kind] < HABIT_DAILY_LIMIT[kind]
       const scoreDelta = rewarded ? HABIT_REWARD[kind] : 0
+      // 2026-08-31：瘪了之后喝水打卡也加 recovery（+34），三次 ≈ 还原成功。
+      // 其他 kind 在 deflated 模式下不计 recovery（避免打站立让桃屁屁在瘪着时也鼓起来）。
       const recoveryDelta = rewarded && state.mode !== 'deflated'
         ? Math.min(HABIT_REWARD[kind] * 4, 100 - state.recovery)
-        : 0
+        : rewarded && state.mode === 'deflated' && kind === 'water'
+          ? Math.min(34, 100 - state.recovery)
+          : 0
       if (rewarded) state.habitRewards[kind] += 1
       state.score += scoreDelta
       state.recovery = Math.min(100, state.recovery + recoveryDelta)
       const events: HealthEvent[] = [
         { type: 'habit_completed', ts: now, kind, pressureRelief, scoreDelta, recoveryDelta, rewarded, ...timing }
       ]
+      // deflated 下 recovery 到达 100 时同步触发模式切换 + progress complete 事件
+      if (state.mode === 'deflated' && state.recovery >= 100) {
+        state.mode = 'active'
+        state.continuousActiveSeconds = 0
+        events.push({ type: 'recovery_progress', ts: now, recovery: state.recovery, complete: true })
+        events.push({ type: 'state_changed', ts: now, mode: 'active' })
+      }
       if (scoreDelta > 0) {
         events.push({
           type: 'score_changed',

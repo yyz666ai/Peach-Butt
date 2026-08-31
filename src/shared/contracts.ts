@@ -135,6 +135,10 @@ export interface AppSnapshot {
   hydrationStage: 0 | 1 | 2 | 3
   /** 喝水累计打卡次数（用于修补进度） */
   hydrateCount: number
+  // 2026-08-31：连续化的干裂/膨胀进度（0..1），驱动 CSS 滤镜与 scale 平滑插值。
+  // 不再依赖离散 stage 跳变。runtime 同时输出离散 stage（粗粒度逻辑分派）与 progress（细粒度视觉）。
+  hydrationProgress: number
+  swellProgress: number
   /** 大屏接管（null 表示无接管） */
   takeover: TakeoverSnapshot | null
   /** 每日达标奖励（null 表示当前无奖励；当天爆炸 ≥3 次后不再发出） */
