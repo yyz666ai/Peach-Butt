@@ -1,11 +1,14 @@
 """V3 专用抠图：v3 源视频在 MiniMax-H3 输出的"亮白底"上
-不需要 ML 模型，用亮度阈值 + 边界 flood-fill 直接抠出桃子。
-- 像素满足"接近白色"（min(R,G,B) >= 240 且 饱和度低）当作背景
-- 从图像四边开始 flood-fill 标记连通背景
-- 不在连通背景里的"亮色"判定为身体内反光/瓶身玻璃等，保留
-- 其余像素不透明
-- 把任何不透明像素 alpha 通道上做最小 3x3 形态学开运算去噪
-- 复用 build_transparent_videos 的 fill_enclosed_holes 修复封闭洞
+不需要 ML 模型，用亮度阈值 + scipy.ndimage.label 一次性标记连通背景块，
+再以「是否接触图像四边」判定真背景 / 身体内反光 —— 全程 O(n) C 操作，
+不靠 Python 层 flood-fill 循环，避免 OOM 与慢。
+
+调用：
+  .venv-video/bin/python scripts/build-v3-keyed.py assets/video/source assets/video/generated --width 768
+
+`--width` 推荐 ≥ 源分辨率（MiniMax H3 输出 768P 即 768），不要再降到 360 了
+（360 是早期为躲 OOM 牺牲清晰度的妥协，现在已经不需要）。normalize 步骤会
+把帧缩到 480×500 画布，所以源越清晰反而越不糊。
 """
 from __future__ import annotations
 
@@ -54,29 +57,34 @@ def _fill_background_islands(mask: Image.Image, min_island: int = 0) -> Image.Im
 
 
 def key_mask(image: Image.Image, threshold: int = 235) -> Image.Image:
-    """亮白底 chroma key：min(R,G,B)>=threshold 视为背景，从四边 flood 标记连通背景。"""
+    """亮白底 chroma key：min(R,G,B)>=threshold 视为背景。
+
+    旧实现用 `while frontier.any(): binary_dilation(...)` 的 Python 层循环逐像素
+    flood-fill，每帧在 1024x1067 上要跑几十上百次 C 扩展调用，是 OOM 与慢的主因。
+    新实现：一次 `scipy.ndimage.label` 把所有背景连通块标记出来，再用「是否接触四边」
+    判定哪些是「真背景」、哪些是「身体内的反光斑」，整段是 O(n) C 操作，速度与
+    内存都比旧实现好一个数量级。
+    """
+    from scipy.ndimage import label
     arr = np.asarray(image.convert("RGB"), dtype=np.uint8)
-    h, w, _ = arr.shape
     min_rgb = arr.min(axis=2)
     background = min_rgb >= threshold
-    # 从四边 flood fill
-    from scipy.ndimage import label
-    # 标记所有"接近白色"，再从边界 flood 标记连通背景
-    # 用 ndimage.binary_propagation 从边界种子
-    seeds = np.zeros_like(background, dtype=bool)
-    seeds[0, :] = background[0, :]
-    seeds[-1, :] = background[-1, :]
-    seeds[:, 0] = background[:, 0]
-    seeds[:, -1] = background[:, -1]
-    from scipy.ndimage import binary_dilation
+    labeled, n = label(background)
+    if n <= 1:
+        # 整张图要么全是背景要么全是前景
+        mask = np.where(background, 0, 255).astype(np.uint8)
+        return Image.fromarray(mask, mode="L")
+    # 收集接触四边的 label（背景）和那些需要保留的「身体内反光」（不接触边）
+    border_labels = set()
+    border_labels.update(int(x) for x in labeled[0, :].tolist())
+    border_labels.update(int(x) for x in labeled[-1, :].tolist())
+    border_labels.update(int(x) for x in labeled[:, 0].tolist())
+    border_labels.update(int(x) for x in labeled[:, -1].tolist())
+    border_labels.discard(0)
     connected_bg = np.zeros_like(background, dtype=bool)
-    frontier = seeds.copy()
-    while frontier.any():
-        connected_bg |= frontier
-        frontier = binary_dilation(frontier, mask=background) & ~connected_bg
-    foreground = ~connected_bg
-    mask = np.zeros((h, w), dtype=np.uint8)
-    mask[foreground] = 255
+    if border_labels:
+        connected_bg = np.isin(labeled, list(border_labels))
+    mask = np.where(connected_bg, 0, 255).astype(np.uint8)
     return Image.fromarray(mask, mode="L")
 
 
@@ -104,9 +112,9 @@ def convert_v3(source: Path, destination: Path, fps: int, width: int, trim: tupl
                 result.putalpha(mask)
                 result = btv.fill_enclosed_holes(result, image)
                 result.save(keyed / frame.name, optimize=True)
-                rgb.close()
-                mask.close()
-                result.close()
+                # 显式释放大对象，避免每帧累积占内存
+                del rgb, mask, result
+                image.close()
         selected = sorted(keyed.glob("*.png"))
         btv.polish_frames(selected, destination.stem)
         focus_clip = destination.stem == "focus"
@@ -123,7 +131,8 @@ def main() -> None:
     parser.add_argument("sources", type=Path)
     parser.add_argument("destination", type=Path)
     parser.add_argument("--fps", type=int, default=24)
-    parser.add_argument("--width", type=int, default=1024)
+    parser.add_argument("--width", type=int, default=1024,
+                        help="源分辨率或 1024；旧版默认 1024 是因为 chroma key 现在是 O(n)，没 OOM 风险了")
     parser.add_argument("--only", nargs="*", default=list(V3_NAMES))
     args = parser.parse_args()
     names = args.only or list(V3_NAMES)
