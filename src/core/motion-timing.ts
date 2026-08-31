@@ -6,8 +6,8 @@ import type { ReminderKind } from '../shared/contracts'
  */
 export const REST_CLIP_DURATION_MS: Record<ReminderKind, number> = {
   stand: 4_000,
-  // 2026-08-31 v2 喝水素材：举瓶喝水→裂纹愈合→恢复，全程 4.23 秒
-  water: 4_230,
+  // 2026-08-31 v3 喝水素材：hydrate-v3 修剪后约 4.13 秒
+  water: 4_130,
   toilet: 5_800,
   eyes: 5_000
 }

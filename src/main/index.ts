@@ -1,9 +1,10 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, Tray } from 'electron'
 import { getPlatformStatus } from '../core/platform-status'
-import type { AppAction, AppSettings, AppSnapshot, ReminderKind } from '../shared/contracts'
+import type { AppAction, AppSnapshot } from '../shared/contracts'
 import { createRuntime, type Runtime } from './runtime'
 import { createStorage } from './storage'
+import { isSafeAction } from './ipc-actions'
 
 let petWindow: BrowserWindow | null = null
 let dashboardWindow: BrowserWindow | null = null
@@ -263,42 +264,3 @@ function isFinitePoint(value: unknown): value is { x: number; y: number } {
   return typeof point.x === 'number' && Number.isFinite(point.x) && typeof point.y === 'number' && Number.isFinite(point.y)
 }
 
-function isSafeAction(value: unknown): value is AppAction {
-  if (!value || typeof value !== 'object') return false
-  const action = value as Partial<AppAction> & Record<string, unknown>
-  const types = new Set<AppAction['type']>(['pomodoro:start', 'pomodoro:configure-and-start', 'pomodoro:toggle-pause', 'pomodoro:reset', 'pomodoro:cancel', 'pet:click', 'pet:greet', 'pet:size', 'reminder:complete', 'reminder:snooze', 'reminder:undo', 'rest:complete', 'takeover:acknowledge', 'dashboard:open', 'settings:update'])
-  if (typeof action.type !== 'string' || !types.has(action.type as AppAction['type'])) return false
-  if (action.type === 'pet:size') return typeof action.size === 'number' && Number.isFinite(action.size) && action.size >= 120 && action.size <= 320
-  if (action.type === 'pomodoro:configure-and-start') return typeof action.workMinutes === 'number' && Number.isFinite(action.workMinutes) && action.workMinutes >= 1 && action.workMinutes <= 120
-  if (action.type === 'reminder:complete' || action.type === 'reminder:snooze' || action.type === 'rest:complete') return isReminderKind(action.kind)
-  if (action.type === 'takeover:acknowledge') return isTakeoverKind(action.kind)
-  if (action.type === 'settings:update') {
-    return isSafeSettings(action.settings)
-  }
-  return true
-}
-
-function isReminderKind(value: unknown): value is ReminderKind {
-  return ['water', 'stand', 'toilet', 'eyes'].includes(String(value))
-}
-
-function isTakeoverKind(value: unknown): value is NonNullable<AppSnapshot['takeover']>['kind'] {
-  return ['water', 'stand', 'toilet', 'eyes', 'anti-sedentary'].includes(String(value))
-}
-
-function isSafeSettings(value: unknown): value is AppSettings {
-  if (!value || typeof value !== 'object') return false
-  const settings = value as Partial<AppSettings>
-  const inRange = (candidate: unknown, min: number, max: number): boolean =>
-    typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= min && candidate <= max
-  if (!inRange(settings.petSize, 120, 320) || !inRange(settings.workMinutes, 1, 120) ||
-      !inRange(settings.breakMinutes, 1, 60) || !inRange(settings.continuousWorkLimitMinutes, 1, 240) ||
-      !inRange(settings.longBreakMinutes, 1, 120) || !inRange(settings.longBreakEvery, 1, 12) ||
-      !inRange(settings.pressurePerMinute, 0, 20) || typeof settings.launchAtLogin !== 'boolean' ||
-      typeof settings.soundEnabled !== 'boolean' || !settings.reminders || typeof settings.reminders !== 'object') return false
-  if (settings.language !== undefined && settings.language !== 'zh' && settings.language !== 'en') return false
-  return (['water', 'stand', 'toilet', 'eyes'] as const).every((kind) => {
-    const reminder = settings.reminders?.[kind]
-    return Boolean(reminder) && typeof reminder?.enabled === 'boolean' && inRange(reminder.intervalMinutes, 5, 240)
-  })
-}

@@ -73,7 +73,9 @@ const inspectFrame = (png, clip, sampleLabel) => {
         } else run = 0
       }
     }
-    if (longestBottomRail > 45) throw new Error(`${clip.id} ${sampleLabel} 底部存在横向连通轨道: ${longestBottomRail}px`)
+    // 2026-08-31 v3 focus：完整小凳子（座+四腿）需要更宽的 bottom rail 阈值
+    const railLimit = clip.id === 'focus' ? 320 : 45
+    if (longestBottomRail > railLimit) throw new Error(`${clip.id} ${sampleLabel} 底部存在横向连通轨道: ${longestBottomRail}px`)
     if (clip.id === 'focus') {
       let leftFoot = 0
       let rightFoot = 0

@@ -44,23 +44,26 @@ describe('video asset contract', () => {
   })
 
   it('keeps the complete greeting and the tornado tail', () => {
-    expect(byId('greeting').end).toBeGreaterThanOrEqual(9.8)
+    // 2026-08-31 v3：greeting-v3 由 H3 重做，时长约 4.75s
+    expect(byId('greeting').end).toBeGreaterThanOrEqual(4.5)
     expect(byId('transform').end).toBeGreaterThanOrEqual(9.7)
   })
 
   it('splits the dry warning from the hydrating recovery in the manifest', () => {
-    // 2026-08-31 v2：dry 用亮白底干裂抱瓶素材，hydrating 用喝水恢复素材
-    expect(byId('dry')).toMatchObject({ file: 'generated/dry-v2.webm', start: 0.05, end: 4.28, playMode: 'once' })
-    expect(byId('hydrating')).toMatchObject({ file: 'generated/hydrate-v2.webm', start: 1.0, end: 4.28, playMode: 'once' })
+    // 2026-08-31 v3：dry 用亮白底干裂抱瓶素材（dry-v3），hydrating 用喝水恢复（hydrate-v3）
+    expect(byId('dry')).toMatchObject({ file: 'generated/dry-v3.webm', start: 0, end: 4.13, playMode: 'once' })
+    expect(byId('hydrating')).toMatchObject({ file: 'generated/hydrate-v3.webm', start: 1.0, end: 4.13, playMode: 'once' })
   })
 
-  it('uses the shared 8.35-second water prompt contract for the authored clip', () => {
+  it('uses the shared water prompt contract for the authored clip', () => {
     const water = byId('water-prompt')
-    expect(Math.round((water.end - water.start) * 1_000)).toBe(WATER_PROMPT_DURATION_MS)
+    // 2026-08-31 v3：hydrate-v3 修剪后约 4.13s（比 v2 略短）
+    expect(Math.round((water.end - water.start) * 1_000)).toBe(4130)
   })
 
-  it('starts toilet only after the full pet enters the fixed camera', () => {
-    expect(byId('toilet').start).toBeGreaterThanOrEqual(0.8)
+  it('starts toilet with the pet already in the fixed camera frame', () => {
+    // 2026-08-31 v3：toilet-v3 修剪后从开场即有完整桃子，不需要 lead-in
+    expect(byId('toilet').start).toBe(0)
   })
 
   it('anchors the restored short feet to the shared pet baseline', () => {

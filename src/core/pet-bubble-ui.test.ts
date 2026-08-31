@@ -4,6 +4,9 @@ import { describe, expect, it } from 'vitest'
 const renderer = readFileSync(new URL('../renderer/src/main.tsx', import.meta.url), 'utf8')
 const styles = readFileSync(new URL('../renderer/src/styles.css', import.meta.url), 'utf8')
 const mainProcess = readFileSync(new URL('../main/index.ts', import.meta.url), 'utf8')
+// 2026-08-31：IPC action 白名单与字段校验抽到 src/main/ipc-actions.ts（index.ts 只 import），
+// 就地断言要跟着读新文件，否则白名单迁移后这里会误判。
+const ipcActions = readFileSync(new URL('../main/ipc-actions.ts', import.meta.url), 'utf8')
 
 describe('desktop pet speech bubble contract', () => {
   it('shows one short-lived sentence without action or undo controls', () => {
@@ -28,12 +31,18 @@ describe('desktop pet speech bubble contract', () => {
     expect(renderer).toContain('< 120_000')
     expect(renderer).toContain('if (snapshot.takeover || snapshot.reminder) return')
     expect(renderer).toContain('focusingNow')
-    expect(mainProcess).toContain("type: 'pet:greet'")
+    expect(ipcActions).toContain("'pet:greet': true")
   })
 
   it('accepts rest completion through the guarded ipc action channel', () => {
-    expect(mainProcess).toContain("'rest:complete'")
-    expect(mainProcess).toContain("action.type === 'rest:complete'")
+    expect(ipcActions).toContain("'rest:complete': true")
+    expect(ipcActions).toContain("action.type === 'rest:complete'")
+  })
+
+  it('accepts the hover pat action through the guarded ipc channel', () => {
+    // 回归：pet:pat 曾经漏登记在白名单里，真机悬停摸头静默失败
+    expect(renderer).toContain("void act({ type: 'pet:pat' })")
+    expect(ipcActions).toContain("'pet:pat': true")
   })
 
   it('keeps undo out of the visible pet menu', () => {
