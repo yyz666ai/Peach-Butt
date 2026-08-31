@@ -21,18 +21,22 @@ button { cursor: pointer; }
 .rest-checkins img { width: 24px; height: 24px; object-fit: contain; }
 @keyframes status-in { from { opacity: 0; transform: translateY(-5px) scale(.98); } }
 
-/* 接管层半透明：透出桌面（用户要求不要大红实心背景），加毛玻璃保证可读性 */
-.takeover { position: absolute; inset: 0; z-index: 100; display: grid; grid-template-rows: auto auto auto; align-content: center; gap: 4vh; padding: clamp(30px, 6vh, 60px) clamp(40px, 8vw, 100px); background: radial-gradient(circle at 50% 38%, rgba(255, 217, 168, .30) 0%, rgba(255, 186, 135, .38) 38%, rgba(233, 106, 74, .46) 72%, rgba(196, 69, 42, .52) 100%); backdrop-filter: blur(26px) saturate(1.15); -webkit-backdrop-filter: blur(26px) saturate(1.15); color: #4a2614; align-items: center; justify-items: center; animation: takeover-in .22s ease-out both; pointer-events: auto; }
-.takeover.is-anti-sedentary { background: radial-gradient(circle at 50% 38%, rgba(255, 176, 160, .34) 0%, rgba(255, 138, 110, .42) 38%, rgba(216, 68, 42, .52) 72%, rgba(122, 26, 8, .58) 100%); }
-.takeover.is-water.is-hydration-1 { background: radial-gradient(circle at 50% 38%, rgba(255, 228, 192, .28) 0%, rgba(255, 201, 160, .34) 38%, rgba(233, 138, 90, .42) 72%, rgba(166, 81, 42, .48) 100%); }
-.takeover.is-water.is-hydration-2 { background: radial-gradient(circle at 50% 38%, rgba(255, 210, 160, .30) 0%, rgba(255, 169, 120, .38) 38%, rgba(220, 94, 58, .46) 72%, rgba(138, 58, 26, .52) 100%); }
-.takeover.is-water.is-hydration-3 { background: radial-gradient(circle at 50% 38%, rgba(240, 160, 112, .36) 0%, rgba(200, 96, 56, .44) 32%, rgba(110, 36, 16, .54) 68%, rgba(44, 10, 4, .62) 100%); }
+/* 接管层：暖色聚光晕，不是蒙版。
+   用户反馈「提醒背景不要大红色、要能看见桌面」——原来最高 .62 alpha + blur(26px)
+   等于把桌面糊成一片红。现在整体透明度砍半、模糊降到 6px（只柔化不遮蔽），
+   可读性靠文案的亮色描边（.takeover-copy text-shadow）保证，不靠盖住桌面。 */
+.takeover { position: absolute; inset: 0; z-index: 100; display: grid; grid-template-rows: auto auto auto; align-content: center; gap: 4vh; padding: clamp(30px, 6vh, 60px) clamp(40px, 8vw, 100px); background: radial-gradient(circle at 50% 38%, rgba(255, 224, 190, .16) 0%, rgba(255, 196, 150, .20) 38%, rgba(238, 132, 96, .24) 72%, rgba(214, 96, 60, .28) 100%); backdrop-filter: blur(6px) saturate(1.08); -webkit-backdrop-filter: blur(6px) saturate(1.08); color: #4a2614; align-items: center; justify-items: center; animation: takeover-in .22s ease-out both; pointer-events: auto; }
+.takeover.is-anti-sedentary { background: radial-gradient(circle at 50% 38%, rgba(255, 186, 168, .18) 0%, rgba(255, 150, 122, .22) 38%, rgba(224, 92, 62, .28) 72%, rgba(178, 58, 32, .32) 100%); }
+.takeover.is-water.is-hydration-1 { background: radial-gradient(circle at 50% 38%, rgba(255, 230, 196, .14) 0%, rgba(255, 205, 164, .18) 38%, rgba(238, 148, 100, .22) 72%, rgba(198, 108, 62, .26) 100%); }
+.takeover.is-water.is-hydration-2 { background: radial-gradient(circle at 50% 38%, rgba(255, 216, 168, .16) 0%, rgba(255, 178, 130, .20) 38%, rgba(228, 110, 70, .26) 72%, rgba(172, 78, 42, .30) 100%); }
+.takeover.is-water.is-hydration-3 { background: radial-gradient(circle at 50% 38%, rgba(250, 186, 140, .20) 0%, rgba(228, 132, 86, .26) 32%, rgba(160, 66, 34, .32) 68%, rgba(96, 34, 14, .38) 100%); }
 @keyframes takeover-in { from { opacity: 0; transform: scale(.98); } }
 .takeover-pet { width: min(44vw, 640px); max-height: 44vh; display: grid; place-items: center; }
 .takeover-pet .pet-media { width: 100%; height: 100%; max-height: 44vh; object-fit: contain; }
 .takeover.is-water .takeover-pet { animation: dry-shake 1.4s ease-in-out infinite; }
 @keyframes dry-shake { 0%, 100% { transform: translateX(0) rotate(0); } 25% { transform: translateX(-3px) rotate(-2deg); } 75% { transform: translateX(3px) rotate(2deg); } }
-.takeover-copy { display: grid; gap: 8px; text-align: center; text-shadow: 0 2px 12px rgba(255, 240, 216, .85); animation: takeover-copy-in .35s cubic-bezier(.2,.86,.26,1) both; }
+/* 背景变透之后，可读性全靠这层亮色描边撑住（浅色/深色桌面都能看清） */
+.takeover-copy { display: grid; gap: 8px; text-align: center; text-shadow: 0 1px 2px rgba(255, 248, 232, .95), 0 2px 14px rgba(255, 242, 220, .9), 0 0 34px rgba(255, 236, 206, .7); animation: takeover-copy-in .35s cubic-bezier(.2,.86,.26,1) both; }
 @keyframes takeover-copy-in { from { opacity: 0; transform: translateY(20px) scale(.96); } }
 .takeover-copy strong { font-size: clamp(40px, 7vw, 96px); line-height: 1.06; letter-spacing: -.035em; color: #4a2614; }
 .takeover-copy span { font-size: clamp(14px, 1.8vw, 22px); color: #6a3a23; font-weight: 650; }
@@ -67,7 +71,8 @@ img.pet-media { animation: pet-still-breath 3.4s ease-in-out infinite; transform
 .menu-foot { align-items: center; }.menu-foot button { flex: 1; padding: 5px; }.menu-foot > svg { color: #91ad54; }
 
 /* Full-screen health interruption */
-.alert-view { position: relative; width: 100vw; height: 100vh; overflow: hidden; display: grid; grid-template-columns: minmax(180px, .48fr) minmax(0, 1fr); align-items: center; gap: clamp(20px, 5vw, 90px); padding: clamp(30px, 7vw, 120px); background: radial-gradient(circle at 30% 60%, rgba(255, 227, 187, .9), rgba(242, 105, 78, .23) 55%, transparent 78%); }
+/* 短提示同样只做暖色光晕：中心原来是 .9 近乎实心，桌面基本被盖住 */
+.alert-view { position: relative; width: 100vw; height: 100vh; overflow: hidden; display: grid; grid-template-columns: minmax(180px, .48fr) minmax(0, 1fr); align-items: center; gap: clamp(20px, 5vw, 90px); padding: clamp(30px, 7vw, 120px); background: radial-gradient(circle at 30% 60%, rgba(255, 231, 196, .42), rgba(244, 132, 100, .18) 55%, transparent 78%); }
 .alert-view img, .alert-view video { justify-self: end; width: min(34vw, 520px); max-height: 72vh; object-fit: contain; }
 .alert-view div { display: grid; align-content: center; color: #733820; text-shadow: 0 2px 10px #fff0d8; animation: alert-copy 2.05s cubic-bezier(.2,.86,.26,1) both; }
 .alert-view strong { max-width: 9.5em; font-size: clamp(50px, 8vw, 132px); line-height: 1.06; letter-spacing: -.04em; }

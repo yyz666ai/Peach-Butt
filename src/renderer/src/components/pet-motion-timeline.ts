@@ -17,8 +17,10 @@ export const clipTimelines = {
   // eye-strain：循环 0.58-2.58
   'eye-strain': { start: 0, end: 4.75, playMode: 'once' },
   // focus v3：完整小凳子+银色笔记本（1.8-3.5，diff 7.77）
-  // 含椅子取景让桃屁屁偏小，scale 拉齐体型
-  focus: { start: 1.8, end: 3.5, playMode: 'loop', scale: 1.22 },
+  // 含椅子取景让桃屁屁偏小，scale 1.10 拉齐体型。
+  // 数值来自 scripts/measure-body-scale.py 双口径实测（桃子色 1.11 / 最大连通分量 1.10），
+  // 不是手调：v2 时期的 1.22 在 v3 取景下反而会让专注状态比 idle 大 9%。
+  focus: { start: 1.8, end: 3.5, playMode: 'loop', scale: 1.10 },
   greeting: { start: 0, end: 4.75, playMode: 'once' },
   pressure: { start: 0, end: 5.3, playMode: 'scrub' },
   sleep: { start: 0.05, end: 4.9, playMode: 'loop' },

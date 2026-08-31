@@ -41,6 +41,18 @@ describe('pet motion timelines', () => {
     expect(clipTimelines.focus.scale).toBeGreaterThan(1)
   })
 
+  // 用户反馈「点专注时宠物小一号、变身完又大一号」：体型系数必须来自实测，不能手调。
+  // 换素材后跑 `.venv-video/bin/python scripts/measure-body-scale.py` 重新取数，
+  // 两种口径（桃子色 / 最大连通分量）差异 > 0.12 的先别改，多半是道具污染了测量。
+  it('keeps body-scale factors at their measured values', () => {
+    expect(clipTimelines.focus.scale).toBe(1.10)
+    // 只有取景差异才配 scale；姿态差异（蜷缩睡觉、干裂抱瓶、压扁、变身、爆炸）
+    // 靠 scale 拉平只会更怪，统一不加
+    for (const id of ['sleep', 'dry', 'deflated', 'transform', 'explosion', 'pressure', 'pet'] as const) {
+      expect((clipTimelines[id] as { scale?: number }).scale, id).toBeUndefined()
+    }
+  })
+
   it('loops the dedicated full-body activity reminder', () => {
     expect(clipTimelines.activity).toMatchObject({ start: 0, end: 4, playMode: 'loop' })
     expect(nextPlaybackAction(clipTimelines.activity, 4)).toBe('rewind')

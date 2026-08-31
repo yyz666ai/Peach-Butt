@@ -95,6 +95,27 @@ function resizePet(size: number): void {
   petWindow.setBounds({ x, y, width, height }, true)
 }
 
+/**
+ * 确保桌宠窗口可见并把窗口层级重新顶到最前。
+ *
+ * 用户反馈「打开后台后桌宠不见了」：macOS 上新建/聚焦一个普通窗口后，系统会重排
+ * floating 层级与 Space 归属，桌宠被压到后台窗口下面（进程还在、视频还在播，就是看不见）。
+ * 凡是可能改变窗口层级的时机（打开小屋、小屋获得焦点）都重新断言一次。
+ *
+ * 注意：大屏接管（overlay）期间桌宠是**故意**隐藏的，这时不要抢着恢复。
+ */
+function ensurePetVisible(): void {
+  if (alertWindow && !alertWindow.isDestroyed()) return
+  if (!petWindow || petWindow.isDestroyed()) {
+    petWindow = createPetWindow()
+    return
+  }
+  petHiddenForOverlay = false
+  petWindow.setAlwaysOnTop(true, 'floating')
+  petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  if (!petWindow.isVisible()) petWindow.showInactive()
+}
+
 function restorePetAfterOverlay(): void {
   if (!petHiddenForOverlay) return
   petHiddenForOverlay = false
@@ -135,8 +156,8 @@ function showOverlay(snapshot: AppSnapshot): void {
 }
 
 function openDashboard(): void {
-  // 用户反馈：打开后台后桌宠经常不见了——每次打开小屋都确保桌宠窗口可见
-  if (!petWindow?.isDestroyed() && !petWindow?.isVisible()) petWindow?.showInactive()
+  // 用户反馈：打开后台后桌宠经常不见了——打开小屋前先把桌宠窗口层级顶回来
+  ensurePetVisible()
   if (dashboardWindow) { dashboardWindow.show(); dashboardWindow.focus(); return }
   const language = runtime?.snapshot().settings.language ?? 'zh'
   dashboardWindow = new BrowserWindow({
@@ -145,6 +166,8 @@ function openDashboard(): void {
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: true }
   })
   load(dashboardWindow, 'dashboard')
+  // 小屋获得焦点后 macOS 可能把桌宠压到它下面，每次聚焦都重新断言一次层级
+  dashboardWindow.on('focus', ensurePetVisible)
   dashboardWindow.on('closed', () => { dashboardWindow = null })
 }
 
@@ -154,12 +177,12 @@ function createTray(): void {
   tray.setToolTip('Peach Butt')
   const language = (): 'zh' | 'en' => runtime?.snapshot().settings.language ?? 'zh'
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: language() === 'en' ? 'Show Peach Butt' : '显示桃屁屁', click: () => petWindow?.show() },
+    { label: language() === 'en' ? 'Show Peach Butt' : '显示桃屁屁', click: ensurePetVisible },
     { label: language() === 'en' ? 'Health Cottage' : '健康小屋', click: openDashboard },
     { type: 'separator' },
     { label: language() === 'en' ? 'Quit' : '退出', click: () => app.quit() }
   ]))
-  tray.on('click', () => petWindow?.isVisible() ? petWindow.hide() : petWindow?.show())
+  tray.on('click', () => (petWindow && !petWindow.isDestroyed() && petWindow.isVisible()) ? petWindow.hide() : ensurePetVisible())
 }
 
 function showPetMenu(): void {
@@ -247,11 +270,11 @@ app.whenReady().then(() => {
     if (isFinitePoint(point)) petWindow?.setPosition(Math.round(point.x - dragOffset.x), Math.round(point.y - dragOffset.y))
   })
   ipcMain.on('pipeach:pet-menu', showPetMenu)
-  app.on('activate', () => { if (!petWindow) petWindow = createPetWindow(); else petWindow.show() })
+  app.on('activate', ensurePetVisible)
 })
 
 app.on('second-instance', () => {
-  petWindow?.show()
+  ensurePetVisible()
   petWindow?.focus()
 })
 
