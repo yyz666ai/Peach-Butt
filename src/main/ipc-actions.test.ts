@@ -22,6 +22,7 @@ const ALL_ACTION_TYPES: AppAction['type'][] = [
   'reminder:undo',
   'rest:complete',
   'takeover:acknowledge',
+  'reward:ack',
   'dashboard:open',
   'settings:update'
 ]
@@ -49,6 +50,8 @@ describe('IPC action 白名单', () => {
         pressurePerMinute: 1,
         launchAtLogin: false,
         soundEnabled: true,
+        waterGoalCups: 6,
+        activityGoalMinutes: 30,
         reminders: {
           water: { enabled: true, intervalMinutes: 30 },
           stand: { enabled: true, intervalMinutes: 45 },

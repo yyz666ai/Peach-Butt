@@ -5,9 +5,11 @@ const renderer = readFileSync(new URL('../renderer/src/main.tsx', import.meta.ur
 const motion = readFileSync(new URL('../renderer/src/components/PetMotion.tsx', import.meta.url), 'utf8')
 
 describe('UI accessibility and cutout contract', () => {
-  it('clamps the progressbar machine value while preserving the real score in its text', () => {
-    expect(renderer).toContain('aria-valuenow={energyPercent}')
-    expect(renderer).toContain("aria-valuetext={t(lang, 'energy.ariaValue', { score: energyScore })}")
+  it('clamps the goal progressbar values to 0-100 with goal text', () => {
+    expect(renderer).toContain('aria-valuenow={waterPercent}')
+    expect(renderer).toContain('aria-valuenow={activityPercent}')
+    expect(renderer).toContain('Math.min(100, Math.round(today.waterCount / waterGoal * 100))')
+    expect(renderer).toContain('Math.min(100, Math.round(snapshot.health.activeSecondsToday / 60 / activityGoal * 100))')
   })
 
   it('keeps keyboard focus inside the settings dialog', () => {

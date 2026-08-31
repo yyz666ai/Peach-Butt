@@ -20,20 +20,23 @@ describe('dashboard responsive layout contract', () => {
     }
   })
 
-  it('keeps the energy title, score, summary and metrics in explicit grid rows', () => {
+  it('replaces the energy score with the daily nudge sentence and goal progress', () => {
     expect(rule('.energy-hero')).toContain('grid-template-rows:')
-    expect(rule('.energy-copy')).toContain('display: contents')
-    expect(rule('.energy-copy > span')).toContain('grid-row: 1')
-    expect(rule('.energy-copy > strong')).toContain('grid-row: 2')
-    expect(rule('.energy-summary')).toContain('grid-row: 3')
-    expect(rule('.energy-progress')).toContain('grid-row: 4')
+    expect(rule('.nudge-copy')).toContain('display: grid')
+    expect(rule('.nudge-goal-bar')).toContain('border-radius: 999px')
     expect(rule('.hero-metrics')).toContain('grid-template-columns: repeat(3')
+    // 2026-08-31：顶部不再显示桃桃能量数字，改为激励句 + 喝水/活动目标进度
+    expect(renderer).toContain('computeDailyNudge(')
     expect(renderer).toContain('role="progressbar"')
-    expect(renderer).toContain('aria-valuenow={energyPercent}')
-    expect(renderer).toContain("aria-valuetext={t(lang, 'energy.ariaValue', { score: energyScore })}")
-    expect(renderer).toContain('Math.min(100, Math.max(0, energyScore))')
-    expect(renderer).toContain('<span style={{ width: `${energyPercent}%` }}><i')
+    expect(renderer).toContain('aria-valuenow={waterPercent}')
+    expect(renderer).toContain('aria-valuenow={activityPercent}')
+    expect(renderer).not.toContain('energyPercent')
     expect(renderer).not.toContain('energyArc')
+    // 奖励弹层与设置目标
+    expect(renderer).toContain('<RewardOverlay')
+    expect(renderer).toContain("type: 'reward:ack'")
+    expect(renderer).toContain('waterGoalCups')
+    expect(renderer).toContain('activityGoalMinutes')
   })
 
   it('keeps the default bubble beside the pet and preserves reduced-motion fades', () => {

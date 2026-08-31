@@ -1,5 +1,11 @@
 import { Notification, powerMonitor } from 'electron'
 import { createHealthEngine, type HabitCompletion, type HealthEvent, type HealthSnapshot, type ReminderKind } from '../core/health-engine'
+import {
+  clampActivityGoalMinutes,
+  clampWaterGoalCups,
+  computeDailyNudge,
+  EXPLOSION_REWARD_BLOCK
+} from '../core/daily-nudge'
 import { createPomodoro, type PomodoroSnapshot } from '../core/pomodoro'
 import { createReminderScheduler } from '../core/reminders'
 import { createRestSession, type RestSession } from '../core/rest-session'
@@ -10,6 +16,7 @@ import type {
   AppSettings,
   AppSnapshot,
   RestSessionSnapshot,
+  RewardSnapshot,
   TakeoverSnapshot,
   UsageState
 } from '../shared/contracts'
@@ -35,7 +42,11 @@ const DEFAULT_SETTINGS: AppSettings = {
   launchAtLogin: false,
   soundEnabled: true,
   reminderIntensity: 'standard',
-  language: 'zh'
+  language: 'zh',
+  // 每日健康目标（2026-08-31 与用户对齐）：默认 6 杯（1500ml，指南推荐量），
+  // 设置里可调但 sanitize 强制下限：水 ≥4 杯 / 活动 ≥30 分钟
+  waterGoalCups: 6,
+  activityGoalMinutes: 30
 }
 
 // 反久坐 swellLevel 触发时机：连续专注满「上限的一半」开始涨，每 5 分钟进一档
@@ -253,6 +264,99 @@ export function createRuntime(storage: Storage): Runtime {
     lastHydrateAt = at
     return hydrateCount === 3
   }
+  // ── 每日达标奖励（2026-08-31 与用户对齐）──────────────────────
+  const dateKey = (ts = Date.now()): string => {
+    const d = new Date(ts)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  // 文案与动画解耦：动画复用 PetMotion 素材（hug/thumbs-up/kiss 为新增，
+  // happy/deflated 复用现有），夸夸句子从 i18n 池轮换 —— 排列组合丰富。
+  // 触发条件（每天各一次）：喝水过半 / 喝水达标 / 活动达标 / 全部达标；
+  // 当天爆炸 ≥ EXPLOSION_REWARD_BLOCK(3) 次：奖励全部取消，只提示一次被取消。
+  const REWARD_AUTO_DISMISS_MS = 12_000
+  const REWARD_PRAISE_KEYS: StringKey[] = [
+    'reward.praise1', 'reward.praise2', 'reward.praise3',
+    'reward.praise4', 'reward.praise5', 'reward.praise6'
+  ]
+  let rewardSequence = 0
+  let activeReward: RewardSnapshot | null = null
+  let rewardUntil = 0
+  const storedRewardState = storage.getSetting<unknown>('dailyRewardState', undefined)
+  let rewardDay = isRecord(storedRewardState) && typeof storedRewardState.day === 'string'
+    ? storedRewardState.day
+    : ''
+  let rewardFired = new Set<string>(
+    rewardDay === dateKey(now) && isRecord(storedRewardState) && Array.isArray(storedRewardState.fired)
+      ? storedRewardState.fired.filter((key): key is string => typeof key === 'string')
+      : []
+  )
+  const fireReward = (
+    kind: RewardSnapshot['kind'],
+    animation: RewardSnapshot['animation'],
+    titleKey: StringKey,
+    subtitleKey: StringKey,
+    params: Record<string, string | number>,
+    at: number
+  ): void => {
+    rewardSequence += 1
+    rewardFired.add(kind)
+    rewardDay = dateKey(at)
+    storage.setSetting('dailyRewardState', { day: rewardDay, fired: [...rewardFired] })
+    activeReward = {
+      id: rewardSequence,
+      kind,
+      animation,
+      title: t(settings.language, titleKey, params),
+      subtitle: t(settings.language, subtitleKey, params),
+      praise: t(settings.language, REWARD_PRAISE_KEYS[rewardSequence % REWARD_PRAISE_KEYS.length])
+    }
+    rewardUntil = at + REWARD_AUTO_DISMISS_MS
+  }
+  const evaluateDailyRewards = (at: number): void => {
+    const day = dateKey(at)
+    if (rewardDay !== day) {
+      rewardDay = day
+      rewardFired = new Set()
+    }
+    const h = health.snapshot()
+    // 爆炸封顶：今天奖励全部取消（正在展示的非取消提示也立即收回）
+    if (h.explosionsToday >= EXPLOSION_REWARD_BLOCK) {
+      if (activeReward && activeReward.kind !== 'reward-blocked') {
+        activeReward = null
+        rewardUntil = 0
+      }
+      if (!rewardFired.has('reward-blocked')) {
+        fireReward('reward-blocked', 'deflated', 'reward.blocked.title', 'reward.blocked.sub', { count: h.explosionsToday }, at)
+      }
+      return
+    }
+    const today = storage.getDailyStats(day, day)[0] ?? emptyDailyStats(day)
+    const nudge = computeDailyNudge({
+      waterCount: today.waterCount,
+      waterGoalCups: settings.waterGoalCups,
+      activeSeconds: h.activeSecondsToday,
+      activityGoalMinutes: settings.activityGoalMinutes,
+      explosionsToday: h.explosionsToday,
+      hour: new Date(at).getHours()
+    })
+    const waterDone = nudge.missing.waterCups === 0
+    const activityDone = nudge.missing.activityMinutes === 0
+    if (waterDone && activityDone) {
+      if (!rewardFired.has('all-done')) {
+        fireReward('all-done', 'hug', 'reward.allDone.title', 'reward.allDone.sub', nudge.params, at)
+      }
+      return
+    }
+    if (waterDone && !rewardFired.has('water-done')) {
+      fireReward('water-done', 'kiss', 'reward.waterDone.title', 'reward.waterDone.sub', nudge.params, at)
+    }
+    if (activityDone && !rewardFired.has('activity-done')) {
+      fireReward('activity-done', 'thumbs-up', 'reward.activityDone.title', 'reward.activityDone.sub', nudge.params, at)
+    }
+    if (!waterDone && !rewardFired.has('water-half') && today.waterCount >= Math.ceil(clampWaterGoalCups(settings.waterGoalCups) / 2)) {
+      fireReward('water-half', 'happy', 'reward.waterHalf.title', 'reward.waterHalf.sub', nudge.params, at)
+    }
+  }
   // 大屏接管：到点提醒或反久坐 swellLevel 3 触发；点 ack 才解除
   let activeTakeover: TakeoverSnapshot | null = null
   let takeoverSince = 0
@@ -260,11 +364,6 @@ export function createRuntime(storage: Storage): Runtime {
   let clickCombo = 0
   let lastClickAt = 0
   const listeners = new Set<(snapshot: AppSnapshot) => void>()
-
-  const dateKey = (ts = Date.now()): string => {
-    const d = new Date(ts)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }
 
   const callName = (): string => callNamePrefix(settings.language, settings.nickname)
 
@@ -517,6 +616,7 @@ visual: visual.id,
     hydrationStage: computeHydrationStage(reminder, lastTickAt),
     hydrateCount: hydrateCount,
     takeover: activeTakeover,
+    reward: rewardUntil > Date.now() ? activeReward : null,
     growth: {
         level: growthLevelOf(growthEnergy),
         name: growthLevelName(settings.language, growthLevelOf(growthEnergy)),
@@ -685,6 +785,7 @@ visual: visual.id,
     mutateStats(healthEvents, effectiveNow)
     syncGrowthEnergy(effectiveNow)
     maybeBuildTakeover(effectiveNow)
+    evaluateDailyRewards(effectiveNow)
     advanceUsage(effectiveNow)
     persistRuntimeState()
     return publish()
@@ -870,6 +971,10 @@ visual: visual.id,
           lastCompletedHabit = null
         }
       }
+      if (action.type === 'reward:ack') {
+        activeReward = null
+        rewardUntil = 0
+      }
       if (action.type === 'settings:update') {
         const previous = pomodoro.snapshot()
         const wasFocusing = phaseBeforeAction === 'work' || phaseBeforeAction === 'awaiting_rest_confirmation'
@@ -900,6 +1005,7 @@ visual: visual.id,
       applyReconciliationBonus(events, actionNow)
       mutateStats(events, actionNow)
       syncGrowthEnergy(actionNow)
+      evaluateDailyRewards(actionNow)
       advanceUsage(actionNow)
       lastInteractionAt = actionNow
       nextAmbienceAt = Math.max(nextAmbienceAt, actionNow + 45_000)
@@ -972,7 +1078,9 @@ function sanitizeSettings(candidate: unknown, fallback: AppSettings): AppSetting
       : fallback.reminderIntensity,
     launchAtLogin: typeof source.launchAtLogin === 'boolean' ? source.launchAtLogin : fallback.launchAtLogin,
     soundEnabled: typeof source.soundEnabled === 'boolean' ? source.soundEnabled : fallback.soundEnabled,
-    language: source.language === 'en' || source.language === 'zh' ? source.language : fallback.language
+    language: source.language === 'en' || source.language === 'zh' ? source.language : fallback.language,
+    waterGoalCups: Math.round(positive(source.waterGoalCups, fallback.waterGoalCups, 4, 20)),
+    activityGoalMinutes: Math.round(positive(source.activityGoalMinutes, fallback.activityGoalMinutes, 30, 300))
   }
 }
 

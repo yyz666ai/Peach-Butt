@@ -26,6 +26,7 @@ const SAFE_ACTION_TYPES: Record<AppAction['type'], true> = {
   'reminder:undo': true,
   'rest:complete': true,
   'takeover:acknowledge': true,
+  'reward:ack': true,
   'dashboard:open': true,
   'settings:update': true
 }
@@ -53,6 +54,8 @@ export function isSafeSettings(value: unknown): value is AppSettings {
       !inRange(settings.longBreakMinutes, 1, 120) || !inRange(settings.longBreakEvery, 1, 12) ||
       !inRange(settings.pressurePerMinute, 0, 20) || typeof settings.launchAtLogin !== 'boolean' ||
       typeof settings.soundEnabled !== 'boolean' || !settings.reminders || typeof settings.reminders !== 'object') return false
+  // 每日健康目标：有最低标准，不能定太低（水 ≥4 杯 / 活动 ≥30 分钟）
+  if (!inRange(settings.waterGoalCups, 4, 20) || !inRange(settings.activityGoalMinutes, 30, 300)) return false
   if (settings.language !== undefined && settings.language !== 'zh' && settings.language !== 'en') return false
   return (['water', 'stand', 'toilet', 'eyes'] as const).every((kind) => {
     const reminder = settings.reminders?.[kind]

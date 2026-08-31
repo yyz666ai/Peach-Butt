@@ -2,8 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { Settings, X } from 'lucide-react'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import type { AppAction, AppSettings, AppSnapshot, ReminderKind } from '../../shared/contracts'
+import type { AppAction, AppSettings, AppSnapshot, ReminderKind, RewardSnapshot } from '../../shared/contracts'
 import { callNamePrefix, dateFormatter, formatDurationLocalized, t, type Language, type StringKey } from '../../shared/i18n'
+import { clampActivityGoalMinutes, clampWaterGoalCups, computeDailyNudge, WATER_GOAL_MIN_CUPS, ACTIVITY_GOAL_MIN_MINUTES } from '../../core/daily-nudge'
+
+// 设置面板输入框下限：低于最低标准时强制抬回（与后端 sanitize 双保险）
+const WATER_GOAL_INPUT_MIN = WATER_GOAL_MIN_CUPS
+const ACTIVITY_GOAL_INPUT_MIN = ACTIVITY_GOAL_MIN_MINUTES
 import { PetMotion } from './components/PetMotion'
 import { Confetti, celebrationKey } from './components/Confetti'
 import { computeBadges, earnedBadgeCount } from './components/badges'
@@ -254,6 +259,7 @@ function PetView(): React.JSX.Element {
       <PetMotion visual={preview?.visual ?? snapshot.visual} pressureValue={preview?.pressure ?? snapshot.health.pressure} recovery={preview?.recovery ?? snapshot.health.recovery} swellLevel={preview ? 0 : snapshot.swellLevel} hydrationStage={preview ? 0 : snapshot.hydrationStage}/>
     </div>
     {confettiOn && !preview && <Confetti/>}
+    {!preview && snapshot.reward && <RewardOverlay reward={snapshot.reward} lang={snapshot.settings.language} onAck={() => void act({ type: 'reward:ack' })}/>}
     {!preview && snapshot.takeover && <Takeover takeover={snapshot.takeover} hydrateCount={snapshot.hydrateCount} hydrationStage={snapshot.hydrationStage} lang={snapshot.settings.language} onAck={(kind) => void act({ type: 'takeover:acknowledge', kind })}/>}
     {!snapshot.takeover && (() => { const t = getTakeoverPreview(); return t ? <Takeover takeover={t} onAck={() => { /* preview 模式：仅展示 UI */ }}/> : null })()}
   </main>
@@ -316,6 +322,28 @@ const habitItems: Array<{ kind: ReminderKind; asset: string }> = [
 ]
 const habitLabel = (lang: Language | undefined, kind: ReminderKind): string => t(lang, `habit.${kind}` as StringKey)
 
+// 每日达标奖励弹层：文案与动画解耦（动画复用 PetMotion 素材池，夸夸句从文案池轮换）。
+// kiss 附带屏幕大唇印（纯 CSS，零素材）；all-done 附带撒花。
+function RewardOverlay({ reward, lang, onAck }: {
+  reward: RewardSnapshot
+  lang: Language
+  onAck: () => void
+}): React.JSX.Element {
+  return <section className={`reward-overlay is-${reward.kind}`} role="dialog" aria-modal="true" aria-label={reward.title}>
+    {reward.kind === 'all-done' && <Confetti/>}
+    <div className="reward-pet">
+      <PetMotion visual={reward.animation} pressureValue={0} recovery={100}/>
+    </div>
+    <div className="reward-copy">
+      <strong>{reward.title}</strong>
+      <span>{reward.subtitle}</span>
+      <em>{reward.praise}</em>
+    </div>
+    {reward.kind === 'water-done' && <span className="reward-lip-print" aria-hidden="true">{t(lang, 'reward.lipPrint')}</span>}
+    <button className="reward-ack" onClick={onAck} autoFocus>{t(lang, 'reward.ackButton')}</button>
+  </section>
+}
+
 // 桃屁屁身体状态卡片：实时反映接管机制背后的状态（喝水拼回 / 反久坐膨胀 / 水润干裂）
 function PetStatusCard({ hydrateCount, swellLevel, hydrationStage, lang = 'zh' }: {
   hydrateCount: number
@@ -371,10 +399,21 @@ function Dashboard(): React.JSX.Element {
   const date = dateFormatter(lang).format(new Date())
   const focusActive = snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused'
   const chartCeiling = Math.max(100, ...chart.map((item) => item.energy))
-  const energyScore = Math.round(snapshot.health.score)
-  const energyPercent = Math.min(100, Math.max(0, energyScore))
   const badges = computeBadges(snapshot.growth, lang)
   const earned = earnedBadgeCount(snapshot.growth)
+  // 每日激励句（2026-08-31）：顶部不再显示桃桃能量，改为识别「还差什么」的固定激励句
+  const nudge = computeDailyNudge({
+    waterCount: today.waterCount,
+    waterGoalCups: snapshot.settings.waterGoalCups,
+    activeSeconds: snapshot.health.activeSecondsToday,
+    activityGoalMinutes: snapshot.settings.activityGoalMinutes,
+    explosionsToday: snapshot.health.explosionsToday,
+    hour: new Date().getHours()
+  })
+  const waterGoal = clampWaterGoalCups(snapshot.settings.waterGoalCups)
+  const activityGoal = clampActivityGoalMinutes(snapshot.settings.activityGoalMinutes)
+  const waterPercent = Math.min(100, Math.round(today.waterCount / waterGoal * 100))
+  const activityPercent = Math.min(100, Math.round(snapshot.health.activeSecondsToday / 60 / activityGoal * 100))
 
   return <main className="cottage" style={{ backgroundImage: `url(${roomBackground})` }}>
     <header className="cottage-topbar">
@@ -382,10 +421,21 @@ function Dashboard(): React.JSX.Element {
       <div className="date-actions"><time>{date}</time><button ref={settingsTrigger} aria-label={t(lang, 'cottage.settingsAria')} onClick={() => setSettingsOpen(true)}><Settings/></button><button aria-label={t(lang, 'cottage.closeAria')} onClick={() => window.close()}><X/></button></div>
     </header>
 
-    <section className="energy-hero">
-      <div className="energy-copy"><span>{t(lang, 'energy.label')}</span><strong>{energyScore}</strong><small className="energy-summary">{energyScore > 100 ? t(lang, 'energy.summaryOver', { score: energyScore, over: energyScore - 100 }) : t(lang, 'energy.summary', { score: energyScore })}</small></div>
-      <div className="energy-progress" role="progressbar" aria-label={t(lang, 'energy.aria')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={energyPercent} aria-valuetext={t(lang, 'energy.ariaValue', { score: energyScore })}>
-        <span style={{ width: `${energyPercent}%` }}><i aria-hidden="true"/></span>
+    <section className="energy-hero is-nudge" aria-label={t(lang, 'nudge.aria')}>
+      <div className="nudge-copy">
+        <strong>{t(lang, nudge.key as StringKey, nudge.params)}</strong>
+        <div className="nudge-goals">
+          <div className="nudge-goal is-water" role="progressbar" aria-label={t(lang, 'hero.water')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={waterPercent}>
+            <span>{t(lang, 'hero.water')}</span>
+            <div className="nudge-goal-bar"><i style={{ width: `${waterPercent}%` }}/></div>
+            <small>{t(lang, 'hero.waterProgress', { water: today.waterCount, waterGoal })}</small>
+          </div>
+          <div className="nudge-goal is-activity" role="progressbar" aria-label={t(lang, 'hero.activity')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={activityPercent}>
+            <span>{t(lang, 'hero.activity')}{activityPercent >= 100 ? ` · ${t(lang, 'hero.activityDoneBadge')}` : ''}</span>
+            <div className="nudge-goal-bar"><i style={{ width: `${activityPercent}%` }}/></div>
+            <small>{t(lang, 'hero.activityProgress', { minutes: Math.floor(snapshot.health.activeSecondsToday / 60), activityGoal })}</small>
+          </div>
+        </div>
       </div>
       <div className="hero-metrics">
         <div><span>{t(lang, 'hero.focus')}</span><strong>{snapshot.pomodoro.completedToday}<small>{t(lang, 'hero.focusUnit')}</small></strong></div>
@@ -489,6 +539,18 @@ function SettingsPanel({ draft, setDraft, save, close }: { draft: AppSettings; s
           </label>)}
         </fieldset>
       </div>
+      <h3>{t(draft.language, 'settings.goalsHeader')}</h3>
+      <div className="setting-pair setting-goals">
+        <label>{t(draft.language, 'settings.waterGoal')}
+          <input type="number" min={WATER_GOAL_INPUT_MIN} max={20} value={draft.waterGoalCups} onChange={(e) => setDraft({ ...draft, waterGoalCups: Math.max(WATER_GOAL_INPUT_MIN, Math.min(20, Number(e.target.value) || WATER_GOAL_INPUT_MIN)) })}/>
+          <span>{t(draft.language, 'settings.cups')}</span>
+        </label>
+        <label>{t(draft.language, 'settings.activityGoal')}
+          <input type="number" min={ACTIVITY_GOAL_INPUT_MIN} max={300} value={draft.activityGoalMinutes} onChange={(e) => setDraft({ ...draft, activityGoalMinutes: Math.max(ACTIVITY_GOAL_INPUT_MIN, Math.min(300, Number(e.target.value) || ACTIVITY_GOAL_INPUT_MIN)) })}/>
+          <span>{t(draft.language, 'settings.minutes')}</span>
+        </label>
+      </div>
+      <p className="setting-goal-note">{t(draft.language, 'settings.waterGoalNote')}<br/>{t(draft.language, 'settings.activityGoalNote')}</p>
       <h3>{t(draft.language, 'settings.remindersHeader')}</h3>
       {(Object.keys(draft.reminders) as ReminderKind[]).map((kind) => <label className="setting-reminder" key={kind}>
         <input type="checkbox" checked={draft.reminders[kind].enabled} onChange={(e) => setDraft({ ...draft, reminders: { ...draft.reminders, [kind]: { ...draft.reminders[kind], enabled: e.target.checked } } })}/>

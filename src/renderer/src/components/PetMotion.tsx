@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import focus from '../../../../assets/video/generated/focus-v3.webm'
-import greeting from '../../../../assets/video/generated/greeting-v3.webm'
+import greeting from '../../../../assets/video/generated/greeting-v7.webm'
 import pressure from '../../../../assets/video/generated/pressure.webm'
 import sleep from '../../../../assets/video/generated/sleep.webm'
 import toilet from '../../../../assets/video/generated/toilet-v3.webm'
@@ -9,14 +9,17 @@ import transform from '../../../../assets/video/generated/transform.webm'
 import dry from '../../../../assets/video/generated/dry-v3.webm'
 import hydrate from '../../../../assets/video/generated/hydrate-v3.webm'
 import idleMotion from '../../../../assets/video/generated/idle-lounge-v3.webm'
-import eyeStrainMotion from '../../../../assets/video/generated/eye-strain-v3.webm'
+import eyeStrainMotion from '../../../../assets/video/generated/eye-strain-v7.webm'
 import activityMotion from '../../../../assets/video/generated/activity.webm'
-import happyMotion from '../../../../assets/video/generated/happy-v3.webm'
-import restMotion from '../../../../assets/video/generated/rest.webm'
-import boredMotion from '../../../../assets/video/generated/bored-v3.webm'
-import petMotion from '../../../../assets/video/generated/pet-v3.webm'
-import shyMotion from '../../../../assets/video/generated/shy-v3.webm'
-import danceMotion from '../../../../assets/video/generated/dance-v3.webm'
+import happyMotion from '../../../../assets/video/generated/happy-v7.webm'
+import restMotion from '../../../../assets/video/generated/rest-v7.webm'
+import boredMotion from '../../../../assets/video/generated/bored-v7.webm'
+import petMotion from '../../../../assets/video/generated/pet-v7.webm'
+import shyMotion from '../../../../assets/video/generated/shy-v7.webm'
+import danceMotion from '../../../../assets/video/generated/dance-v7.webm'
+import hugMotion from '../../../../assets/video/generated/hug-v7.webm'
+import thumbsUpMotion from '../../../../assets/video/generated/thumbs-up-v7.webm'
+import kissMotion from '../../../../assets/video/generated/kiss-v7.webm'
 import deflatedMotion from '../../../../assets/video/generated/deflated.webm'
 import idle from '../../../../assets/generated/final/idle.png'
 import idleMotionStill from '../../../../assets/generated/final/idle-motion.png'
@@ -52,6 +55,9 @@ const clips = {
   pet: { src: petMotion, ...clipTimelines.pet },
   shy: { src: shyMotion, ...clipTimelines.shy },
   dance: { src: danceMotion, ...clipTimelines.dance },
+  hug: { src: hugMotion, ...clipTimelines.hug },
+  'thumbs-up': { src: thumbsUpMotion, ...clipTimelines['thumbs-up'] },
+  kiss: { src: kissMotion, ...clipTimelines.kiss },
   deflated: { src: deflatedMotion, ...clipTimelines.deflated }
 } as const
 

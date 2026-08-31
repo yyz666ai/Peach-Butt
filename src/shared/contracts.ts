@@ -99,6 +99,24 @@ export interface AppSettings {
   reminders: Record<ReminderKind, { enabled: boolean; intervalMinutes: number }>
   launchAtLogin: boolean
   soundEnabled: boolean
+  /** 每日喝水目标（杯，1 杯 = 250ml）；最低 4 杯兜底，不能更低 */
+  waterGoalCups: number
+  /** 每日活动目标（分钟）；最低 30 分钟兜底 */
+  activityGoalMinutes: number
+}
+
+/** 每日达标奖励：文案与动画解耦，动画可复用现有素材池 */
+export interface RewardSnapshot {
+  id: number
+  kind: 'water-half' | 'water-done' | 'activity-done' | 'all-done' | 'reward-blocked'
+  /** 奖励动画（PetMotion visual id；kiss 附带屏幕大唇印，all-done 附带撒花） */
+  animation: 'happy' | 'kiss' | 'thumbs-up' | 'hug' | 'dance' | 'deflated'
+  /** 主标题（i18n 已本地化） */
+  title: string
+  /** 副文案 */
+  subtitle: string
+  /** 夸夸句子（从文案池轮换挑选，与动画自由组合） */
+  praise: string
 }
 
 export interface AppSnapshot {
@@ -118,6 +136,8 @@ export interface AppSnapshot {
   hydrateCount: number
   /** 大屏接管（null 表示无接管） */
   takeover: TakeoverSnapshot | null
+  /** 每日达标奖励（null 表示当前无奖励；当天爆炸 ≥3 次后不再发出） */
+  reward: RewardSnapshot | null
   growth: { level: number; name: string; energy: number; days: number }
   settings: AppSettings
   trends: DailyStats[]
@@ -139,6 +159,7 @@ export type AppAction =
   | { type: 'reminder:undo' }
   | { type: 'rest:complete'; kind: ReminderKind }
   | { type: 'takeover:acknowledge'; kind: TakeoverSnapshot['kind'] }
+  | { type: 'reward:ack' }
   | { type: 'dashboard:open' }
   | { type: 'settings:update'; settings: AppSettings }
 

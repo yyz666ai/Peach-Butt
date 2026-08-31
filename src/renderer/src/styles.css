@@ -181,3 +181,33 @@ img.pet-media { animation: pet-still-breath 3.4s ease-in-out infinite; transform
 .status-stage.stage-3 { background: linear-gradient(135deg, #a85030, #6a2810); border-color: #4a1a08; }
 .status-stage.is-current { box-shadow: 0 0 0 3px rgba(248, 200, 140, .6); transform: rotate(-45deg) scale(1.15); }
 .status-item.is-hydration-3 .status-stage.stage-3 { animation: dry-shake 1.4s ease-in-out infinite; }
+
+/* ── 每日激励 hero（2026-08-31：顶部能量数字改为识别「还差什么」的激励句 + 目标进度）── */
+.energy-hero.is-nudge { grid-template-rows: auto auto; align-content: center; }
+.nudge-copy { display: grid; gap: clamp(6px, 1.1vh, 12px); }
+.nudge-copy > strong { justify-self: center; max-width: 100%; color: #d95a44; font-size: clamp(15px, 1.45vw, 23px); font-weight: 900; line-height: 1.32; }
+.nudge-goals { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(8px, 1vw, 16px); }
+.nudge-goal { display: grid; gap: 4px; padding: clamp(7px, 1vh, 12px) clamp(10px, 1.1vw, 16px); border: 1px solid rgba(255,249,232,.8); border-radius: 16px; background: rgba(255,246,221,.75); text-align: left; }
+.nudge-goal > span { font-size: clamp(11px, .9vw, 14px); font-weight: 800; color: #71452f; }
+.nudge-goal-bar { height: 10px; overflow: hidden; border-radius: 999px; background: rgba(255,242,213,.92); box-shadow: inset 0 2px 4px rgba(113,67,37,.12); }
+.nudge-goal-bar > i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ff9a78, #f16e59); transition: width .35s ease; }
+.nudge-goal.is-activity .nudge-goal-bar > i { background: linear-gradient(90deg, #b7d76a, #8fb944); }
+.nudge-goal > small { font-size: clamp(10px, .8vw, 13px); font-weight: 750; color: #97634a; font-variant-numeric: tabular-nums; }
+
+/* ── 每日达标奖励弹层（文案×动画解耦；kiss 大唇印 / all-done 撒花）── */
+.reward-overlay { position: absolute; z-index: 20; inset: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; place-items: center; gap: 6px; padding: 10px 8px; background: rgba(255, 244, 227, .62); backdrop-filter: blur(5px); animation: status-in .2s ease-out; }
+.reward-overlay .reward-pet { width: 84%; height: 62%; min-height: 0; display: grid; place-items: center; }
+.reward-overlay .reward-pet video { width: 100%; height: 100%; object-fit: contain; }
+.reward-overlay .reward-pet img { width: 100%; height: 100%; object-fit: contain; }
+.reward-copy { display: grid; gap: 3px; justify-items: center; max-width: 94%; text-align: center; }
+.reward-copy strong { color: #d95a44; font-size: 13px; font-weight: 900; }
+.reward-copy span { color: #7c5747; font-size: 10px; font-weight: 650; line-height: 1.35; }
+.reward-copy em { color: #b0503e; font-size: 11px; font-style: normal; font-weight: 850; }
+.reward-ack { padding: 7px 18px; border: 0; border-radius: 999px; color: white; background: #ef765e; font-size: 11px; font-weight: 800; box-shadow: 0 6px 14px rgba(220,91,62,.25); }
+.reward-ack:hover { background: #e8670f; background: #e86a52; }
+.reward-lip-print { position: absolute; z-index: 21; top: 14%; right: 8%; display: grid; place-items: center; width: 78px; height: 54px; color: #fff; font-size: 14px; font-weight: 900; background: linear-gradient(180deg, #ff7fa0 55%, #ff5f8a); border-radius: 48% 48% 50% 50% / 62% 62% 38% 38%; box-shadow: inset 0 -7px 0 rgba(150, 20, 60, .18), inset 0 4px 6px rgba(255,255,255,.35), 0 8px 18px rgba(200, 40, 90, .22); transform: rotate(-12deg); animation: lip-stamp .55s cubic-bezier(.2, 1.5, .4, 1) both; }
+.reward-lip-print::before { content: ''; position: absolute; left: 18%; top: 22%; width: 26%; height: 30%; border-radius: 50%; background: rgba(255,255,255,.32); filter: blur(1px); }
+@keyframes lip-stamp { from { transform: rotate(-34deg) scale(2.4); opacity: 0; } 55% { opacity: .95; } to { transform: rotate(-12deg) scale(1); opacity: .9; } }
+
+/* ── 设置面板：每日目标说明 ── */
+.setting-goal-note { margin: -6px 0 0; padding: 0 13px; color: #a06b4e; font-size: 11px; font-weight: 600; line-height: 1.55; }

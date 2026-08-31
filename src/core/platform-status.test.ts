@@ -37,12 +37,15 @@ function snapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
       launchAtLogin: false,
       soundEnabled: true,
       reminderIntensity: 'standard',
-      language: 'zh'
+      language: 'zh',
+      waterGoalCups: 6,
+      activityGoalMinutes: 30
     },
     swellLevel: 0,
     hydrationStage: 0,
     hydrateCount: 0,
     takeover: null,
+    reward: null,
     trends: [],
     monthStats: [],
     ...overrides
