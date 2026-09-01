@@ -64,6 +64,6 @@
 **Files:**
 - Modify: `docs/superpowers/plans/2026-09-01-portable-start-and-pet-i18n.md`
 
-- [ ] Run `npm run assets:check`, `npm run videos:check`, `npm test`, `npm run typecheck`, and `npm run build`.
-- [ ] Confirm the repository is clean except for intended changes and run `git diff --check`.
-- [ ] Commit the implementation, push `main` to the configured GitHub remote, and report the exact no-installer commands.
+- [x] Run `npm run assets:check`, `npm run videos:check`, `npm test`, `npm run typecheck`, and `npm run build`.
+- [x] Confirm the repository is clean except for intended changes and run `git diff --check`.
+- [x] Commit the implementation, merge it into `main`, and report the exact no-installer commands. The final GitHub push is performed immediately after this checklist update.
