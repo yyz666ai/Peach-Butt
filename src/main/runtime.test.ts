@@ -141,6 +141,41 @@ describe('runtime data integrity', () => {
     })
   })
 
+  it('re-localizes a cached pet bubble immediately after switching to English', () => {
+    const runtime = createRuntime(memoryStorage())
+    runtimes.push(runtime)
+    runtime.dispatch({ type: 'pet:pat' })
+    expect(runtime.snapshot().message).toContain('好舒服')
+
+    runtime.dispatch({
+      type: 'settings:update',
+      settings: { ...runtime.snapshot().settings, language: 'en' }
+    })
+
+    expect(runtime.snapshot().settings.language).toBe('en')
+    expect(runtime.snapshot().message).not.toMatch(/[\u3400-\u9fff]/)
+  })
+
+  it('uses English for greeting, focus feedback and the rest queue', () => {
+    const storage = memoryStorage()
+    storage.settings.set('settings', { language: 'en' })
+    const runtime = createRuntime(storage)
+    runtimes.push(runtime)
+
+    expect(runtime.snapshot().message).toContain('Good morning')
+    runtime.dispatch({ type: 'pomodoro:configure-and-start', workMinutes: 1 })
+    runtime.dispatch({ type: 'pet:click' })
+    expect(runtime.snapshot().message).toBe('Stay focused')
+
+    runtime.tick(start + 60_000, 0)
+    vi.setSystemTime(start + 60_000)
+    runtime.dispatch({ type: 'pet:click' })
+    expect(runtime.snapshot()).toMatchObject({
+      visual: 'activity',
+      message: 'This round is done — stretch your legs with me'
+    })
+  })
+
   it('ignores head pats while focusing on pomodoro work', () => {
     const runtime = createRuntime(memoryStorage())
     runtimes.push(runtime)

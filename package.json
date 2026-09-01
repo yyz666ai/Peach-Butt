@@ -23,10 +23,12 @@
     "windows"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "main": "./out/main/index.js",
   "scripts": {
+    "prestart": "node scripts/check-runtime.mjs",
+    "start": "npm run build && electron .",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "test": "vitest run",

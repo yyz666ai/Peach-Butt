@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, Tray } from 'electron'
 import { getPlatformStatus } from '../core/platform-status'
 import type { AppAction, AppSnapshot } from '../shared/contracts'
+import { t, type Language } from '../shared/i18n'
 import { createRuntime, type Runtime } from './runtime'
 import { createStorage } from './storage'
 import { isSafeAction } from './ipc-actions'
@@ -23,7 +24,12 @@ const previewAlert = visualPreview === 'explosion' || visualPreview === 'rest-du
   ? visualPreview
   : process.env.PIPEACH_PREVIEW_EXPLOSION === '1' ? 'explosion' : null
 const isExplosionPreview = previewAlert === 'explosion'
-const restDuePreviewMessages = ['起来活动一下啦！', '要去喝水啦！', '该去上个厕所啦！', '让眼睛休息一下吧！']
+const restDuePreviewMessages = (lang: Language): string[] => [
+  t(lang, 'overlay.rest1'),
+  t(lang, 'overlay.rest2'),
+  t(lang, 'overlay.rest3'),
+  t(lang, 'overlay.rest4')
+]
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 const appIconPath = join(app.getAppPath(), 'assets/app-icon/pipeach-icon-master.png')
 const windowIcon = process.platform === 'win32'
@@ -190,14 +196,19 @@ function createTray(): void {
   const icon = nativeImage.createFromPath(appIconPath).resize({ width: 20, height: 20 })
   tray = new Tray(icon)
   tray.setToolTip('Peach Butt')
-  const language = (): 'zh' | 'en' => runtime?.snapshot().settings.language ?? 'zh'
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: language() === 'en' ? 'Show Peach Butt' : '显示桃屁屁', click: ensurePetVisible },
-    { label: language() === 'en' ? 'Health Cottage' : '健康小屋', click: openDashboard },
-    { type: 'separator' },
-    { label: language() === 'en' ? 'Quit' : '退出', click: () => app.quit() }
-  ]))
+  refreshTrayMenu()
   tray.on('click', () => (petWindow && !petWindow.isDestroyed() && petWindow.isVisible()) ? petWindow.hide() : ensurePetVisible())
+}
+
+function refreshTrayMenu(): void {
+  if (!tray) return
+  const language = runtime?.snapshot().settings.language ?? 'zh'
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: language === 'en' ? 'Show Peach Butt' : '显示桃屁屁', click: ensurePetVisible },
+    { label: language === 'en' ? 'Health Cottage' : '健康小屋', click: openDashboard },
+    { type: 'separator' },
+    { label: language === 'en' ? 'Quit' : '退出', click: () => app.quit() }
+  ]))
 }
 
 function showPetMenu(): void {
@@ -238,12 +249,13 @@ app.whenReady().then(() => {
   createTray()
   if (process.env.PIPEACH_OPEN_DASHBOARD === '1') openDashboard()
   if (previewAlert) {
+    const lang = runtime.snapshot().settings.language
     showOverlay({
       ...runtime.snapshot(),
       overlay: {
         id: -1,
         kind: isExplosionPreview ? 'explosion' : 'rest-reminder',
-        messages: isExplosionPreview ? ['快去休息啦！'] : restDuePreviewMessages
+        messages: isExplosionPreview ? [t(lang, 'msg.explode')] : restDuePreviewMessages(lang)
       }
     })
   }
@@ -271,9 +283,14 @@ app.whenReady().then(() => {
   ipcMain.handle('pipeach:action', (_event, action: AppAction) => {
     if (!isSafeAction(action)) throw new Error('Invalid Pipeach action')
     if (action.type === 'dashboard:open') openDashboard()
-    if (action.type === 'settings:update') app.setLoginItemSettings({ openAtLogin: action.settings.launchAtLogin })
     if (action.type === 'pet:size') resizePet(action.size)
-    return runtime?.dispatch(action)
+    const result = runtime?.dispatch(action)
+    if (action.type === 'settings:update') {
+      app.setLoginItemSettings({ openAtLogin: action.settings.launchAtLogin })
+      refreshTrayMenu()
+      dashboardWindow?.setTitle(`Peach Butt · ${action.settings.language === 'en' ? 'Health Cottage' : '健康小屋'}`)
+    }
+    return result
   })
   ipcMain.on('pipeach:drag-begin', (_event, point: { x: number; y: number }) => {
     if (!petWindow || !isFinitePoint(point)) return

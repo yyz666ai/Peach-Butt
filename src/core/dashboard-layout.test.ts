@@ -56,7 +56,8 @@ describe('dashboard responsive layout contract', () => {
   })
 
   it('keeps the dashboard statistical and removes story, timer, and generic rest controls', () => {
-    expect(renderer).toContain('活动一下')
+    expect(renderer).toContain('activityStretchAsset')
+    expect(renderer).toContain('habitLabel(lang, item.kind)')
     for (const removed of ['今日的话', 'timer-device', 'story-trigger', 'calendarAsset', '<span>休息一下</span>', 'MonthCalendar', 'BarChart3', "'month'"]) {
       expect(renderer).not.toContain(removed)
     }

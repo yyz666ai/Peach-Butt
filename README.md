@@ -66,36 +66,47 @@
 - 健康分、提醒反馈、专注/休息状态和统计存储在应用本机的 SQLite 数据库。
 - 应用直接使用仓库内的透明 WebM；含创作平台元数据的原始母带不进入公开仓库，日常使用不需要 Python、`rembg` 或模型下载。
 
-### 使用
+### 免安装快速启动（macOS 与 Windows 通用）
 
-目前仓库不提供经验证的公开下载链接。请从源码构建，或由维护者提供已签名的发布包。
+当前不提供 `.dmg`、`.app` 或 `.exe` 安装包。桃屁屁可以直接从源码目录运行：不会写入“应用程序”或 `Program Files`，删除项目文件夹即可移除程序。
 
-#### macOS
+准备工作：安装 [Node.js 22 LTS 或更新版本](https://nodejs.org/)。Git 不是必需的；不使用 Git 时，可以在 GitHub 页面选择 **Code → Download ZIP** 并解压。
+
+在 macOS Terminal 或 Windows PowerShell 中执行完全相同的命令：
+
+```bash
+git clone https://github.com/yyz666ai/Peach-Butt.git
+cd Peach-Butt
+npm install
+npm start
+```
+
+如果下载的是 ZIP，进入解压后的 `Peach-Butt` 文件夹，只需运行：
 
 ```bash
 npm install
-npm run dev
+npm start
 ```
 
-构建本地应用目录：
+首次执行 `npm install` 会把 Electron 和运行依赖下载到当前项目文件夹。以后日常启动只需：
 
 ```bash
-npm run dist:mac
+npm start
 ```
 
-构建产物写入 `release/`。未签名或未公证的开发构建，首次打开时可能需要在 Finder 中右键选择“打开”。Apple Silicon 与 Intel Mac 应分别在对应架构环境中构建和验证。
+更新到最新版：
 
-#### Windows
-
-在 Windows 10/11 上安装 Node.js 的当前 LTS 版本后运行：
-
-```powershell
+```bash
+git pull
 npm install
-npm run dev
-npm run dist:win
+npm start
 ```
 
-NSIS 安装包写入 `release/`。建议在 Windows 机器或 Windows CI 上构建 Windows 包，以便正确处理原生依赖；未签名的测试包可能触发 SmartScreen。
+`npm start` 会构建生产代码后启动桌宠；它不是安装程序。开发者需要热更新时才使用 `npm run dev`。
+
+本地统计不会随着源码更新而丢失：macOS 数据位于 `~/Library/Application Support/Peach Butt/pipeach.sqlite`，Windows 数据位于 `%APPDATA%\Peach Butt\pipeach.sqlite`。
+
+如果命令提示 Node.js 版本过低，请升级 Node.js 后重新执行 `npm install`。退出桌宠时，点击菜单栏或系统托盘中的桃屁屁图标并选择“退出 / Quit”。
 
 ### 开发
 
@@ -207,29 +218,47 @@ Read the [current interaction and motion logic](docs/product-interaction-logic.m
 
 No account is required. Health scores, reminders, responses, focus/break state, and statistics stay in a local SQLite database. The app ships generated WebM assets; source masters containing creation-platform metadata are not published, so end users do not need Python, `rembg`, or model downloads.
 
-### Run and build
+### Portable start — same steps on macOS and Windows
 
-This repository does not claim a verified public release download. Build from source, or use a signed release supplied by a maintainer.
+There is currently no `.dmg`, `.app`, or `.exe` download. Peach Butt runs directly from its source folder and does not install itself into Applications or Program Files. Remove the source folder whenever you want to remove the app.
+
+Install [Node.js 22 LTS or newer](https://nodejs.org/). Git is optional: you can also choose **Code → Download ZIP** on GitHub and extract it.
+
+Run the same commands in macOS Terminal or Windows PowerShell:
+
+```bash
+git clone https://github.com/yyz666ai/Peach-Butt.git
+cd Peach-Butt
+npm install
+npm start
+```
+
+For a downloaded ZIP, open the extracted `Peach-Butt` folder in Terminal or PowerShell and run:
 
 ```bash
 npm install
-npm run dev
+npm start
 ```
 
-Build a macOS app directory:
+`npm install` downloads Electron and native dependencies into this project folder. After the first setup, normal launches only need:
 
 ```bash
-npm run dist:mac
+npm start
 ```
 
-Build a Windows NSIS installer on Windows or Windows CI:
+To update a Git clone:
 
-```powershell
+```bash
+git pull
 npm install
-npm run dist:win
+npm start
 ```
 
-Build output is written to `release/`. Development builds may be unsigned; platform signing, notarization, and SmartScreen handling are required for public distribution.
+`npm start` builds production code and launches the pet; it is not an installer. Use `npm run dev` only when developing with live reload.
+
+Local history is stored outside the source folder and survives updates. The database is `~/Library/Application Support/Peach Butt/pipeach.sqlite` on macOS and `%APPDATA%\Peach Butt\pipeach.sqlite` on Windows.
+
+If the runtime check reports an old Node.js version, upgrade Node.js and run `npm install` again. To quit, use the Peach Butt menu-bar or system-tray icon and choose **Quit**.
 
 ### Development & checks
 

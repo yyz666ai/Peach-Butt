@@ -17,10 +17,10 @@
 - Modify: `src/core/dashboard-layout.test.ts`
 - Create: `scripts/portable-start-contract.test.ts`
 
-- [ ] Add a runtime test that switches settings from Chinese to English and expects the next pet snapshot message to contain no Chinese characters.
-- [ ] Add tests for English greeting, focus-click feedback, recovery completion and rest reminder messages.
-- [ ] Add static tests requiring renderer bubble comparison to use `t(lang, 'msg.focusKeep')`, preview copy to use i18n, and `package.json` to expose a cross-platform `start` script.
-- [ ] Run the focused tests and confirm they fail because the current recovery message, preview copy, bubble comparison and start script are not compliant.
+- [x] Add a runtime test that switches settings from Chinese to English and expects the next pet snapshot message to contain no Chinese characters.
+- [x] Add tests for English greeting, focus-click feedback, recovery completion and rest reminder messages.
+- [x] Add static tests requiring renderer bubble comparison to use `t(lang, 'msg.focusKeep')`, preview copy to use i18n, and `package.json` to expose a cross-platform `start` script.
+- [x] Run the focused tests and confirm they fail because the current recovery message, preview copy, bubble comparison and start script are not compliant.
 
 ### Task 2: Make the full pet interaction path locale-driven
 
@@ -30,12 +30,12 @@
 - Modify: `src/renderer/src/main.tsx`
 - Modify: `src/shared/i18n.ts`
 
-- [ ] Replace the hard-coded recovery completion message with `t(settings.language, 'msg.thanksRecovery')`.
-- [ ] On a language update, clear cached temporary pet copy and rebuild active takeover and overlay copy in the new language.
-- [ ] Replace preview reminder arrays and renderer takeover fallback literals with shared translation keys.
-- [ ] Replace the renderer's Chinese string comparison with `snapshot.message === t(lang, 'msg.focusKeep')`.
-- [ ] Refresh the tray context menu after saving a language change so its labels switch immediately.
-- [ ] Run the focused tests until green, then run the complete suite.
+- [x] Replace the hard-coded recovery completion message with `t(settings.language, 'msg.thanksRecovery')`.
+- [x] On a language update, clear cached temporary pet copy and rebuild active takeover and overlay copy in the new language.
+- [x] Replace preview reminder arrays and renderer takeover fallback literals with shared translation keys.
+- [x] Replace the renderer's Chinese string comparison with `snapshot.message === t(lang, 'msg.focusKeep')`.
+- [x] Refresh the tray context menu after saving a language change so its labels switch immediately.
+- [x] Run the focused tests until green, then run the complete suite.
 
 ### Task 3: Add the shared no-installer start command
 
@@ -44,20 +44,20 @@
 - Modify: `package-lock.json`
 - Create: `scripts/check-runtime.mjs`
 
-- [ ] Require Node.js 22 or newer and add a small runtime checker with actionable macOS/Windows guidance.
-- [ ] Add `prestart` to run the checker and `start` to execute `npm run build && electron .` without shell-specific syntax.
-- [ ] Run the portable-start contract test, typecheck and build.
-- [ ] Run `npm start` on macOS and confirm the live process starts from the repository production output.
+- [x] Require Node.js 22 or newer and add a small runtime checker with actionable macOS/Windows guidance.
+- [x] Add `prestart` to run the checker and `start` to execute `npm run build && electron .` without shell-specific syntax.
+- [x] Run the portable-start contract test, typecheck and build.
+- [x] Run `npm start` on macOS and confirm the live process starts from the repository production output.
 
 ### Task 4: Rewrite the bilingual README around portable source launch
 
 **Files:**
 - Modify: `README.md`
 
-- [ ] Replace the download/installer-first copy with identical macOS and Windows quick-start commands: clone or download, `npm install`, `npm start`.
-- [ ] Explain the difference between `npm start` for normal use and `npm run dev` for development.
-- [ ] Add update, data-location, first-run and troubleshooting notes in Chinese and English.
-- [ ] State explicitly that no installer or public binary is currently distributed.
+- [x] Replace the download/installer-first copy with identical macOS and Windows quick-start commands: clone or download, `npm install`, `npm start`.
+- [x] Explain the difference between `npm start` for normal use and `npm run dev` for development.
+- [x] Add update, data-location, first-run and troubleshooting notes in Chinese and English.
+- [x] State explicitly that no installer or public binary is currently distributed.
 
 ### Task 5: Verify, document and publish source changes
 

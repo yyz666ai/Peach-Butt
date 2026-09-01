@@ -781,7 +781,7 @@ if (
       // 喝水打卡触发完整恢复时也走这里（engine 同步切了 mode）。
       if (wasDeflated && health.snapshot().mode === 'active') {
         recoveryRestStartedAt = null
-        visualOverride = { id: 'transform', until: effectiveNow + TRANSFORM_OVERRIDE_MS, message: '谢谢你等我回来～' }
+        visualOverride = { id: 'transform', until: effectiveNow + TRANSFORM_OVERRIDE_MS, message: t(settings.language, 'msg.thanksRecovery') }
         reconciliationDay = dateKey(effectiveNow)
       }
     }
@@ -1030,6 +1030,7 @@ if (
       }
       if (action.type === 'settings:update') {
         const previous = pomodoro.snapshot()
+        const previousLanguage = settings.language
         const wasFocusing = phaseBeforeAction === 'work' || phaseBeforeAction === 'awaiting_rest_confirmation'
         events.push(...health.tick({
           now: actionNow,
@@ -1037,6 +1038,33 @@ if (
           focusing: wasFocusing
         }))
         settings = sanitizeSettings(action.settings, settings)
+        if (settings.language !== previousLanguage) {
+          // Temporary overrides store rendered copy. Clear them so the current
+          // visual is recomputed immediately in the newly saved language.
+          visualOverride = null
+          activeReward = null
+          rewardUntil = 0
+          if (overlay) {
+            overlay = {
+              ...overlay,
+              messages: overlay.kind === 'explosion'
+                ? [t(settings.language, 'msg.explode')]
+                : restOverlayCopy(settings.language)
+            }
+          }
+          if (activeTakeover) {
+            const kind = activeTakeover.kind
+            const copy = takeoverCopy(kind, settings.language)
+            const ignoredMinutes = reminder && reminder.kind === kind ? (actionNow - reminder.dueAt) / 60_000 : 0
+            const continuousMinutes = continuousWorkStartedAt === null ? 0 : (actionNow - continuousWorkStartedAt) / 60_000
+            activeTakeover = {
+              ...activeTakeover,
+              title: copy.title,
+              subtitle: copy.subtitle,
+              reason: takeoverReason(kind, settings.language, ignoredMinutes, continuousMinutes)
+            }
+          }
+        }
         health.setPressurePerMinute(pressureRateFor(settings))
         storage.setSetting('settings', settings)
         reminders.updateSettings(settings.reminders, actionNow)

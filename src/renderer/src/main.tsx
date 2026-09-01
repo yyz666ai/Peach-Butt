@@ -115,18 +115,18 @@ function getVisualPreview(): VisualPreview | null {
 }
 
 // preview-only takeover：?takeoverKind=water|stand|toilet|eyes|anti-sedentary 直接渲染接管 UI
-function getTakeoverPreview(): NonNullable<AppSnapshot['takeover']> | null {
+function getTakeoverPreview(lang: Language | undefined): NonNullable<AppSnapshot['takeover']> | null {
   const requested = new URLSearchParams(location.search).get('takeoverKind')
   const kinds = ['water', 'stand', 'toilet', 'eyes', 'anti-sedentary'] as const
   if (!requested || !(kinds as readonly string[]).includes(requested)) return null
-  const copy = {
-    water: { title: '该喝水啦', subtitle: '我都干成这样了，喝口水我就缓过来' },
-    stand: { title: '起来活动一下', subtitle: '我也想蹦两下，跟我一起？' },
-    toilet: { title: '该去厕所啦', subtitle: '别憋着，跟我说一声「我去了」' },
-    eyes: { title: '眼睛休息一下', subtitle: '跟我揉揉眼睛，1–2 分钟就好' },
-    'anti-sedentary': { title: '我撑不住了！', subtitle: '已经连续坐太久了，起来走走我才能消气' }
-  }[requested as typeof kinds[number]]
-  return { kind: requested as NonNullable<AppSnapshot['takeover']>['kind'], ...copy, since: Date.now(), reason: '已忽略 5 分钟（preview）' }
+  const kind = requested as typeof kinds[number]
+  return {
+    kind,
+    title: t(lang, `takeover.${requested}.title` as StringKey),
+    subtitle: t(lang, `takeover.${requested}.subtitle` as StringKey),
+    since: Date.now(),
+    reason: t(lang, 'takeover.reason.ignored', { minutes: 5 })
+  }
 }
 
 function PetView(): React.JSX.Element {
@@ -270,7 +270,7 @@ function PetView(): React.JSX.Element {
   const recoveryElapsed = preview?.recoveryRemainingSeconds !== undefined
     ? Math.max(0, PREVIEW_RECOVERY_REQUIRED - preview.recoveryRemainingSeconds)
     : snapshot.recoverySession?.elapsedSeconds ?? 0
-  const takeoverPreview = getTakeoverPreview()
+  const takeoverPreview = getTakeoverPreview(lang)
   // 2026-08-31：接管期间整段桌宠区域（pet-stage / 气泡 / 打卡提示）都藏掉。
   // 否则背景会露出主线 PetMotion 当前 visual（如瘪桃子），与接管角色重叠打架。
   const takeoverVisible = snapshot.takeover ?? takeoverPreview
@@ -319,7 +319,7 @@ function PetView(): React.JSX.Element {
               >{t(lang, 'recovery.startButton')}</button>
             </section>
         : preview?.recoveryRemainingSeconds !== undefined
-          ? <section className="hover-status" aria-live="polite"><strong>恢复 {formatTime(preview.recoveryRemainingSeconds)}</strong></section>
+          ? <section className="hover-status" aria-live="polite"><strong>{t(lang, 'recovery.timerTitle')} {formatTime(preview.recoveryRemainingSeconds)}</strong></section>
           : bubbleVisible && !preview
             ? <section className="hover-status" aria-live="polite"><strong>{bubbleCopy}</strong></section>
             : askFocusVisible && !preview && !petHovered
@@ -625,7 +625,12 @@ function SettingsPanel({ draft, setDraft, save, close }: { draft: AppSettings; s
   </div>
 }
 
-const defaultRestMessages = ['起来活动一下啦！', '要去喝水啦！', '该去上个厕所啦！', '让眼睛休息一下吧！']
+const defaultRestMessages = (lang: Language | undefined): string[] => [
+  t(lang, 'overlay.rest1'),
+  t(lang, 'overlay.rest2'),
+  t(lang, 'overlay.rest3'),
+  t(lang, 'overlay.rest4')
+]
 
 function AlertView(): React.JSX.Element {
   const [snapshot, act] = useSnapshot()
@@ -636,10 +641,15 @@ function AlertView(): React.JSX.Element {
   const previewDeflated = previewAlert === 'deflated'
   const previewRestDue = previewAlert === 'rest-due'
   const explosion = previewAlert === 'explosion' || overlay?.kind === 'explosion'
+  const lang = snapshot?.settings.language ?? 'zh'
   // 2026-09-01：alert 不再写死 idle.png，跟随 snapshot.visual 切换；
   // deflated 状态在 alert 显 deflated 视频 + 大按钮 + 倒计时环。
   const isDeflatedMode = snapshot?.health.mode === 'deflated'
-  const messages = explosion ? ['快去休息啦！'] : previewRestDue ? defaultRestMessages : (overlay?.messages.length ? overlay.messages : defaultRestMessages)
+  const messages = explosion
+    ? [t(lang, 'msg.explode')]
+    : previewRestDue
+      ? defaultRestMessages(lang)
+      : (overlay?.messages.length ? overlay.messages : defaultRestMessages(lang))
   // 2026-09-01：deflated 面板用 snapshot.health.mode 触发，不需要消息轮换；爆炸保留轮换。
   const rotatingMessages = !explosion && !previewDeflated && !isDeflatedMode
   useEffect(() => {
@@ -659,7 +669,6 @@ function AlertView(): React.JSX.Element {
   const mediaVisual = explosion ? 'explosion'
     : (previewDeflated || isDeflatedMode) ? 'deflated'
     : snapshot?.visual ?? 'idle'
-  const lang = snapshot?.settings.language ?? 'zh'
   return <main className={`alert-view ${explosion ? 'is-explosion' : isDeflatedMode || previewDeflated ? 'is-deflated' : 'is-rest'}`}>
     {explosion
       ? <video ref={video} key="explosion" className="pet-media" src={explosionVideo} muted autoPlay playsInline/>
@@ -725,7 +734,7 @@ function idleQuip(snapshot: AppSnapshot): string {
 }
 function getBubbleCopy(snapshot: AppSnapshot, focusing: boolean): string {
   const lang = snapshot.settings.language
-  if (snapshot.message === '保持专注') return t(lang, 'bubble.focusKeep')
+  if (snapshot.message === t(lang, 'msg.focusKeep')) return t(lang, 'bubble.focusKeep')
   if (focusing) return t(lang, 'bubble.focusRemaining', { time: formatTime(snapshot.pomodoro.remainingSeconds) })
   if (snapshot.pomodoro.phase === 'break') return t(lang, 'bubble.breakRemaining', { time: formatTime(snapshot.pomodoro.remainingSeconds) })
   if (snapshot.pomodoro.phase === 'awaiting_rest_confirmation') return t(lang, 'bubble.awaitingRest')

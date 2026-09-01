@@ -14,11 +14,11 @@ describe('fullscreen health alert contract', () => {
     expect(mainProcess).toContain('setIgnoreMouseEvents(true)')
   })
 
-  it('renders activity messages and the exact explosion copy', () => {
+  it('renders localized activity and explosion copy', () => {
     expect(renderer).toContain('function AlertView')
-    expect(renderer).toContain('快去休息啦！')
-    for (const copy of ['起来活动一下啦！', '要去喝水啦！', '该去上个厕所啦！', '让眼睛休息一下吧！']) {
-      expect(renderer).toContain(copy)
+    expect(renderer).toContain("t(lang, 'msg.explode')")
+    for (const key of ['overlay.rest1', 'overlay.rest2', 'overlay.rest3', 'overlay.rest4']) {
+      expect(renderer).toContain(`t(lang, '${key}')`)
     }
     expect(styles).toContain('.alert-view')
   })
