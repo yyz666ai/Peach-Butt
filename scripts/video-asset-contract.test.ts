@@ -15,12 +15,16 @@ interface VideoClip {
   restKind?: 'stand' | 'water' | 'toilet' | 'eyes' | 'long-rest'
   bottomSafeMargin?: number
   fps?: number
+  source?: string
+  fullBody?: boolean
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const manifest = JSON.parse(
   fs.readFileSync(path.join(root, 'assets/video/manifest.json'), 'utf8')
 ) as { canvas: { width: number; height: number; fps: number; bottomSafeMargin: number }; clips: VideoClip[] }
+const v7Pipeline = fs.readFileSync(path.join(root, 'scripts/key-v7.py'), 'utf8')
+const v3Pipeline = fs.readFileSync(path.join(root, 'scripts/build-v3-keyed.py'), 'utf8')
 
 const byId = (id: string): VideoClip => {
   const clip = manifest.clips.find((candidate) => candidate.id === id)
@@ -67,7 +71,7 @@ describe('video asset contract', () => {
   })
 
   it('anchors the restored short feet to the shared pet baseline', () => {
-    expect(byId('focus').bottomSafeMargin).toBe(8)
+    expect(byId('focus').bottomSafeMargin).toBe(18)
   })
 
   it('uses normalized VP9 alpha videos at 480 by 500 with 12 or 24 fps', () => {
@@ -85,5 +89,32 @@ describe('video asset contract', () => {
         tags: { alpha_mode: '1' }
       })
     }
+  })
+
+  it('documents the original source for every runtime clip so re-keying never starts from screenshots', () => {
+    for (const clip of manifest.clips) {
+      expect(clip.source, clip.id).toMatch(/\.(mp4|png)$/)
+    }
+    expect(byId('activity').source).toBe('../../generated/final/stretch.png')
+  })
+
+  it('marks standing character clips as full-body assets', () => {
+    for (const id of ['idle', 'activity', 'eye-strain', 'greeting', 'happy', 'rest', 'bored', 'pet', 'shy', 'dance', 'hug', 'thumbs-up', 'kiss']) {
+      expect(byId(id).fullBody, id).toBe(true)
+    }
+  })
+
+  it('preserves thin legs while removing only the pale studio floor from v7 clips', () => {
+    expect(v7Pipeline).toContain('clear_floor_shadow_preserving_limbs')
+    expect(v7Pipeline).not.toContain('ImageFilter.MinFilter(3)')
+    expect(v7Pipeline).toContain('target_fraction=.88')
+    expect(v7Pipeline).toContain('bottom_margin=12')
+  })
+
+  it('re-keys v3 props without the white floor band or thin-line erosion', () => {
+    expect(v3Pipeline).toContain('clear_v3_floor_shadow_preserving_props')
+    expect(v3Pipeline).toContain('polish_v3_frames')
+    expect(v3Pipeline).not.toContain('ImageFilter.MinFilter(3)')
+    expect(v3Pipeline).toContain('enhance(1.08)')
   })
 })

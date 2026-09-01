@@ -25,6 +25,10 @@ const previewAlert = visualPreview === 'explosion' || visualPreview === 'rest-du
 const isExplosionPreview = previewAlert === 'explosion'
 const restDuePreviewMessages = ['起来活动一下啦！', '要去喝水啦！', '该去上个厕所啦！', '让眼睛休息一下吧！']
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
+const appIconPath = join(app.getAppPath(), 'assets/app-icon/pipeach-icon-master.png')
+const windowIcon = process.platform === 'win32'
+  ? join(app.getAppPath(), 'assets/app-icon/pipeach.ico')
+  : undefined
 if (!hasSingleInstanceLock) app.quit()
 
 function load(window: BrowserWindow, view: 'pet' | 'dashboard' | 'alert'): void {
@@ -44,7 +48,7 @@ function load(window: BrowserWindow, view: 'pet' | 'dashboard' | 'alert'): void 
 
 function createPetWindow(): BrowserWindow {
   const area = screen.getPrimaryDisplay().workArea
-  const petSize = runtime?.snapshot().settings.petSize ?? 140
+  const petSize = runtime?.snapshot().settings.petSize ?? 180
   // 接管 preview：直接铺满 workArea 启动，验证「全屏接管」的真实视觉效果
   const previewTakeover = Boolean(process.env.PEACH_BUTT_TAKEOVER_PREVIEW?.trim())
   const width = previewTakeover ? area.width : petSize + 20
@@ -56,7 +60,7 @@ function createPetWindow(): BrowserWindow {
     x: previewTakeover ? area.x : area.x + area.width - width - 28,
     y: previewTakeover ? area.y : area.y + area.height - height - 28,
     transparent: true, frame: false, alwaysOnTop: true, resizable: true,
-    hasShadow: false, skipTaskbar: process.platform !== 'win32', show: false,
+    hasShadow: false, skipTaskbar: process.platform !== 'win32', show: false, icon: windowIcon,
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: true }
   })
   window.setAlwaysOnTop(true, 'floating')
@@ -81,7 +85,7 @@ function createPetWindow(): BrowserWindow {
       window.setBounds(preTakeoverBounds, true)
       preTakeoverBounds = null
     } else if (bounds.width > 400) {
-      resizePet(runtime?.snapshot().settings.petSize ?? 140)
+      resizePet(runtime?.snapshot().settings.petSize ?? 180)
     }
     // 2026-09-01：deflated 时 pet 窗口自动放大到 320×480（与 alert 同等占位），
     // 让用户看清桃 + 恢复按钮。离开 deflated 模式自动收回原尺寸。
@@ -92,7 +96,7 @@ function createPetWindow(): BrowserWindow {
       const newH = 480
       petWindow?.setBounds({ x: workArea.x + workArea.width - newW - 28, y: workArea.y + workArea.height - newH - 28, width: newW, height: newH })
     } else if (!deflated && bounds.width >= 280) {
-      resizePet(runtime?.snapshot().settings.petSize ?? 140)
+      resizePet(runtime?.snapshot().settings.petSize ?? 180)
     }
   })
   return window
@@ -149,7 +153,7 @@ function showOverlay(snapshot: AppSnapshot): void {
   }
   const window = new BrowserWindow({
     ...bounds, transparent: true, frame: false, alwaysOnTop: true,
-    focusable: false, skipTaskbar: true, hasShadow: false, show: false,
+    focusable: false, skipTaskbar: true, hasShadow: false, show: false, icon: windowIcon,
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: true }
   })
   alertWindow = window
@@ -173,7 +177,7 @@ function openDashboard(): void {
   const language = runtime?.snapshot().settings.language ?? 'zh'
   dashboardWindow = new BrowserWindow({
     width: 1050, height: 760, minWidth: 960, minHeight: 650,
-    title: `Peach Butt · ${language === 'en' ? 'Health Cottage' : '健康小屋'}`, backgroundColor: '#fff8f3',
+    title: `Peach Butt · ${language === 'en' ? 'Health Cottage' : '健康小屋'}`, backgroundColor: '#fff8f3', icon: windowIcon,
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: true }
   })
   load(dashboardWindow, 'dashboard')
@@ -183,7 +187,7 @@ function openDashboard(): void {
 }
 
 function createTray(): void {
-  const icon = nativeImage.createFromPath(join(app.getAppPath(), 'assets/generated/final/idle.png')).resize({ width: 20, height: 20 })
+  const icon = nativeImage.createFromPath(appIconPath).resize({ width: 20, height: 20 })
   tray = new Tray(icon)
   tray.setToolTip('Peach Butt')
   const language = (): 'zh' | 'en' => runtime?.snapshot().settings.language ?? 'zh'
@@ -225,7 +229,10 @@ function showPetMenu(): void {
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return
   // 确保应用出现在 macOS Dock（用户反馈：底下看不见 Peach Butt）
-  if (process.platform === 'darwin' && app.dock && !app.dock.isVisible()) app.dock.show()
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(appIconPath)
+    if (!app.dock.isVisible()) app.dock.show()
+  }
   runtime = createRuntime(createStorage(usesEphemeralPreviewStore ? ':memory:' : join(app.getPath('userData'), 'pipeach.sqlite')))
   petWindow = createPetWindow()
   createTray()
@@ -293,4 +300,3 @@ function isFinitePoint(value: unknown): value is { x: number; y: number } {
   const point = value as { x?: unknown; y?: unknown }
   return typeof point.x === 'number' && Number.isFinite(point.x) && typeof point.y === 'number' && Number.isFinite(point.y)
 }
-

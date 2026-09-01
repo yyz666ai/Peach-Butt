@@ -62,6 +62,34 @@ describe('dashboard responsive layout contract', () => {
     }
   })
 
+  it('shows a simple explosion reminder and seven-day four-habit completion state', () => {
+    expect(renderer).toContain('className="explosion-card"')
+    expect(renderer).toContain('snapshot.health.explosionsToday')
+    expect(renderer).toContain('isCompleteHealthDay(item)')
+    expect(renderer).toContain('className="week-completion"')
+    expect(renderer).not.toContain('function PetStatusCard')
+    expect(renderer).not.toContain('<PetStatusCard')
+    expect(renderer).not.toContain('status-dots')
+  })
+
+  it('uses warm, quiet habit counts instead of red notification badges', () => {
+    expect(rule('.habit-dock small')).not.toContain('position: absolute')
+    expect(rule('.habit-dock small')).not.toContain('color: white')
+    expect(rule('.habit-dock small')).not.toContain('background: #f06d59')
+    expect(rule('.habit-dock small')).toContain('color: #8a5438')
+  })
+
+  it('uses a larger one-shot cute mascot instead of the head-pat loop', () => {
+    expect(renderer).toContain('<PetMotion visual="happy"')
+    expect(renderer).not.toContain('<PetMotion visual="pet" pressureValue={0} recovery={100} doingFollow')
+    expect(rule('.cottage-mascot')).toContain('width: clamp(150px, 14vw, 220px)')
+  })
+
+  it('uses the selected abstract Peach Butt logo in the dashboard brand', () => {
+    expect(renderer).toContain("assets/app-icon/pipeach-logo.png")
+    expect(renderer).toContain('<div className="cottage-brand"><img src={appLogo}')
+  })
+
   it('exposes every focus and break cadence setting', () => {
     for (const setting of ['continuousWorkLimitMinutes', 'breakMinutes', 'longBreakMinutes', 'longBreakEvery']) {
       expect(renderer).toContain(setting)

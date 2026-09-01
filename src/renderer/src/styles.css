@@ -7,7 +7,7 @@ button { cursor: pointer; }
 /* Compact transparent desktop pet */
 .pet-shell { position: relative; width: 100vw; height: 100vh; user-select: none; overflow: hidden; }
 .pet-loading { display: grid; height: 100vh; place-items: center; color: #7c5747; font-size: 12px; }
-.pet-stage { position: absolute; inset: 14% 2% 4% 2%; display: grid; place-items: end center; cursor: grab; touch-action: none; }
+.pet-stage { --pet-max-w: 100%; --pet-max-h: 100%; position: absolute; inset: 14% 2% 4% 2%; display: grid; place-items: end center; cursor: grab; touch-action: none; }
 .pet-stage:active { cursor: grabbing; }
 /* 2026-08-31：旋风过渡层。状态切换时新视频沿径向圆形 blur 揭幕，
    旧视频同步径向 scale-out；不需要素材，纯 CSS 0.42s 即可。 */
@@ -16,12 +16,11 @@ button { cursor: pointer; }
 @keyframes pet-whirl { 0% { opacity: 0; transform: translate(-50%, 0) scale(0) rotate(0deg); } 30% { opacity: .9; transform: translate(-50%, 0) scale(.55) rotate(180deg); } 65% { opacity: .55; transform: translate(-50%, 0) scale(.95) rotate(420deg); } 100% { opacity: 0; transform: translate(-50%, 0) scale(1.35) rotate(540deg); } }
 .pet-media { width: 100%; height: 100%; object-fit: contain; pointer-events: none; transform-origin: center bottom; }
 .pet-video { mix-blend-mode: normal; }
-/* 2026-08-31：状态切换径向 fade 过渡，配合 .pet-stage.is-whirling */
-.pet-stage.is-whirling .pet-media { animation: pet-swap-out .32s ease-out both; }
-@keyframes pet-swap-out { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.86); } }
-/* 旋风跟做/奖励/接管都共用同一个尺寸锚点：宽度统一 min(44vw, 640px)，
-   高度统一 44vh；video 始终 object-fit: contain 维持原始体型，避免 reward 缩小、focus 偏小。 */
-.pet-stage { --pet-max-w: min(44vw, 640px); --pet-max-h: 44vh; }
+/* 状态切换只让新状态短暂淡入。旧实现的末帧是 opacity:0 且永久保留，
+   导致任何一次切换后桌宠都会彻底消失。只动画透明度，避免覆盖各视频的体型 scale。 */
+.pet-stage.is-whirling .pet-media { animation: pet-swap-in .32s ease-out both; }
+@keyframes pet-swap-in { 0% { opacity: .12; } 100% { opacity: 1; } }
+/* 小窗桌宠使用自身舞台的完整可用空间。全屏接管、奖励和后台角色在各自容器单独限宽。 */
 .pet-stage > * { width: 100%; height: 100%; max-width: var(--pet-max-w); max-height: var(--pet-max-h); }
 /* 2026-09-01：deflated 时桌宠 + 恢复面板共占 pet 窗口，pet-stage 居中且不贴顶/贴底，
    给恢复气泡留出紧贴桃上方的位置（避免气泡飘到窗口顶部、与桃隔太远）。 */
@@ -156,7 +155,15 @@ img.pet-media { animation: pet-still-breath 3.4s ease-in-out infinite; transform
 
 .growth-card { grid-area: chart; position: relative; z-index: 3; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding: clamp(10px, 1vw, 15px) clamp(12px, 1.25vw, 20px) clamp(8px, .75vw, 12px); border: 1px solid rgba(255, 248, 226, .72); border-radius: 34px 34px 27px 27px; background: rgba(255, 226, 177, .58); box-shadow: inset 0 1px rgba(255,255,255,.62), 0 12px 30px rgba(103, 58, 29, .08); overflow: hidden; }
 .growth-title { position: absolute; z-index: 2; top: -9px; left: 50%; padding: 8px 18px; transform: translateX(-50%) rotate(-3deg); border-radius: 7px; color: #683e2a; background: #fff0cb; box-shadow: 0 5px 12px rgba(107, 61, 30, .12); font-size: clamp(14px, 1vw, 18px); font-weight: 800; white-space: nowrap; }
-.growth-toolbar { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 2px 8px; }.growth-toolbar > div:first-child { min-width: 0; display: flex; align-items: baseline; gap: 10px; }.growth-toolbar strong { font-size: clamp(14px, 1.1vw, 18px); white-space: nowrap; }.growth-toolbar span { overflow: hidden; color: #97634a; font-size: clamp(9px, .72vw, 12px); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }.growth-tabs { flex: 0 0 auto; display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border: 1px solid rgba(134,80,45,.11); border-radius: 13px; background: rgba(255,246,221,.68); }.growth-tabs button { min-width: 54px; padding: 5px 11px; border: 0; border-radius: 10px; color: #8a5a42; background: transparent; font-size: 12px; font-weight: 800; }.growth-tabs button[aria-selected="true"] { color: white; background: #ed7961; box-shadow: 0 5px 10px rgba(208,91,64,.2); }.growth-content, .week-chart { min-width: 0; min-height: 0; width: 100%; height: 100%; }
+.growth-toolbar { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 2px 8px; }.growth-toolbar > div:first-child { min-width: 0; display: flex; align-items: baseline; gap: 10px; }.growth-toolbar strong { font-size: clamp(14px, 1.1vw, 18px); white-space: nowrap; }.growth-toolbar span { overflow: hidden; color: #97634a; font-size: clamp(9px, .72vw, 12px); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }.growth-tabs { flex: 0 0 auto; display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border: 1px solid rgba(134,80,45,.11); border-radius: 13px; background: rgba(255,246,221,.68); }.growth-tabs button { min-width: 54px; padding: 5px 11px; border: 0; border-radius: 10px; color: #8a5a42; background: transparent; font-size: 12px; font-weight: 800; }.growth-tabs button[aria-selected="true"] { color: white; background: #ed7961; box-shadow: 0 5px 10px rgba(208,91,64,.2); }.growth-content { min-width: 0; min-height: 0; width: 100%; height: 100%; }
+.week-completion { width: 100%; height: 100%; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); align-items: stretch; gap: clamp(6px, .8vw, 12px); }
+.completion-day { min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; place-items: center; gap: 3px; padding: clamp(7px, .8vw, 12px) 4px; border: 1px solid rgba(155, 101, 68, .13); border-radius: 18px; color: #895e49; background: rgba(255, 248, 232, .58); }
+.completion-day time { font-size: clamp(9px, .72vw, 12px); font-weight: 750; font-variant-numeric: tabular-nums; }
+.completion-day > span { align-self: center; display: grid; place-items: center; width: clamp(30px, 3vw, 46px); height: clamp(30px, 3vw, 46px); border-radius: 50%; color: #b98a70; background: rgba(244, 201, 172, .28); font-size: clamp(19px, 1.8vw, 29px); font-weight: 900; }
+.completion-day small { color: #986c55; font-size: clamp(8px, .65vw, 11px); font-weight: 750; white-space: nowrap; }
+.completion-day.is-complete { border-color: rgba(218, 132, 99, .34); background: linear-gradient(180deg, rgba(255, 237, 222, .94), rgba(255, 246, 226, .88)); box-shadow: 0 7px 18px rgba(181, 91, 58, .1); }
+.completion-day.is-complete > span { color: #fffaf0; background: linear-gradient(145deg, #f1a07f, #dd785f); box-shadow: 0 5px 12px rgba(191, 91, 61, .18); }
+.completion-day.is-complete small { color: #7a503c; }
 .month-calendar { width: 100%; height: 100%; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 3px; color: #704630; }.month-calendar-head { min-width: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 0 3px; }.month-calendar-head strong { font-size: clamp(11px, .85vw, 14px); }.month-calendar-head span { overflow: hidden; color: #a07159; font-size: clamp(8px, .62vw, 10px); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }.month-weekdays, .month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }.month-weekdays span { text-align: center; color: #9b6b52; font-size: clamp(8px, .62vw, 10px); font-weight: 750; }.month-grid { min-height: 0; gap: 2px 3px; }.month-grid.rows-5 { grid-template-rows: repeat(5, minmax(0, 1fr)); }.month-grid.rows-6 { grid-template-rows: repeat(6, minmax(0, 1fr)); }.month-grid > button, .month-empty { min-width: 0; min-height: 0; border: 1px solid rgba(139,83,48,.08); border-radius: 9px; background: rgba(255,248,228,.52); }.month-grid > button { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto minmax(0, 1fr); align-items: center; gap: 0 3px; padding: 2px 4px; color: #724833; overflow: hidden; transition: border-color .16s ease, background .16s ease, transform .16s ease; }.month-grid > button:hover { transform: translateY(-1px); background: rgba(255,251,239,.82); }.month-grid > button.is-today { border-color: rgba(237,121,97,.5); }.month-grid > button.is-selected { border-color: #ef8168; background: rgba(255,238,209,.95); box-shadow: inset 0 0 0 1px rgba(239,129,104,.15); }.calendar-day { font-size: clamp(8px, .62vw, 10px); font-weight: 850; }.calendar-energy { justify-self: end; color: #e96752; font-size: clamp(8px, .62vw, 10px); font-weight: 850; }.calendar-habits { grid-column: 1 / -1; min-width: 0; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; gap: 1px; }.calendar-habits > span { min-width: 0; display: grid; place-items: center; opacity: .28; }.calendar-habits > span.has-value { opacity: 1; }.calendar-habits img { width: clamp(10px, 1.05vw, 16px); height: clamp(10px, 1.05vw, 16px); object-fit: contain; }.calendar-habits b { position: absolute; opacity: 0; pointer-events: none; }.month-detail { min-width: 0; display: flex; align-items: center; gap: clamp(5px, .65vw, 10px); padding: 3px 6px 0; overflow: hidden; color: #805641; font-size: clamp(8px, .62vw, 10px); font-weight: 650; white-space: nowrap; }.month-detail > strong { flex: 0 0 auto; color: #e76752; font-size: clamp(10px, .75vw, 12px); }.month-detail > span { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 2px; }.month-detail img { width: 13px; height: 13px; object-fit: contain; }.month-detail b { color: #69913c; }
 
 .calendar-habits > span { display: flex; align-items: center; justify-content: center; gap: 1px; opacity: .22; }
@@ -165,7 +172,7 @@ img.pet-media { animation: pet-still-breath 3.4s ease-in-out infinite; transform
 .month-detail { font-size: clamp(8px, .68vw, 11px); }
 .month-detail > strong { font-size: clamp(10px, .8vw, 13px); }
 
-.habit-dock { grid-area: dock; position: relative; z-index: 6; min-width: 0; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: stretch; padding: clamp(8px, 1.1vh, 13px) clamp(12px, 1.4vw, 22px); border: 1px solid rgba(137, 81, 42, .13); border-radius: 34px 34px 27px 27px; background: rgba(255, 202, 126, .78); box-shadow: 0 16px 30px rgba(102, 57, 28, .15), inset 0 2px rgba(255,245,218,.65); backdrop-filter: blur(3px); overflow: hidden; }.habit-dock .habit-stat { position: relative; min-width: 0; min-height: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) 24px; place-items: center; overflow: hidden; color: #633b28; }.habit-dock img { width: 100%; height: 100%; min-height: 0; object-fit: contain; filter: brightness(1.12) saturate(1.25) drop-shadow(0 7px 7px rgba(95,52,28,.13)); }.habit-dock span { align-self: center; font-size: clamp(11px, .92vw, 16px); line-height: 22px; font-weight: 800; white-space: nowrap; }.habit-dock small { position: absolute; right: 11%; top: 2%; min-width: 25px; padding: 3px 6px; border-radius: 11px; color: white; background: #f06d59; font-size: clamp(10px, .68vw, 12px); font-weight: 800; }.dock-hint { position: absolute; z-index: 14; left: 50%; bottom: 22%; margin: 0; padding: 9px 14px; transform: translateX(-50%); border-radius: 13px; color: #7a4c37; background: rgba(255,248,231,.96); box-shadow: 0 8px 20px rgba(93,52,28,.15); font-size: clamp(12px, .9vw, 15px); font-weight: 700; white-space: nowrap; }
+.habit-dock { grid-area: dock; position: relative; z-index: 6; min-width: 0; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: stretch; padding: clamp(8px, 1.1vh, 13px) clamp(12px, 1.4vw, 22px); border: 1px solid rgba(137, 81, 42, .13); border-radius: 34px 34px 27px 27px; background: rgba(255, 218, 166, .76); box-shadow: 0 16px 30px rgba(102, 57, 28, .12), inset 0 2px rgba(255,245,218,.72); backdrop-filter: blur(3px); overflow: hidden; }.habit-dock .habit-stat { position: relative; min-width: 0; min-height: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) 24px; grid-template-columns: 1fr auto; place-items: center; overflow: hidden; color: #633b28; }.habit-dock img { grid-column: 1 / -1; width: 100%; height: 100%; min-height: 0; object-fit: contain; filter: brightness(1.12) saturate(1.18) drop-shadow(0 7px 7px rgba(95,52,28,.11)); }.habit-dock span { justify-self: end; align-self: center; font-size: clamp(11px, .92vw, 16px); line-height: 22px; font-weight: 800; white-space: nowrap; }.habit-dock small { justify-self: start; min-width: 20px; margin-left: 7px; color: #8a5438; font-size: clamp(10px, .68vw, 12px); font-weight: 800; font-variant-numeric: tabular-nums; }.dock-hint { position: absolute; z-index: 14; left: 50%; bottom: 22%; margin: 0; padding: 9px 14px; transform: translateX(-50%); border-radius: 13px; color: #7a4c37; background: rgba(255,248,231,.96); box-shadow: 0 8px 20px rgba(93,52,28,.15); font-size: clamp(12px, .9vw, 15px); font-weight: 700; white-space: nowrap; }
 
 
 .settings-scrim { position: absolute; z-index: 30; inset: 0; display: grid; place-items: center; background: rgba(91, 54, 34, .18); backdrop-filter: blur(8px); }.settings-panel { width: min(560px, 78vw); max-height: 82vh; overflow: auto; padding: 26px; border: 1px solid rgba(132,78,46,.13); border-radius: 30px; background: #fff3d9; box-shadow: 0 25px 70px rgba(82,46,27,.28); }.settings-panel header { display: flex; justify-content: space-between; align-items: center; }.settings-panel header div { display: grid; gap: 3px; }.settings-panel header span { color: #d96d56; font-size: 12px; }.settings-panel header strong { font-size: 25px; }.setting-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0; }.setting-nickname { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px; margin-top: 18px; padding: 13px; border-radius: 17px; background: #f9dfbb; font-size: 13px; font-weight: 700; }.setting-nickname input { border: 1px solid rgba(137,80,45,.14); border-radius: 9px; padding: 8px 10px; color: #68422f; background: #fff9ec; }.setting-pair label, .setting-reminder { display: grid; align-items: center; gap: 8px; padding: 13px; border-radius: 17px; background: #f9dfbb; }.setting-pair label { grid-template-columns: 1fr 65px auto; font-size: 12px; }.settings-panel input[type="number"] { width: 100%; border: 1px solid rgba(137,80,45,.14); border-radius: 9px; padding: 7px; color: #68422f; background: #fff9ec; }.settings-panel h3 { font-size: 15px; }.setting-reminder { grid-template-columns: 20px 1fr 65px auto; margin-top: 8px; font-size: 12px; }.setting-reminder input[type="checkbox"] { accent-color: #84a746; }.save-settings { width: 100%; margin-top: 20px; padding: 12px; border: 0; border-radius: 14px; color: white; background: #ef765e; font-weight: 750; box-shadow: 0 8px 17px rgba(220,91,62,.2); }
@@ -203,42 +210,11 @@ img.pet-media { animation: pet-still-breath 3.4s ease-in-out infinite; transform
 .badge-chip b { font-size: clamp(9px, .72vw, 12px); font-weight: 800; color: #7a4c33; white-space: nowrap; }
 .badge-strip > small { margin-left: auto; flex: 0 0 auto; color: #a07159; font-size: clamp(9px, .68vw, 11px); font-weight: 750; }
 
-/* 桃屁屁身体状态卡片：实时反映接管机制背后的状态 */
-.pet-status-card { background: linear-gradient(180deg, rgba(255, 247, 233, .78) 0%, rgba(253, 231, 210, .72) 100%); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border: 1.5px solid rgba(244, 216, 168, .55); border-radius: 24px; padding: 18px clamp(20px, 2.4vw, 32px); display: grid; gap: 14px; box-shadow: 0 6px 18px rgba(176, 86, 38, .08); }
-.pet-status-card > header { display: flex; align-items: baseline; gap: 12px; }
-.pet-status-card > header strong { font-size: clamp(15px, 1.4vw, 19px); color: #4a2614; letter-spacing: -.01em; }
-.pet-status-card > header span { color: #a07159; font-size: clamp(10px, .82vw, 12px); font-weight: 650; }
-.status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(12px, 1.6vw, 24px); }
-.status-item { display: grid; gap: 6px; align-content: start; }
-.status-label { font-size: clamp(10px, .82vw, 12px); color: #8a5a40; font-weight: 750; letter-spacing: .03em; }
-.status-item small { font-size: clamp(10px, .82vw, 12px); color: #6a3a23; font-weight: 650; }
-
-/* 喝水拼回：3 个圆点 */
-.status-dots { display: flex; gap: 8px; padding: 4px 0; }
-.status-dot { width: clamp(20px, 2vw, 28px); height: clamp(20px, 2vw, 28px); border-radius: 50%; background: rgba(180, 130, 90, .18); border: 2px solid rgba(180, 130, 90, .25); transition: all .25s ease; }
-.status-dot.is-filled { background: linear-gradient(140deg, #8bb52f, #a8cc45); border-color: #6e9020; box-shadow: 0 2px 6px rgba(140, 180, 60, .4); }
-
-/* 反久坐膨胀：4 段横条（递增红） */
-.status-bars { display: flex; gap: 4px; align-items: end; padding: 4px 0; height: clamp(28px, 3vw, 38px); }
-.status-bar { flex: 1; height: 35%; border-radius: 4px; background: linear-gradient(180deg, rgba(255, 200, 170, .25), rgba(240, 180, 150, .18)); border: 1px solid rgba(180, 130, 90, .18); transition: all .25s ease; }
-.status-bar.level-0.is-filled { background: linear-gradient(180deg, rgba(255, 200, 170, .55), rgba(240, 180, 150, .45)); border-color: rgba(216, 130, 90, .4); }
-.status-bar.level-1 { height: 50%; }
-.status-bar.level-2 { height: 70%; }
-.status-bar.level-3 { height: 100%; }
-.status-bar.is-filled.level-0, .status-bar.is-filled.level-1 { background: linear-gradient(180deg, #ffb888, #f2885e); border-color: #d8603a; }
-.status-bar.is-filled.level-2 { background: linear-gradient(180deg, #ff8a6e, #e85a3a); border-color: #c03820; }
-.status-bar.is-filled.level-3 { background: linear-gradient(180deg, #e85a3a, #b02810); border-color: #7a1a08; animation: status-pulse 1.2s ease-in-out infinite; }
-@keyframes status-pulse { 0%, 100% { transform: scaleY(1); opacity: 1; } 50% { transform: scaleY(.95); opacity: .85; } }
-
-/* 水润度：4 段水滴（缺水越严重越深褐） */
-.status-stages { display: flex; gap: 4px; align-items: center; padding: 4px 0; }
-.status-stage { width: clamp(22px, 2.2vw, 30px); height: clamp(22px, 2.2vw, 30px); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: rgba(180, 130, 90, .15); border: 1.5px solid rgba(180, 130, 90, .25); transition: all .3s ease; }
-.status-stage.stage-0 { background: linear-gradient(135deg, #8fc8e8, #4a9bc4); border-color: #2a78a0; }
-.status-stage.stage-1 { background: linear-gradient(135deg, #f4d4a8, #e8b878); border-color: #c89860; }
-.status-stage.stage-2 { background: linear-gradient(135deg, #d8a070, #b87850); border-color: #8a5530; }
-.status-stage.stage-3 { background: linear-gradient(135deg, #a85030, #6a2810); border-color: #4a1a08; }
-.status-stage.is-current { box-shadow: 0 0 0 3px rgba(248, 200, 140, .6); transform: rotate(-45deg) scale(1.15); }
-.status-item.is-hydration-3 .status-stage.stage-3 { animation: dry-shake 1.4s ease-in-out infinite; }
+/* 右侧简洁提醒：只保留今日爆炸次数与休息建议 */
+.explosion-card { grid-area: friend; align-self: start; position: relative; z-index: 3; min-width: 0; display: grid; gap: clamp(7px, 1vh, 12px); padding: clamp(18px, 2vw, 28px); border: 1px solid rgba(229, 151, 113, .25); border-radius: 28px; color: #633b28; background: linear-gradient(155deg, rgba(255, 245, 229, .9), rgba(255, 224, 205, .8)); box-shadow: 0 12px 28px rgba(126, 67, 38, .1), inset 0 1px rgba(255,255,255,.68); }
+.explosion-card > span { color: #a36f54; font-size: clamp(10px, .78vw, 12px); font-weight: 750; letter-spacing: .08em; }
+.explosion-card > strong { color: #7a3f2d; font-size: clamp(18px, 1.65vw, 27px); line-height: 1.25; }
+.explosion-card > small { max-width: 24em; color: #8a5b46; font-size: clamp(11px, .86vw, 14px); font-weight: 650; line-height: 1.55; }
 
 /* ── 每日激励 hero（2026-08-31：顶部能量数字改为识别「还差什么」的激励句 + 目标进度）── */
 .energy-hero.is-nudge { grid-template-rows: auto auto; align-content: center; }
@@ -271,7 +247,6 @@ img.pet-media { animation: pet-still-breath 3.4s ease-in-out infinite; transform
 /* ── 设置面板：每日目标说明 ── */
 .setting-goal-note { margin: -6px 0 0; padding: 0 13px; color: #a06b4e; font-size: 11px; font-weight: 600; line-height: 1.55; }
 
-/* ── Dashboard 右下角卖萌视频（2026-08-31）：脱离 grid，用 fixed 浮在右下，
-   pointer-events:none 不挡习惯按钮。视觉上不占布局空间但存在感强。 ── */
-.cottage-mascot { position: fixed; z-index: 4; right: clamp(10px, 1vw, 22px); bottom: clamp(80px, 8vh, 110px); width: clamp(80px, 9vw, 130px); height: clamp(80px, 9vw, 130px); display: grid; place-items: center; pointer-events: none; filter: drop-shadow(0 10px 14px rgba(98, 52, 28, .16)); }
+/* 后台右下角色只播放一次卖萌动作；尺寸足够看清，但不覆盖统计与打卡区域。 */
+.cottage-mascot { position: fixed; z-index: 4; right: clamp(12px, 1.4vw, 26px); bottom: clamp(92px, 9vh, 124px); width: clamp(150px, 14vw, 220px); height: clamp(150px, 14vw, 220px); display: grid; place-items: center; pointer-events: none; filter: drop-shadow(0 10px 14px rgba(98, 52, 28, .16)); }
 .cottage-mascot .pet-media { width: 100%; height: 100%; object-fit: contain; }

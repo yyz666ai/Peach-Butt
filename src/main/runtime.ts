@@ -24,7 +24,7 @@ import { callNamePrefix, growthLevelName, t, type StringKey } from '../shared/i1
 import { emptyDailyStats, type DailyStats, type Storage } from './storage'
 
 const DEFAULT_SETTINGS: AppSettings = {
-  petSize: 140,
+  petSize: 180,
   workMinutes: 25,
   breakMinutes: 5,
   continuousWorkLimitMinutes: 40,
@@ -196,7 +196,7 @@ export function createRuntime(storage: Storage): Runtime {
   const savedSettings = isRecord(savedSettingsValue) ? savedSettingsValue : {}
   let settings = sanitizeSettings({
     ...savedSettings,
-    petSize: savedSettings.petSize === 170 || savedSettings.petSize === undefined
+    petSize: savedSettings.petSize === 140 || savedSettings.petSize === 170 || savedSettings.petSize === undefined
       ? DEFAULT_SETTINGS.petSize
       : savedSettings.petSize,
   }, DEFAULT_SETTINGS)

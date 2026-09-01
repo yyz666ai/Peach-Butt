@@ -17,8 +17,6 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter
 
-from PIL import ImageEnhance
-
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -39,14 +37,75 @@ V7_NAMES = ("greeting-v7", "pet-v7", "happy-v7", "shy-v7",
 V7_TRIM = {name: (0.0, 5.0) for name in V7_NAMES}
 
 
+def clear_floor_shadow_preserving_limbs(image: Image.Image) -> Image.Image:
+    """Remove the pale studio floor without erasing the character's thin feet.
+
+    The source clips contain a soft, low-chroma floor shadow in the lower part of
+    the frame.  The old morphological erosion treated the one-to-three-pixel
+    black leg outlines as noise.  Here we classify colour instead: peach body,
+    green leaves and dark limb pixels are always retained; only pale neutral
+    residue near the bottom is cleared.
+    """
+    rgba = np.asarray(image.convert("RGBA")).copy()
+    rgb = rgba[:, :, :3].astype(np.int16)
+    alpha = rgba[:, :, 3]
+    red, green, blue = rgb[:, :, 0], rgb[:, :, 1], rgb[:, :, 2]
+    maximum = rgb.max(axis=2)
+    minimum = rgb.min(axis=2)
+    chroma = maximum - minimum
+
+    rows = np.arange(rgba.shape[0])[:, None]
+    lower_frame = rows >= int(rgba.shape[0] * .58)
+    floor_band = rows >= int(rgba.shape[0] * .90)
+    peach = (red > 125) & (red - green > 18) & (red - blue > 18)
+    leaf = (green > 55) & (green - blue > 12) & (green >= red * .62)
+    dark_limbs = maximum < 145
+    pale_floor = (minimum > 130) & (chroma < 65)
+    removable = (lower_frame & pale_floor & ~(leaf | dark_limbs)) | (floor_band & ~dark_limbs)
+    rgba[:, :, 3] = np.where(removable & (alpha > 0), 0, alpha)
+
+    side_band = (np.arange(rgba.shape[1])[None, :] < int(rgba.shape[1] * .035)) | \
+        (np.arange(rgba.shape[1])[None, :] >= int(rgba.shape[1] * .965))
+    dark_edge_sliver = side_band & (maximum < 205) & ~(leaf | peach)
+    rgba[:, :, 3] = np.where(dark_edge_sliver, 0, rgba[:, :, 3])
+    # Keep detached hands and lifted feet: they are valid animation parts even
+    # when anti-aliasing leaves a one-pixel gap from the body.  Only tiny alpha
+    # specks are discarded here; edge slivers were handled above by colour.
+    from scipy.ndimage import label
+    dark_components, dark_count = label((maximum < 150) & (rgba[:, :, 3] > 14))
+    if dark_count:
+        edge_labels = set(int(value) for value in dark_components[:, 0])
+        edge_labels.update(int(value) for value in dark_components[:, -1])
+        edge_labels.discard(0)
+        if edge_labels:
+            edge_residue = np.isin(dark_components, list(edge_labels))
+            rgba[:, :, 3] = np.where(edge_residue, 0, rgba[:, :, 3])
+
+    labeled, count = label(rgba[:, :, 3] > 14)
+    if count > 1:
+        sizes = np.bincount(labeled.ravel())
+        sizes[0] = 0
+        largest = max(1, int(sizes.max()))
+        edge_labels = set(int(value) for value in labeled[:, 0])
+        edge_labels.update(int(value) for value in labeled[:, -1])
+        edge_labels.discard(0)
+        keep_labels = np.array([
+            component for component in range(1, count + 1)
+            if sizes[component] >= 20
+            and (component not in edge_labels or sizes[component] >= largest * .05)
+        ], dtype=np.int32)
+        rgba[:, :, 3] = np.where(np.isin(labeled, keep_labels), rgba[:, :, 3], 0)
+    return Image.fromarray(rgba, mode="RGBA")
+
+
 def polish_v7_frames(frames: list[Path]) -> None:
     """v7 专用 polish：只做 alpha 收边（去白边毛刺），不做提亮/增饱和——
     用户要求颜色打光与原图完全一致，任何颜色增强都不要。"""
     for frame in frames:
         with Image.open(frame) as source:
             image = source.convert("RGBA")
-        alpha = image.getchannel("A").point(lambda value: 0 if value < 20 else value)
-        alpha = alpha.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(.35))
+        alpha = image.getchannel("A").point(lambda value: 0 if value < 14 else value)
+        alpha = alpha.filter(ImageFilter.GaussianBlur(.25))
         polished = image.convert("RGBA")
         polished.putalpha(alpha)
         polished = btv.unmatte_white_edges(polished)
@@ -70,18 +129,17 @@ def convert_v7(source: Path, destination: Path, fps: int, width: int,
             with Image.open(frame) as image:
                 rgb = image.convert("RGB")
                 mask = v3k.key_mask(rgb, threshold=threshold)
-                mask = mask.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))
                 mask = v3k._fill_background_islands(mask)
                 result = rgb.copy()
                 result.putalpha(mask)
                 result = btv.fill_enclosed_holes(result, image)
+                result = clear_floor_shadow_preserving_limbs(result)
                 result.save(keyed / frame.name, optimize=True)
                 del rgb, mask, result
                 image.close()
         selected = sorted(keyed.glob("*.png"))
         polish_v7_frames(selected)
-        btv.normalize_frames(selected, target_fraction=.93,
-                             bottom_margin=btv.BOTTOM_SAFE_MARGIN)
+        btv.normalize_frames(selected, target_fraction=.88, bottom_margin=12)
         btv.encode(keyed, destination, fps)
 
 
@@ -90,7 +148,8 @@ def main() -> None:
     parser.add_argument("sources", type=Path)
     parser.add_argument("destination", type=Path)
     parser.add_argument("--fps", type=int, default=24)
-    parser.add_argument("--width", type=int, default=1024)
+    parser.add_argument("--width", type=int, default=768,
+                        help="v7 源视频原生宽度；避免先无意义放大到 1024 再缩回 480")
     parser.add_argument("--threshold", type=int, default=232)
     parser.add_argument("--names", nargs="*", default=list(V7_NAMES))
     args = parser.parse_args()

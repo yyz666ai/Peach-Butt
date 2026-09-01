@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { Settings, X } from 'lucide-react'
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { AppAction, AppSettings, AppSnapshot, ReminderKind, RewardSnapshot } from '../../shared/contracts'
 import { callNamePrefix, dateFormatter, formatDurationLocalized, t, type Language, type StringKey } from '../../shared/i18n'
 import { clampActivityGoalMinutes, clampWaterGoalCups, computeDailyNudge, WATER_GOAL_MIN_CUPS, ACTIVITY_GOAL_MIN_MINUTES } from '../../core/daily-nudge'
+import { isCompleteHealthDay } from '../../core/daily-completion'
 
 // 设置面板输入框下限：低于最低标准时强制抬回（与后端 sanitize 双保险）
 const WATER_GOAL_INPUT_MIN = WATER_GOAL_MIN_CUPS
@@ -65,8 +65,8 @@ import waterAsset from '../../../assets/dashboard/water.png'
 import activityStretchAsset from '../../../assets/dashboard/activity-stretch.png'
 import eyeMaskAsset from '../../../assets/dashboard/eye-mask.png'
 import toiletAsset from '../../../assets/dashboard/toilet.png'
-import milestoneAsset from '../../../assets/dashboard/milestone.png'
 import motivationNoteAsset from '../../../assets/dashboard/motivation-note.png'
+import appLogo from '../../../assets/app-icon/pipeach-logo.png'
 import explosionVideo from '../../../assets/video/generated/explosion.webm'
 import deflatedMotion from '../../../assets/video/generated/deflated.webm'
 import pressureMotion from '../../../assets/video/generated/pressure.webm'
@@ -433,41 +433,6 @@ function RewardOverlay({ reward, lang, onAck }: {
   </section>
 }
 
-// 桃屁屁身体状态卡片：实时反映接管机制背后的状态（喝水拼回 / 反久坐膨胀 / 水润干裂）
-function PetStatusCard({ hydrateCount, swellLevel, hydrationStage, lang = 'zh' }: {
-  hydrateCount: number
-  swellLevel: 0 | 1 | 2 | 3
-  hydrationStage: 0 | 1 | 2 | 3
-  lang?: Language
-}): React.JSX.Element {
-  return <section className="pet-status-card" aria-label={t(lang, 'status.aria')}>
-    <header><strong>{t(lang, 'status.title')}</strong><span>{t(lang, 'status.subtitle')}</span></header>
-    <div className="status-grid">
-      <div className={`status-item is-hydrate-${hydrateCount}`}>
-        <div className="status-label">{t(lang, 'status.hydrate')}</div>
-        <div className="status-dots" role="img" aria-label={t(lang, 'status.hydrateAria', { count: Math.min(3, hydrateCount) })}>
-          {[0, 1, 2].map((i) => <span key={i} className={i < Math.min(3, hydrateCount) ? 'status-dot is-filled' : 'status-dot'}/>)}
-        </div>
-        <small>{t(lang, 'status.hydrateNote', { count: Math.min(3, hydrateCount) })}</small>
-      </div>
-      <div className={`status-item is-swell-${swellLevel}`}>
-        <div className="status-label">{t(lang, 'status.swell')}</div>
-        <div className="status-bars" role="img" aria-label={t(lang, 'status.swellAria', { label: t(lang, `swell.${swellLevel}` as StringKey) })}>
-          {[0, 1, 2, 3].map((i) => <span key={i} className={i <= swellLevel ? `status-bar is-filled level-${i}` : 'status-bar'}/>)}
-        </div>
-        <small>{t(lang, `swell.${swellLevel}` as StringKey)}</small>
-      </div>
-      <div className={`status-item is-hydration-${hydrationStage}`}>
-        <div className="status-label">{t(lang, 'status.hydration')}</div>
-        <div className="status-stages" role="img" aria-label={t(lang, 'status.hydrationAria', { label: t(lang, `hydration.${hydrationStage}` as StringKey) })}>
-          {[0, 1, 2, 3].map((i) => <span key={i} className={i === hydrationStage ? `status-stage is-current stage-${i}` : `status-stage stage-${i}`}/>)}
-        </div>
-        <small>{t(lang, `hydration.${hydrationStage}` as StringKey)}</small>
-      </div>
-    </div>
-  </section>
-}
-
 function Dashboard(): React.JSX.Element {
   const [snapshot, act] = useSnapshot()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -481,13 +446,11 @@ function Dashboard(): React.JSX.Element {
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [])
-  const chart = useMemo(() => snapshot?.trends.map((item) => ({ ...item, shortDate: item.date.slice(5).replace('-', '/'), energy: item.scoreEnd ?? 0 })) ?? [], [snapshot])
   if (!snapshot || !draft) return <main className="cottage-loading">{t(undefined, 'cottage.loading')}</main>
   const lang = snapshot.settings.language
   const today = snapshot.trends.at(-1)!
   const date = dateFormatter(lang).format(new Date())
   const focusActive = snapshot.pomodoro.phase === 'work' || snapshot.pomodoro.phase === 'paused'
-  const chartCeiling = Math.max(100, ...chart.map((item) => item.energy))
   const badges = computeBadges(snapshot.growth, lang)
   const earned = earnedBadgeCount(snapshot.growth)
   // 每日激励句（2026-08-31）：顶部不再显示桃桃能量，改为识别「还差什么」的固定激励句
@@ -506,7 +469,7 @@ function Dashboard(): React.JSX.Element {
 
   return <main className="cottage" style={{ backgroundImage: `url(${roomBackground})` }}>
     <header className="cottage-topbar">
-      <div className="cottage-brand"><img src={idle} alt=""/><div><strong>Peach Butt</strong><span>{t(lang, 'cottage.brandSub')}</span></div></div>
+      <div className="cottage-brand"><img src={appLogo} alt=""/><div><strong>Peach Butt</strong><span>{t(lang, 'cottage.brandSub')}</span></div></div>
       <div className="date-actions"><time>{date}</time><button ref={settingsTrigger} aria-label={t(lang, 'cottage.settingsAria')} onClick={() => setSettingsOpen(true)}><Settings/></button><button aria-label={t(lang, 'cottage.closeAria')} onClick={() => window.close()}><X/></button></div>
     </header>
 
@@ -533,7 +496,11 @@ function Dashboard(): React.JSX.Element {
       </div>
     </section>
 
-    <PetStatusCard hydrateCount={snapshot.hydrateCount} swellLevel={snapshot.swellLevel} hydrationStage={snapshot.hydrationStage} lang={lang}/>
+    <section className="explosion-card" aria-label={t(lang, 'explosionCard.aria', { count: snapshot.health.explosionsToday })}>
+      <span>{t(lang, 'explosionCard.eyebrow')}</span>
+      <strong>{t(lang, 'explosionCard.count', { count: snapshot.health.explosionsToday })}</strong>
+      <small>{t(lang, snapshot.health.explosionsToday > 0 ? 'explosionCard.rest' : 'explosionCard.steady')}</small>
+    </section>
 
     <section className="motivation-note"><img src={motivationNoteAsset} alt=""/><p>{t(lang, 'motivation.line1')}<br/>{t(lang, 'motivation.line2')}<br/>{t(lang, 'motivation.line3')}</p></section>
 
@@ -542,10 +509,16 @@ function Dashboard(): React.JSX.Element {
         <div><strong>{t(lang, 'growth.title')}</strong><span>{t(lang, 'growth.subtitle')}</span></div>
       </header>
       <div className="growth-content">
-        <div className="week-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={chart} margin={{ top: 30, right: 35, bottom: 18, left: 35 }}>
-              <YAxis domain={[0, chartCeiling]} hide/><XAxis dataKey="shortDate" axisLine={false} tickLine={false} tick={{ fill: '#71452f', fontSize: 12 }} dy={13}/><Tooltip contentStyle={{ border: 0, borderRadius: 15, background: '#fff7e9', boxShadow: '0 8px 24px rgba(107,65,35,.16)' }} formatter={(value) => [t(lang, 'growth.chartTooltip', { value: String(value ?? 0) }), t(lang, 'growth.chartLabel')]}/>
-              <Line type="monotone" dataKey="energy" stroke="#f17b62" strokeWidth={5} dot={<PeachDot/>} activeDot={{ r: 9, fill: '#a8cc45', stroke: '#fff7e9', strokeWidth: 4 }}/>
-            </LineChart></ResponsiveContainer></div>
+        <div className="week-completion" role="list" aria-label={t(lang, 'growth.weekAria')}>
+          {snapshot.trends.map((item) => {
+            const complete = isCompleteHealthDay(item)
+            return <div key={item.date} role="listitem" className={`completion-day${complete ? ' is-complete' : ''}`} aria-label={t(lang, 'growth.dayAria', { date: item.date.slice(5).replace('-', '/'), state: t(lang, complete ? 'growth.complete' : 'growth.incomplete') })}>
+              <time dateTime={item.date}>{item.date.slice(5).replace('-', '/')}</time>
+              <span aria-hidden="true">{complete ? '✓' : '·'}</span>
+              <small>{t(lang, complete ? 'growth.complete' : 'growth.incomplete')}</small>
+            </div>
+          })}
+        </div>
       </div>
       <footer className="badge-strip" aria-label={t(lang, 'badge.aria', { earned, total: badges.length })}>
         {badges.map((badge) => <span key={badge.id} className={`badge-chip${badge.earned ? ' is-earned' : ''}`} title={badge.earned ? badge.detail : t(lang, 'badge.locked', { detail: badge.detail })}>
@@ -555,10 +528,9 @@ function Dashboard(): React.JSX.Element {
       </footer>
     </section>
 
-    {/* 2026-08-31：右下角卖萌视频。用户点名要「之前做过的那个捏脸的」，
-        换成 pet-v7（卡通圆手摸头享受），doingFollow 让 5s 一次性素材循环播放。 */}
+    {/* 后台只在进入时播放一次开心卖萌动作，结束后停在安静末帧，避免持续吸引注意。 */}
     <section className="cottage-mascot" aria-label={t(lang, 'mascot.aria')}>
-      <PetMotion visual="pet" pressureValue={0} recovery={100} doingFollow/>
+      <PetMotion visual="happy" pressureValue={0} recovery={100}/>
     </section>
 
     {/* 后台只做统计展示：打卡在桌宠身上完成，这里只回看今日记录（不做任何交互） */}
@@ -572,11 +544,6 @@ function Dashboard(): React.JSX.Element {
       save={() => { void act({ type: 'settings:update', settings: draft }); setSettingsOpen(false); settingsTrigger.current?.focus() }}
     />}
   </main>
-}
-
-function PeachDot(props: { cx?: number; cy?: number; value?: number }): React.JSX.Element {
-  const { cx = 0, cy = 0, value = 0 } = props
-  return <g transform={`translate(${cx - 27} ${cy - 35})`}><image href={milestoneAsset} width="54" height="68"/><text x="27" y="39" textAnchor="middle" fill="white" fontSize="14" fontWeight="800">{value}</text></g>
 }
 
 function SettingsPanel({ draft, setDraft, save, close }: { draft: AppSettings; setDraft: (value: AppSettings) => void; save: () => void; close: () => void }): React.JSX.Element {
